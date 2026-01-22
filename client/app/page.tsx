@@ -13,7 +13,7 @@ function MenuCard({ src, alt, label, className = "" }: MenuCardProps) {
       type="button"
       className={`flex flex-col items-center justify-center w-[200px] h-[200px] bg-black hover:bg-zinc-800 rounded-[10px] drop-shadow-[6px_6px_5px_rgba(0,0,0,0.35)] cursor-pointer ${className}`}
     >
-      <Image src={src} alt={alt} width={130} height={130} />
+      <Image src={src} alt={alt} width={130} height={130} unoptimized loading="eager" />
       <p className="text-[22px] text-white text-center pt-[8px]">{label}</p>
     </button>
   );
@@ -23,12 +23,12 @@ export default function Home() {
   return (
     <div>
       <div className="fixed inset-0 bg-white">
-        <Image src="/map.png" alt="Map Background" fill preload />
+        <Image src="/map.png" alt="Map Background" fill unoptimized />
       </div>
       <div className="flex flex-col h-screen w-screen justify-center items-center z-10">
         <div className="relative z-20 w-[700px] h-[928px] shadow-2xl bg-white/75 rounded-[15px] flex flex-col items-center">
           <div className="pt-[50px]">
-            <Image src="/roadia-logo.svg" alt="RoadIA Logo" width={577} height={192} />
+            <Image src="/roadia-logo.svg" alt="RoadIA Logo" width={577} height={192} unoptimized loading="eager" />
           </div>
           <div className="flex pt-[80px]">
             <MenuCard src="/new.svg" alt="New" label="Nouveau" />
@@ -36,7 +36,7 @@ export default function Home() {
           </div>
           <MenuCard src="/trophy.svg" alt="Trophy" label="Challenges" className="mt-[80px]" />
           <div className="mt-auto pb-[16px]">
-            <Image src="/bagnole-logo.png" alt="Bagnole Logo" width={190} height={47} />
+            <Image src="/bagnole-logo.png" alt="Bagnole Logo" width={190} height={47} unoptimized loading="eager" />
           </div>
         </div>
       </div>

@@ -6,6 +6,7 @@ const satoshi = localFont({
   src: "./fonts/Satoshi-Variable.ttf",
   variable: "--font-satoshi",
   weight: "300 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
