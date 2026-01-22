@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+osmpbf = "0.3"      # Fast PBF parser
+petgraph = "0.6"    # Graph data structure
+geo = "0.26"        # For geospatial calculations (distance, etc.)
+anyhow = "1.0"      # Error handling
+serde = "1.0"       # Serialization
