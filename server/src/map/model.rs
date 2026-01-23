@@ -4,9 +4,14 @@ use serde_json::json;
 use crate::map::intersection::{Intersection, IntersectionKind};
 use crate::map::road::Road;
 
+pub enum Node{
+    Road(Road),
+    Intersection(Intersection),
+}
+
 #[derive(Clone)]
 pub struct Map {
-    pub graph: Graph<Intersection, Road>,
+    pub graph: Graph<Node, ()>,
 }
 
 impl Map {
@@ -20,16 +25,12 @@ impl Map {
         self.graph.add_node(intersection)
     }
 
-    pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Road) {
-        self.graph.add_edge(from, to, road.clone());
-        // Since we had Bilateral/Unilateral in RoadType but old code added edge both ways unconditionally for add_road.
-        // Waiting, the old code:
-        // pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, seg: RoadSegment) {
-        //     self.graph.add_edge(from, to, seg.clone());
-        //     self.graph.add_edge(to, from, seg);
-        // }
-        // It always added both ways.
-        self.graph.add_edge(to, from, road);
+    pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Road) -> NodeIndex{
+        let roadIndex = self.graph.add_node(road);
+        self.graph.add_edge(from, roadIndex, {});
+        self.graph.add_edge(roadIndex, from, {});
+        self.graph.add_edge(roadIndex, to, {});
+        self.graph.add_edge(to, roadIndex, {});
     }
 
     pub fn index_from_id(&self, id: u32) -> NodeIndex {
