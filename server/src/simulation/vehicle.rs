@@ -1,6 +1,10 @@
-use crate::map::model::Map;
+use crate::map::model::{Map, Node};
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
+use std::collections::BinaryHeap;
+use std::cmp::Reverse;
+use std::collections::{HashSet, HashMap};
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum VehicleKind {
@@ -74,63 +78,98 @@ pub struct Vehicle {
 // Routing
 // -----------------------------------------------------------------------------
 
-pub trait RoutingStrategy {
-    fn compute_path(
-        &self,
-        map: &Map, // Renamed from network
-        origin: NodeIndex,
-        destination: NodeIndex,
-        departure_time_s: u32,
-    ) -> Vec<NodeIndex>;
+#[derive(Debug, Clone)]
+struct State {
+    cost: f32,
+    node: NodeIndex,
 }
 
-pub struct ShortestPathStrategy;
 
-impl RoutingStrategy for ShortestPathStrategy {
-    fn compute_path(
-        &self,
-        map: &Map,
-        origin: NodeIndex,
-        destination: NodeIndex,
-        _departure_time_s: u32,
-    ) -> Vec<NodeIndex> {
-        use petgraph::algo::astar;
 
-        // Heuristique A* : distance euclidienne entre les nœuds
-        let heuristic = |n: NodeIndex| {
-            let node = &map.graph[n];
-            let dest = &map.graph[destination];
-            let dx = node.x - dest.x;
-            let dy = node.y - dest.y;
-            (dx * dx + dy * dy).sqrt()
+impl PartialEq for State {
+    fn eq(&self, other: &Self) -> bool {
+        self.cost == other.cost
+    }
+}
+
+// Eq est un marqueur → impl vide
+impl Eq for State {}
+
+impl PartialOrd for State {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for State {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // inversion pour min-heap
+        other.cost
+            .partial_cmp(&self.cost)
+            .unwrap_or(Ordering::Equal)
+    }
+}
+
+pub fn road_euclidian_distance(map: &Map, road_index: NodeIndex) -> f32{
+    let neighbors : Vec<NodeIndex> = map.graph.neighbors(road_index).collect();
+    if let Node::Intersection(n1) = &map.graph[neighbors[0]]{
+        if let Node::Intersection(n2) = &map.graph[neighbors[1]]{
+            return ((n1.x - n2.x).powf(2.0) + (n1.y - n2.y).powf(2.0)).sqrt();
         };
+    };
+    return -67.0;//pour le compilo
+}
 
-        // Coût réel : longueur de la route en mètres
-        let edge_cost = |edge: petgraph::graph::EdgeReference<'_, crate::map::road::Road>| {
-            edge.weight().length_m
+pub fn intersections_euclidian_distance(map: &Map, source: NodeIndex, destination: NodeIndex) -> f32{
+    if let Node::Intersection(n1) = &map.graph[source]{
+        if let Node::Intersection(n2) = &map.graph[destination]{
+            return ((n1.x - n2.x).powf(2.0) + (n1.y - n2.y).powf(2.0)).sqrt();
         };
+    };
+    return -67.0;//pour le compilo
+}
 
-        // A*
-        if let Some((_cost, path)) = astar(
-            &map.graph,
-            origin,
-            |n| n == destination,
-            edge_cost,
-            heuristic,
-        ) {
-            println!(
-                "[ROUTING A*] origin={:?} dest={:?} path={:?}",
-                origin, destination, path
-            );
-            path
-        } else {
-            println!(
-                "[ROUTING A*] No path found from {:?} to {:?}",
-                origin, destination
-            );
-            Vec::new()
+pub fn rebuild_path(pred : &HashMap<NodeIndex, NodeIndex>, source : NodeIndex, destination : NodeIndex) -> Vec<NodeIndex>{
+    let mut path : Vec<NodeIndex> = Vec::new();
+    path.push(destination);
+    let mut current = destination;
+    while pred.contains_key(&current){
+        current = *pred.get(&current).unwrap();
+        path.insert(0, current);
+    }
+    return path;
+}
+
+pub fn shortest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex>{
+    let mut file_prio_min = BinaryHeap::new();
+    let mut prios : HashMap<NodeIndex, f32> = HashMap::new();
+    let mut parcourus : HashSet<NodeIndex> = HashSet::new();
+    let mut pred : HashMap<NodeIndex, NodeIndex> = HashMap::new();
+    let mut distances : HashMap<NodeIndex, f32> = HashMap::new();
+
+    file_prio_min.push(State{cost:intersections_euclidian_distance(&map, source, destination), node:source});
+    prios.insert(source, intersections_euclidian_distance(&map, source, destination));
+    distances.insert(source, 0.0);
+    while (! file_prio_min.is_empty()){
+        let n = file_prio_min.peek().unwrap().node;
+        if n == destination{
+            return rebuild_path(&pred, source, destination);
+        }
+        for node in map.neighboring_intersections(n){
+            let distance_node = *distances.get(&n).expect("distance manquante") + map.intersection_neighbor_distance(n, node);
+            if !parcourus.contains(&node) || distance_node < *distances.get(&node).expect("Noeud absent"){
+                distances.insert(node, distance_node);
+                pred.insert(node, n);
+
+                if ! prios.contains_key(&node){
+                    file_prio_min.push(State{cost: intersections_euclidian_distance(&map, node, destination), node:node});
+                    prios.insert(node, intersections_euclidian_distance(&map, node, destination));
+                }
+            }
         }
     }
+
+    return Vec::new();
 }
 
 // -----------------------------------------------------------------------------
