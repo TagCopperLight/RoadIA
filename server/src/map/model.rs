@@ -25,8 +25,8 @@ impl Map {
         self.graph.add_node(Node::Intersection(intersection))
     }
 
-    pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Node) -> NodeIndex{
-        let road_index = self.graph.add_node(road);
+    pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Road) -> NodeIndex{
+        let road_index = self.graph.add_node(Node::Road(road));
         self.graph.add_edge(from, road_index, {});
         self.graph.add_edge(road_index, from, {});
         self.graph.add_edge(road_index, to, {});
