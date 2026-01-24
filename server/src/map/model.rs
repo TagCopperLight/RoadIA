@@ -1,17 +1,11 @@
-use petgraph::graph::{Graph, NodeIndex};
+use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use serde_json::json;
 
-use crate::map::intersection::{Intersection, IntersectionKind};
+use crate::map::intersection::Intersection;
 use crate::map::road::Road;
 
-#[derive(Debug, Clone)]
-pub enum Node{
-    Road(Road),
-    Intersection(Intersection),
-}
-
 pub struct Map {
-    pub graph: Graph<Node, ()>,
+    pub graph: Graph<Intersection, Road>,
 }
 
 impl Map {
@@ -22,49 +16,37 @@ impl Map {
     }
 
     pub fn add_intersection(&mut self, intersection: Intersection) -> NodeIndex {
-        self.graph.add_node(Node::Intersection(intersection))
+        self.graph.add_node(intersection)
     }
 
-    pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Road) -> NodeIndex{
-        let road_index = self.graph.add_node(Node::Road(road));
-        self.graph.add_edge(from, road_index, {});
-        self.graph.add_edge(road_index, from, {});
-        self.graph.add_edge(road_index, to, {});
-        self.graph.add_edge(to, road_index, {});
-        return road_index;
+    pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Road) -> EdgeIndex {
+        self.graph.add_edge(from, to, road)
     }
 
-    pub fn neighboring_intersections(&self, source: NodeIndex) -> Vec<NodeIndex>{
-        let mut neighbors_intersections = Vec::new();
-        for road_index in self.graph.neighbors(source){
-            for intersection_index in self.graph.neighbors(road_index){
-                if intersection_index != source{
-                    neighbors_intersections.push(intersection_index);
-                }
-            }
-        }
-        return neighbors_intersections;
+    pub fn add_two_way_road(
+        &mut self,
+        from: NodeIndex,
+        to: NodeIndex,
+        road: Road,
+    ) -> (EdgeIndex, EdgeIndex) {
+        let e1 = self.add_road(from, to, road.clone());
+        let e2 = self.add_road(to, from, road);
+        (e1, e2)
     }
 
-    pub fn intersection_neighbor_distance(&self, source : NodeIndex, destination : NodeIndex) -> f32{
-        for road_index in self.graph.neighbors(source){
-            let road_neighbors : Vec<NodeIndex> = self.graph.neighbors(road_index).collect();
-            if road_neighbors.contains(&source) && road_neighbors.contains(&destination){
-                if let Node::Road(r) = &self.graph[road_index]{
-                    return r.length_m;
-                }
-            }
-        }
-        return -67.0; //pour que le putin de compiler ne casse pas les couilles
+    pub fn neighboring_intersections(&self, source: NodeIndex) -> Vec<NodeIndex> {
+        self.graph.neighbors(source).collect()
+    }
+
+    pub fn intersection_neighbor_distance(&self, source: NodeIndex, destination: NodeIndex) -> f32 {
+        let edge = self.graph.find_edge(source, destination).unwrap();
+        self.graph[edge].length_m
     }
 
     pub fn index_from_id(&self, id: u32) -> NodeIndex {
         self.graph
             .node_indices()
-            .find(|i| match &self.graph[*i] {
-                Node::Road(n) => n.id==id,
-                Node::Intersection(n) => n.id==id,
-            })
+            .find(|i| self.graph[*i].id == id)
             .unwrap()
     }
 
@@ -73,19 +55,13 @@ impl Map {
             .graph
             .node_indices()
             .map(|i| {
-                match &self.graph[i] {
-                    Node::Road(n) =>
-                        json!({
-                            "id": n.id,
-                        }),
-                    Node::Intersection(n) => 
-                        json!({
-                            "id": n.id,
-                            "name": n.name,
-                            "x": n.x,
-                            "y": n.y
-                        }),
-                };
+                let n = &self.graph[i];
+                json!({
+                    "id": n.id,
+                    "name": n.name,
+                    "x": n.x,
+                    "y": n.y
+                })
             })
             .collect();
 
@@ -94,15 +70,11 @@ impl Map {
             .edge_indices()
             .map(|e| {
                 let (a, b) = self.graph.edge_endpoints(e).unwrap();
+                let r = &self.graph[e];
                 json!({
-                    "from": match &self.graph[a] {
-                        Node::Road(n) => n.id,
-                        Node::Intersection(n) => n.id,
-                    },
-                    "to": match &self.graph[b] {
-                        Node::Road(n) => n.id,
-                        Node::Intersection(n) => n.id,
-                    }
+                    "from": self.graph[a].id,
+                    "to": self.graph[b].id,
+                    "id": r.id,
                 })
             })
             .collect();
