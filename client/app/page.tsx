@@ -23,20 +23,20 @@ export default function Home() {
   return (
     <div>
       <div className="fixed inset-0 bg-white">
-        <Image src="/map.png" alt="Map Background" fill unoptimized />
+        <Image src="/home/map.png" alt="Map Background" fill unoptimized />
       </div>
       <div className="flex flex-col h-screen w-screen justify-center items-center z-10">
         <div className="relative z-20 w-[700px] h-[928px] shadow-2xl bg-white/75 rounded-[15px] flex flex-col items-center">
           <div className="pt-[50px]">
-            <Image src="/roadia-logo.svg" alt="RoadIA Logo" width={577} height={192} unoptimized loading="eager" />
+            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={577} height={192} unoptimized loading="eager" />
           </div>
           <div className="flex pt-[80px]">
-            <MenuCard src="/new.svg" alt="New" label="Nouveau" />
-            <MenuCard src="/folder.svg" alt="Folder" label="Cartes" className="ml-[80px]" />
+            <MenuCard src="/home/new.svg" alt="New" label="Nouveau" />
+            <MenuCard src="/home/folder.svg" alt="Folder" label="Cartes" className="ml-[80px]" />
           </div>
-          <MenuCard src="/trophy.svg" alt="Trophy" label="Challenges" className="mt-[80px]" />
+          <MenuCard src="/home/trophy.svg" alt="Trophy" label="Challenges" className="mt-[80px]" />
           <div className="mt-auto pb-[16px]">
-            <Image src="/bagnole-logo.png" alt="Bagnole Logo" width={190} height={47} unoptimized loading="eager" />
+            <Image src="/home/bagnole-logo.png" alt="Bagnole Logo" width={190} height={47} unoptimized loading="eager" />
           </div>
         </div>
       </div>
