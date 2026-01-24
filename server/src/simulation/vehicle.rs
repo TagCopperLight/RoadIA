@@ -81,12 +81,12 @@ pub fn intersections_euclidean_distance(
     let n2 = &map.graph[destination];
     ((n1.x - n2.x).powf(2.0) + (n1.y - n2.y).powf(2.0)).sqrt()
 }
-pub fn shortest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
+pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
     let result = petgraph::algo::astar(
         &map.graph,
         source,
         |finish| finish == destination,
-        |e| e.weight().length_m / (e.weight().speed_limit_kmh() as f32 / 3.6),
+        |e| e.weight().length_m / (e.weight().speed_limit_kmh as f32 / 3.6),
         |n| intersections_euclidean_distance(map, n, destination) / (MAX_SPEED_KMH as f32 / 3.6),
     );
 
@@ -234,7 +234,7 @@ mod tests {
 
         map.add_two_way_road(i4, w9, Road::new(10, 1, 100, 1., false, false));
 
-        let path: Vec<NodeIndex> = shortest_path(&map, h1, w9);
+        let path: Vec<NodeIndex> = fastest_path(&map, h1, w9);
         assert_eq!(path, vec![h1, i3, i5, i6, i4, w9]);
     }
 }
