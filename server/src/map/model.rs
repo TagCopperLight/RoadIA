@@ -64,6 +64,7 @@ impl Map {
                 json!({
                     "id": n.id,
                     "name": n.name,
+                    "kind": n.kind,
                     "x": n.x,
                     "y": n.y
                 })
