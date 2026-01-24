@@ -35,6 +35,6 @@ impl Road {
     }
 
     pub fn set_speed_limit_kmh(&mut self, speed_limit_kmh: u8) {
-        self.speed_limit_kmh = speed_limit_kmh.min(MAX_SPEED_KMH);
+        self.speed_limit_kmh = speed_limit_kmh.max(1).min(MAX_SPEED_KMH);
     }
 }
