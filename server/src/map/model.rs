@@ -81,6 +81,7 @@ impl Map {
                     "from": self.graph[a].id,
                     "to": self.graph[b].id,
                     "id": r.id,
+                    "length": r.length_m,
                 })
             })
             .collect();
