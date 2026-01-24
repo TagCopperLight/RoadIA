@@ -7,4 +7,4 @@ pub struct SimulationConfig {
     pub time_step_s: f32,
 }
 
-pub const MAX_SPEED_KMH: f32 = 150.0;
+pub const MAX_SPEED_KMH: u8 = 150;

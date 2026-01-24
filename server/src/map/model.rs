@@ -38,9 +38,14 @@ impl Map {
         self.graph.neighbors(source).collect()
     }
 
-    pub fn intersection_neighbor_distance(&self, source: NodeIndex, destination: NodeIndex) -> f32 {
-        let edge = self.graph.find_edge(source, destination).unwrap();
-        self.graph[edge].length_m
+    pub fn intersection_neighbor_distance(
+        &self,
+        source: NodeIndex,
+        destination: NodeIndex,
+    ) -> Option<f32> {
+        self.graph
+            .find_edge(source, destination)
+            .map(|edge| self.graph[edge].length_m)
     }
 
     pub fn index_from_id(&self, id: u32) -> NodeIndex {
