@@ -1,4 +1,4 @@
-use crate::map::model::Map;
+use crate::{map::model::Map, simulation::config::MAX_SPEED_KMH};
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +27,6 @@ pub struct TripRequest {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum VehicleState {
-    // Renamed from AgentState
     WaitingToDepart,
     EnRoute,
     AtIntersection,
@@ -36,7 +35,6 @@ pub enum VehicleState {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vehicle {
-    // Renamed from Agent
     pub id: u64,
     pub spec: VehicleSpec,
     pub trip: TripRequest,
@@ -74,62 +72,27 @@ pub struct Vehicle {
 // Routing
 // -----------------------------------------------------------------------------
 
-pub trait RoutingStrategy {
-    fn compute_path(
-        &self,
-        map: &Map, // Renamed from network
-        origin: NodeIndex,
-        destination: NodeIndex,
-        departure_time_s: u32,
-    ) -> Vec<NodeIndex>;
+pub fn intersections_euclidean_distance(
+    map: &Map,
+    source: NodeIndex,
+    destination: NodeIndex,
+) -> f32 {
+    let n1 = &map.graph[source];
+    let n2 = &map.graph[destination];
+    ((n1.x - n2.x).powf(2.0) + (n1.y - n2.y).powf(2.0)).sqrt()
 }
+pub fn shortest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
+    let result = petgraph::algo::astar(
+        &map.graph,
+        source,
+        |finish| finish == destination,
+        |e| e.weight().length_m / (e.weight().speed_limit_kmh() as f32 / 3.6),
+        |n| intersections_euclidean_distance(map, n, destination) / (MAX_SPEED_KMH as f32 / 3.6),
+    );
 
-pub struct ShortestPathStrategy;
-
-impl RoutingStrategy for ShortestPathStrategy {
-    fn compute_path(
-        &self,
-        map: &Map,
-        origin: NodeIndex,
-        destination: NodeIndex,
-        _departure_time_s: u32,
-    ) -> Vec<NodeIndex> {
-        use petgraph::algo::astar;
-
-        // Heuristique A* : distance euclidienne entre les nœuds
-        let heuristic = |n: NodeIndex| {
-            let node = &map.graph[n];
-            let dest = &map.graph[destination];
-            let dx = node.x - dest.x;
-            let dy = node.y - dest.y;
-            (dx * dx + dy * dy).sqrt()
-        };
-
-        // Coût réel : longueur de la route en mètres
-        let edge_cost = |edge: petgraph::graph::EdgeReference<'_, crate::map::road::Road>| {
-            edge.weight().length_m
-        };
-
-        // A*
-        if let Some((_cost, path)) = astar(
-            &map.graph,
-            origin,
-            |n| n == destination,
-            edge_cost,
-            heuristic,
-        ) {
-            println!(
-                "[ROUTING A*] origin={:?} dest={:?} path={:?}",
-                origin, destination, path
-            );
-            path
-        } else {
-            println!(
-                "[ROUTING A*] No path found from {:?} to {:?}",
-                origin, destination
-            );
-            Vec::new()
-        }
+    match result {
+        Some((_cost, path)) => path,
+        None => Vec::new(),
     }
 }
 
@@ -166,5 +129,112 @@ impl Vehicle {
             co2_emitted_g: 0.0,
             intersection_wait_start_time_s: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::map::intersection::{Intersection, IntersectionKind};
+    use crate::map::road::Road;
+
+    #[test]
+    fn test_shortest_path() {
+        let mut map: Map = Map::new();
+
+        let h1 = map.add_intersection(Intersection {
+            id: 1,
+            kind: IntersectionKind::Habitation,
+            name: "h1".into(),
+            x: 0.,
+            y: 0.,
+        });
+
+        let h2 = map.add_intersection(Intersection {
+            id: 2,
+            kind: IntersectionKind::Habitation,
+            name: "h2".into(),
+            x: 0.,
+            y: 100.,
+        });
+
+        let i3 = map.add_intersection(Intersection {
+            id: 3,
+            kind: IntersectionKind::Intersection,
+            name: "i3".into(),
+            x: 50.,
+            y: 50.,
+        });
+
+        let i4 = map.add_intersection(Intersection {
+            id: 4,
+            kind: IntersectionKind::Intersection,
+            name: "i4".into(),
+            x: 250.,
+            y: 50.,
+        });
+
+        let i5 = map.add_intersection(Intersection {
+            id: 5,
+            kind: IntersectionKind::Intersection,
+            name: "i5".into(),
+            x: 100.,
+            y: 100.,
+        });
+
+        let i6 = map.add_intersection(Intersection {
+            id: 6,
+            kind: IntersectionKind::Intersection,
+            name: "i6".into(),
+            x: 150.,
+            y: 50.,
+        });
+
+        let i7 = map.add_intersection(Intersection {
+            id: 7,
+            kind: IntersectionKind::Intersection,
+            name: "i7".into(),
+            x: 200.,
+            y: 50.,
+        });
+
+        let i8 = map.add_intersection(Intersection {
+            id: 8,
+            kind: IntersectionKind::Intersection,
+            name: "i8".into(),
+            x: 100.,
+            y: 0.,
+        });
+
+        let w9 = map.add_intersection(Intersection {
+            id: 9,
+            kind: IntersectionKind::Workplace,
+            name: "w9".into(),
+            x: 300.,
+            y: 50.,
+        });
+
+        map.add_two_way_road(h1, i3, Road::new(1, 1, 100, 1., false, false));
+
+        map.add_two_way_road(h2, i3, Road::new(2, 1, 100, 1., false, false));
+
+        map.add_two_way_road(i3, i8, Road::new(3, 1, 100, 5., false, false));
+
+        map.add_two_way_road(i3, i5, Road::new(4, 1, 100, 1., false, false));
+
+        map.add_two_way_road(i8, i6, Road::new(5, 1, 100, 1., false, false));
+
+        map.add_two_way_road(i5, i6, Road::new(6, 1, 100, 1., false, false));
+
+        map.add_two_way_road(i8, i7, Road::new(7, 1, 100, 2., false, false));
+
+        map.add_two_way_road(i7, i4, Road::new(8, 1, 100, 1., false, false));
+
+        map.add_two_way_road(i6, i4, Road::new(9, 1, 100, 2., false, false));
+
+        map.add_two_way_road(i4, w9, Road::new(10, 1, 100, 1., false, false));
+
+        let path: Vec<NodeIndex> = shortest_path(&map, h1, w9);
+        assert_eq!(path, vec![h1, i3, i5, i6, i4, w9]);
     }
 }
