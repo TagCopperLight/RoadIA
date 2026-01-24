@@ -72,7 +72,7 @@ pub struct Vehicle {
 // Routing
 // -----------------------------------------------------------------------------
 
-pub fn intersections_euclidian_distance(
+pub fn intersections_euclidean_distance(
     map: &Map,
     source: NodeIndex,
     destination: NodeIndex,
@@ -86,8 +86,8 @@ pub fn shortest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Ve
         &map.graph,
         source,
         |finish| finish == destination,
-        |e| e.weight().length_m / (e.weight().speed_limit_kmh as f32 / 3.6),
-        |n| intersections_euclidian_distance(map, n, destination) / (MAX_SPEED_KMH / 3.6),
+        |e| e.weight().length_m / (e.weight().speed_limit_kmh() as f32 / 3.6),
+        |n| intersections_euclidean_distance(map, n, destination) / (MAX_SPEED_KMH as f32 / 3.6),
     );
 
     match result {
@@ -139,7 +139,7 @@ mod tests {
     use crate::map::road::Road;
 
     #[test]
-    fn test1() {
+    fn test_shortest_path() {
         let mut map: Map = Map::new();
 
         let h1 = map.add_intersection(Intersection {
@@ -214,135 +214,25 @@ mod tests {
             y: 50.,
         });
 
-        map.add_two_way_road(
-            h1,
-            i3,
-            Road {
-                id: 1,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(h1, i3, Road::new(1, 1, 100, 1., false, false));
 
-        map.add_two_way_road(
-            h2,
-            i3,
-            Road {
-                id: 2,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(h2, i3, Road::new(2, 1, 100, 1., false, false));
 
-        map.add_two_way_road(
-            i3,
-            i8,
-            Road {
-                id: 3,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 5.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i3, i8, Road::new(3, 1, 100, 5., false, false));
 
-        map.add_two_way_road(
-            i3,
-            i5,
-            Road {
-                id: 4,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i3, i5, Road::new(4, 1, 100, 1., false, false));
 
-        map.add_two_way_road(
-            i8,
-            i6,
-            Road {
-                id: 5,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i8, i6, Road::new(5, 1, 100, 1., false, false));
 
-        map.add_two_way_road(
-            i5,
-            i6,
-            Road {
-                id: 6,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i5, i6, Road::new(6, 1, 100, 1., false, false));
 
-        map.add_two_way_road(
-            i8,
-            i7,
-            Road {
-                id: 7,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 2.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i8, i7, Road::new(7, 1, 100, 2., false, false));
 
-        map.add_two_way_road(
-            i7,
-            i4,
-            Road {
-                id: 8,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i7, i4, Road::new(8, 1, 100, 1., false, false));
 
-        map.add_two_way_road(
-            i6,
-            i4,
-            Road {
-                id: 9,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 2.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i6, i4, Road::new(9, 1, 100, 2., false, false));
 
-        map.add_two_way_road(
-            i4,
-            w9,
-            Road {
-                id: 1,
-                lane_count: 1,
-                speed_limit_kmh: 100,
-                length_m: 1.,
-                is_blocked: false,
-                can_overtake: false,
-            },
-        );
+        map.add_two_way_road(i4, w9, Road::new(10, 1, 100, 1., false, false));
 
         let path: Vec<NodeIndex> = shortest_path(&map, h1, w9);
         assert_eq!(path, vec![h1, i3, i5, i6, i4, w9]);
