@@ -20,10 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${satoshi.variable} antialiased`}
-      >
+    <html lang="en" className={`${satoshi.variable} font-extrabold antialiased`}>
+      <body>
         {children}
       </body>
     </html>
