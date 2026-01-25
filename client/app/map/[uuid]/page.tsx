@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import MapComponent from '@/components/MapComponent';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
@@ -56,13 +57,6 @@ function Toolbar() {
     )
 }
 
-function Map() {
-    return (
-        <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
-            <div className='w-full h-full bg-[#C1D9B7] rounded-[10px]'></div>
-        </div>
-    )
-}
 
 export default async function MapPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = await params;
@@ -70,7 +64,9 @@ export default async function MapPage({ params }: { params: Promise<{ uuid: stri
     <div className="flex flex-col h-screen w-screen items-center">
         <Header />
         <Toolbar />
-        <Map />
+        <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
+            <MapComponent uuid={uuid} />
+        </div>
     </div>
   );
 }
