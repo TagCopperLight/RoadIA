@@ -143,8 +143,8 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
 			{container && <App resizeTo={container} />}
-			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md">
-				<Image src="/map/man.png" alt="Orange man" width={35} height={35} />
+			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
+				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>
 		</div>
 	);
