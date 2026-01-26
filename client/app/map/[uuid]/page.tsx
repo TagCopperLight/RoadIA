@@ -20,7 +20,7 @@ function Header() {
                 <p className='text-[17px]'>Lannion - 2025</p>
                 <div className='flex text-[15px] font-medium'>
                     {MENU_ITEMS.map((item) => (
-                        <p key={item} className='mr-[14px] cursor-pointer hover:opacity-50 transition-opacity'>
+                        <p key={item} className='mr-[14px] cursor-pointer hover:opacity-50 transition-opacity select-none'>
                             {item}
                         </p>
                     ))}

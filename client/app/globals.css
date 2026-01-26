@@ -16,3 +16,7 @@ body {
   color: var(--foreground);
   overflow: hidden;
 }
+
+img {
+  user-select: none;
+}
