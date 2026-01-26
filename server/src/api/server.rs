@@ -2,6 +2,7 @@ use crate::simulation::handle::Handle;
 use axum::extract::ws::{Message, WebSocket};
 use serde::Serialize;
 use tokio::time::{Duration, sleep};
+use crate::map::model::{Map};
 
 #[derive(Serialize)]
 pub struct VehicleUpdate {
@@ -11,7 +12,7 @@ pub struct VehicleUpdate {
     pub state: String,
 }
 
-pub async fn websocket_loop(mut socket: WebSocket, handle: Handle) {
+pub async fn websocket_loop(mut socket: WebSocket, handle: Handle, map: &Map) {
     loop {
         let vehicles = handle.snapshot_vehicles();
 
@@ -19,8 +20,8 @@ pub async fn websocket_loop(mut socket: WebSocket, handle: Handle) {
             .into_iter()
             .map(|a| VehicleUpdate {
                 id: a.id,
-                x: a.x,
-                y: a.y,
+                x: a.get_coordinates(map).x,
+                y: a.get_coordinates(map).y,
                 state: format!("{:?}", a.state),
             })
             .collect();

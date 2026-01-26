@@ -1,11 +1,19 @@
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use serde_json::json;
+use serde::{Serialize, Deserialize};
 
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
 
+#[derive(Default, Clone, Debug)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Coordinates{
+    pub x : f32,
+    pub y : f32,
 }
 
 impl Map {
