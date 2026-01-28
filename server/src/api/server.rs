@@ -1,8 +1,8 @@
+use crate::map::model::Map;
 use crate::simulation::handle::Handle;
 use axum::extract::ws::{Message, WebSocket};
 use serde::Serialize;
-use tokio::time::{Duration, sleep};
-use crate::map::model::{Map};
+use tokio::time::{sleep, Duration};
 
 #[derive(Serialize)]
 pub struct VehicleUpdate {
