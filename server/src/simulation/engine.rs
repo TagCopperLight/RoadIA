@@ -250,6 +250,8 @@ impl Simulation for SimulationEngine {
                 vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
                 if vehicle.position_on_edge_m < 0.0 {
                     vehicle.position_on_edge_m = 0.0;
+                    vehicle.velocity = 0.0;
+                    vehicle.previous_velocity = 0.0;
                     vehicle.state = VehicleState::AtIntersection;
                     if vehicle.path_index == vehicle.path.len() - 2{
                         vehicle.state = VehicleState::Arrived;
