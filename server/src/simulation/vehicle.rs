@@ -112,7 +112,15 @@ impl Vehicle {
         }
     }
 
-    pub fn compute_acceleration(
+    pub fn compute_acceleration_free_road(
+        &self,
+        desired_velocity: f32,
+        acceleration_exponent: f32
+    ) -> f32 {
+        self.spec.max_acceleration_ms2 * (1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent))
+    }
+
+    pub fn compute_acceleration_follower(
         &self,
         b2b_distance: f32,
         next_vehicle_velocity: f32,
@@ -120,14 +128,16 @@ impl Vehicle {
         minimum_gap: f32,
         acceleration_exponent: f32,
     ) -> f32 {
+        //println!("[Compute acceleration] {} {} {} {} {}", b2b_distance, next_vehicle_velocity, desired_velocity, minimum_gap, acceleration_exponent);
+        //println!("params for s {} {} {}", self.previous_velocity, self.spec.reaction_time, 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5));
         let s: f32 = minimum_gap
             + self.previous_velocity * self.spec.reaction_time
-            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity)
-                / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
+            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
+        //println!("S value {}", s);
         let new_acceleration: f32 = self.spec.max_acceleration_ms2
             * (1.0
                 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent)
-                - (s / b2b_distance));
+                - (s / b2b_distance).powf(2.0));
         new_acceleration
     }
 

@@ -1,4 +1,5 @@
 use petgraph::graph::EdgeIndex;
+use std::cmp::{min, max};
 
 use crate::map::model::Map;
 use crate::map::road::Road;
@@ -79,14 +80,17 @@ impl Simulation for SimulationEngine {
         current_vehicle: &Vehicle,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32 {
+        //print!("[Distance ahead] ");
         match ahead_vehicle {
-            Some(v) => current_vehicle.position_on_edge_m - v.position_on_edge_m + v.spec.length_m,
-            None => current_road.length_m,
+            Some(v) => {/*println!(": {}, {}, {}", current_vehicle.position_on_edge_m, v.position_on_edge_m, v.spec.length_m);*/ current_vehicle.position_on_edge_m - v.position_on_edge_m + v.spec.length_m},
+            None => {/*println!(": {}", 0.0);*/ 0.0},
         }
     }
 
     fn run(&mut self) {
+        println!("Début de la simulation");
         while self.current_time < self.config.end_time_s {
+            println!("Current time {}", self.current_time);
             self.step();
             self.current_time += self.config.time_step_s;
         }
@@ -104,6 +108,7 @@ impl Simulation for SimulationEngine {
 
         let vehicles_len = self.vehicles.len();
         for i in 0..vehicles_len {
+            print!("Vehicle {:?} FROM ({} / {:?}) {:?}", self.vehicles[i].id, self.vehicles[i].position_on_edge_m, self.vehicles[i].current_node, self.vehicles[i].state);
             let state = self.vehicles[i].state;
             match state {
                 VehicleState::WaitingToDepart => {
@@ -133,9 +138,11 @@ impl Simulation for SimulationEngine {
                             current_road.length_m,
                         )
                     };
+                    //println!("[WaitingForDepart] Current Road {}", current_road.id);
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
                         Self::distance_between_vehicles(current_road.clone(), vehicle, ahead);
+                    //println!("Distance ahead : {} cond : {}", distance_ahead, current_road.length_m - distance_ahead >= vehicle.spec.length_m);
                     if current_road.length_m - distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
                         vehicle.position_on_edge_m = current_road.length_m - distance_ahead;
@@ -169,23 +176,25 @@ impl Simulation for SimulationEngine {
                         )
                     };
                     let vehicle = &mut self.vehicles[i];
-                    vehicle.velocity += self.config.time_step_s
-                        * match ahead {
-                            Some(v) => vehicle.compute_acceleration(
+                    let new_acceleration = match ahead {
+                            Some(v) => vehicle.compute_acceleration_follower(
                                 vehicle.position_on_edge_m - v.position_on_edge_m,
                                 v.previous_velocity,
                                 current_road.speed_limit_ms as f32,
                                 self.config.minimum_gap,
                                 self.config.acceleration_exponent,
                             ),
-                            None => vehicle.compute_acceleration(
-                                vehicle.position_on_edge_m,
-                                0.0,
+                            None => vehicle.compute_acceleration_free_road(
                                 current_road.speed_limit_ms as f32,
-                                self.config.minimum_gap,
                                 self.config.acceleration_exponent,
                             ),
                         };
+                    vehicle.velocity += self.config.time_step_s
+                        * new_acceleration;
+                    //println!("");
+                    //println!("Acceleration : {}", new_acceleration);
+                    //println!("Velocity : {}", vehicle.velocity);
+                    //vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
                 }
                 VehicleState::AtIntersection => {
                     let (path_idx, vid) = {
@@ -229,7 +238,8 @@ impl Simulation for SimulationEngine {
                     }
                 }
                 VehicleState::Arrived => {}
-            }
+            };
+            println!("TO {}", self.vehicles[i].position_on_edge_m);
         }
         //MAJ des positions
         let vehicles_len = self.vehicles.len();
@@ -237,10 +247,13 @@ impl Simulation for SimulationEngine {
         for i in 0..vehicles_len {
             let vehicle = &mut vehicles_slice[i];
             if vehicle.state == VehicleState::EnRoute {
-                vehicle.position_on_edge_m -= vehicle.velocity;
+                vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
                 if vehicle.position_on_edge_m < 0.0 {
                     vehicle.position_on_edge_m = 0.0;
                     vehicle.state = VehicleState::AtIntersection;
+                    if vehicle.path_index == vehicle.path.len() - 2{
+                        vehicle.state = VehicleState::Arrived;
+                    }
                 }
             }
         }
