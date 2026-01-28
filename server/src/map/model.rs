@@ -1,6 +1,4 @@
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
-use serde_json::json;
-use serde::{Serialize, Deserialize};
 
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
@@ -10,7 +8,7 @@ pub struct Map {
     pub graph: Graph<Intersection, Road>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Coordinates{
     pub x : f32,
     pub y : f32,
@@ -61,45 +59,5 @@ impl Map {
             .node_indices()
             .find(|i| self.graph[*i].id == id)
             .unwrap()
-    }
-
-    pub fn to_json(&self) -> serde_json::Value {
-        let nodes: Vec<_> = self
-            .graph
-            .node_indices()
-            .map(|i| {
-                let n = &self.graph[i];
-                json!({
-                    "id": n.id,
-                    "name": n.name,
-                    "kind": n.kind,
-                    "x": n.x,
-                    "y": n.y
-                })
-            })
-            .collect();
-
-        let edges: Vec<_> = self
-            .graph
-            .edge_indices()
-            .map(|e| {
-                let (a, b) = self
-                    .graph
-                    .edge_endpoints(e)
-                    .expect("edge_endpoints returned None for an EdgeIndex produced by edge_indices()");
-                let r = &self.graph[e];
-                json!({
-                    "from": self.graph[a].id,
-                    "to": self.graph[b].id,
-                    "id": r.id,
-                    "length": r.length_m,
-                })
-            })
-            .collect();
-
-        json!({
-            "nodes": nodes,
-            "edges": edges
-        })
     }
 }
