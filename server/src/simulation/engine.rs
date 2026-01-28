@@ -15,9 +15,9 @@ pub trait Simulation {
         current_vehicle_id: u64,
         current_vehicle_position: f32,
     ) -> Option<Vehicle>;
-    fn distance_between_vehicles(
+    fn next_obstacle_position(
         current_road: Road,
-        current_vehicle: &Vehicle,
+        current_vehicle_position: f32,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32;
     fn run(&mut self);
@@ -60,10 +60,10 @@ impl Simulation for SimulationEngine {
                         .find_edge(vehicle.current_node, vehicle.next_node.unwrap())
                     {
                         if edge_index == road_index
-                            && vehicle.position_on_edge_m <= current_vehicle_position
+                            && vehicle.previous_position <= current_vehicle_position
                             && closest_ahead_position < vehicle.position_on_edge_m
                         {
-                            closest_ahead_position = vehicle.position_on_edge_m;
+                            closest_ahead_position = vehicle.previous_position;
                             closest_ahead_vehicle = Some(vehicle.clone());
                         }
                     }
@@ -75,15 +75,15 @@ impl Simulation for SimulationEngine {
         closest_ahead_vehicle
     }
 
-    fn distance_between_vehicles(
+    fn next_obstacle_position(//renvoie la position de l'obstacle devant le plus proche (voiture / fin de route)
         current_road: Road,
-        current_vehicle: &Vehicle,
+        current_vehicle_position: f32,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32 {
-        //print!("[Distance ahead] ");
+        print!("[Distance ahead] ");
         match ahead_vehicle {
-            Some(v) => {/*println!(": {}, {}, {}", current_vehicle.position_on_edge_m, v.position_on_edge_m, v.spec.length_m);*/ current_vehicle.position_on_edge_m - v.position_on_edge_m + v.spec.length_m},
-            None => {/*println!(": {}", 0.0);*/ 0.0},
+            Some(v) => {println!(": {}, {}, {}", current_vehicle_position, v.previous_position, v.spec.length_m);v.previous_position + v.spec.length_m},
+            None => {println!(": {}", 0.0); 0.0},
         }
     }
 
@@ -103,13 +103,14 @@ impl Simulation for SimulationEngine {
         for i in 0..vehicles_len {
             let vehicle = &mut vehicles_slice[i];
             vehicle.previous_velocity = vehicle.velocity;
+            vehicle.previous_position = vehicle.position_on_edge_m;
         }
         //MAJ des vitesses et des états
 
         let vehicles_len = self.vehicles.len();
         for i in 0..vehicles_len {
-            print!("Vehicle {:?} FROM ({} / {:?}) {:?}", self.vehicles[i].id, self.vehicles[i].position_on_edge_m, self.vehicles[i].current_node, self.vehicles[i].state);
             let state = self.vehicles[i].state;
+            println!("Vehicle {:?} AT ({} / {:?}) {:?}", self.vehicles[i].id, self.vehicles[i].position_on_edge_m, self.vehicles[i].current_node, self.vehicles[i].state);
             match state {
                 VehicleState::WaitingToDepart => {
                     let (current_node, next_node, vid) = {
@@ -141,7 +142,7 @@ impl Simulation for SimulationEngine {
                     //println!("[WaitingForDepart] Current Road {}", current_road.id);
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
-                        Self::distance_between_vehicles(current_road.clone(), vehicle, ahead);
+                        Self::next_obstacle_position(current_road.clone(), vehicle.previous_position, ahead);
                     //println!("Distance ahead : {} cond : {}", distance_ahead, current_road.length_m - distance_ahead >= vehicle.spec.length_m);
                     if current_road.length_m - distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
@@ -151,7 +152,7 @@ impl Simulation for SimulationEngine {
                 VehicleState::EnRoute => {
                     let (current_node, next_node, pos, vid) = {
                         let v = &self.vehicles[i];
-                        (v.current_node, v.next_node, v.position_on_edge_m, v.id)
+                        (v.current_node, v.next_node, v.previous_position, v.id)
                     };
                     let current_road_index = self
                         .config
@@ -178,7 +179,7 @@ impl Simulation for SimulationEngine {
                     let vehicle = &mut self.vehicles[i];
                     let new_acceleration = match ahead {
                             Some(v) => vehicle.compute_acceleration_follower(
-                                vehicle.position_on_edge_m - v.position_on_edge_m,
+                                vehicle.previous_position - v.previous_position,
                                 v.previous_velocity,
                                 current_road.speed_limit_ms as f32,
                                 self.config.minimum_gap,
@@ -194,7 +195,16 @@ impl Simulation for SimulationEngine {
                     //println!("");
                     //println!("Acceleration : {}", new_acceleration);
                     //println!("Velocity : {}", vehicle.velocity);
-                    //vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
+                    vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
+                    if vehicle.position_on_edge_m < 0.0 {
+                        vehicle.position_on_edge_m = 0.0;
+                        vehicle.velocity = 0.0;
+                        vehicle.previous_velocity = 0.0;
+                        vehicle.state = VehicleState::AtIntersection;
+                        if vehicle.path_index == vehicle.path.len() - 2{
+                            vehicle.state = VehicleState::Arrived;
+                        }
+                    }
                 }
                 VehicleState::AtIntersection => {
                     let (path_idx, vid) = {
@@ -228,10 +238,12 @@ impl Simulation for SimulationEngine {
                     };
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
-                        Self::distance_between_vehicles(next_road.clone(), vehicle, ahead);
+                        Self::next_obstacle_position(next_road.clone(), vehicle.previous_position, ahead);
+                    println!("Distance ahead : {}", distance_ahead);
                     if next_road.length_m - distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
                         vehicle.position_on_edge_m = next_road.length_m - vehicle.spec.length_m;
+                        vehicle.previous_position = vehicle.position_on_edge_m;
                         vehicle.path_index += 1;
                         vehicle.current_node = *vehicle.path.get(vehicle.path_index).unwrap();
                         vehicle.next_node = vehicle.path.get(vehicle.path_index + 1).copied();
@@ -239,25 +251,6 @@ impl Simulation for SimulationEngine {
                 }
                 VehicleState::Arrived => {}
             };
-            println!("TO {}", self.vehicles[i].position_on_edge_m);
-        }
-        //MAJ des positions
-        let vehicles_len = self.vehicles.len();
-        let vehicles_slice = &mut self.vehicles;
-        for i in 0..vehicles_len {
-            let vehicle = &mut vehicles_slice[i];
-            if vehicle.state == VehicleState::EnRoute {
-                vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
-                if vehicle.position_on_edge_m < 0.0 {
-                    vehicle.position_on_edge_m = 0.0;
-                    vehicle.velocity = 0.0;
-                    vehicle.previous_velocity = 0.0;
-                    vehicle.state = VehicleState::AtIntersection;
-                    if vehicle.path_index == vehicle.path.len() - 2{
-                        vehicle.state = VehicleState::Arrived;
-                    }
-                }
-            }
         }
     }
 }
