@@ -128,24 +128,24 @@ impl Vehicle {
             * (1.0
                 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent)
                 - (s / b2b_distance));
-        return new_acceleration;
+        new_acceleration
     }
 
     pub fn get_coordinates(&self, map: &Map) -> Coordinates {
         match self.state {
             VehicleState::WaitingToDepart => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
-                return Coordinates {
+                Coordinates {
                     x: current_node_o.x,
                     y: current_node_o.y,
-                };
+                }
             }
             VehicleState::AtIntersection => {
                 let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
-                return Coordinates {
+                Coordinates {
                     x: next_node_o.x,
                     y: next_node_o.y,
-                };
+                }
             }
             VehicleState::EnRoute => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
@@ -160,10 +160,10 @@ impl Vehicle {
                     .unwrap();
 
                 let pos_rate: f32 = self.position_on_edge_m / current_road.length_m;
-                return Coordinates {
+                Coordinates {
                     x: current_node_o.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
                     y: current_node_o.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
-                };
+                }
             }
             VehicleState::Arrived => {
                 let current_node_o: Intersection = map
@@ -171,10 +171,10 @@ impl Vehicle {
                     .node_weight(*self.path.get(self.path.len() - 1).unwrap())
                     .unwrap()
                     .clone();
-                return Coordinates {
+                Coordinates {
                     x: current_node_o.x,
                     y: current_node_o.y,
-                };
+                }
             }
         }
     }
