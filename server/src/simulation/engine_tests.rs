@@ -15,7 +15,7 @@ mod tests {
             start_time_s: 0.0,
             end_time_s: 10.0,
             time_step_s: 1.0,
-            acceleration_exponent: 2.0,
+            acceleration_exponent: 4.0,
             minimum_gap: 1.0,
             map,
         };
