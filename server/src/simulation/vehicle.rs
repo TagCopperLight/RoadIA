@@ -1,8 +1,8 @@
+use crate::map::intersection::Intersection;
+use crate::map::model::Coordinates;
 use crate::{map::model::Map, simulation::config::MAX_SPEED_MS};
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
-use crate::map::model::{Coordinates};
-use crate::map::intersection::{Intersection};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum VehicleKind {
@@ -102,12 +102,7 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
 // -----------------------------------------------------------------------------
 
 impl Vehicle {
-    pub fn new(
-        id: u64,
-        spec: VehicleSpec,
-        trip: TripRequest,
-        initial_node: NodeIndex,
-    ) -> Self {
+    pub fn new(id: u64, spec: VehicleSpec, trip: TripRequest, initial_node: NodeIndex) -> Self {
         Self {
             id,
             spec,
@@ -127,37 +122,72 @@ impl Vehicle {
         }
     }
 
-    pub fn compute_acceleration(&self, b2b_distance : f32, next_vehicle_velocity : f32, desired_velocity : f32, minimum_gap : f32, acceleration_exponent : f32) -> f32{
-        let s : f32 = minimum_gap + self.previous_velocity * self.spec.reaction_time + 0.5 * self.previous_velocity * ( self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
-        let new_acceleration : f32 = self.spec.max_acceleration_ms2 * (1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent) - (s/b2b_distance));
+    pub fn compute_acceleration(
+        &self,
+        b2b_distance: f32,
+        next_vehicle_velocity: f32,
+        desired_velocity: f32,
+        minimum_gap: f32,
+        acceleration_exponent: f32,
+    ) -> f32 {
+        let s: f32 = minimum_gap
+            + self.previous_velocity * self.spec.reaction_time
+            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity)
+                / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
+        let new_acceleration: f32 = self.spec.max_acceleration_ms2
+            * (1.0
+                - (self.previous_velocity / desired_velocity).powf(acceleration_exponent)
+                - (s / b2b_distance));
         return new_acceleration;
     }
 
-    pub fn get_coordinates(&self, map: &Map) -> Coordinates{
+    pub fn get_coordinates(&self, map: &Map) -> Coordinates {
         match self.state {
             VehicleState::WaitingToDepart => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
-                return Coordinates {x: current_node_o.x, y: current_node_o.y};
-            },
+                return Coordinates {
+                    x: current_node_o.x,
+                    y: current_node_o.y,
+                };
+            }
             VehicleState::AtIntersection => {
                 let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
-                return Coordinates {x: next_node_o.x, y: next_node_o.y};
-            },
+                return Coordinates {
+                    x: next_node_o.x,
+                    y: next_node_o.y,
+                };
+            }
             VehicleState::EnRoute => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
                 let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
-                let current_road = map.graph.edge_weight(map.graph.find_edge(self.current_node, self.next_node.unwrap()).unwrap()).unwrap();
+                let current_road = map
+                    .graph
+                    .edge_weight(
+                        map.graph
+                            .find_edge(self.current_node, self.next_node.unwrap())
+                            .unwrap(),
+                    )
+                    .unwrap();
 
-                let pos_rate : f32 = self.position_on_edge_m / current_road.length_m;
-                return Coordinates {x: current_node_o.x * (1.0 - pos_rate) + next_node_o.x * pos_rate, y:current_node_o.y * (1.0 - pos_rate) + next_node_o.y * pos_rate};
-            },
+                let pos_rate: f32 = 1.0 - (self.position_on_edge_m / current_road.length_m);
+                return Coordinates {
+                    x: current_node_o.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
+                    y: current_node_o.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
+                };
+            }
             VehicleState::Arrived => {
-                let current_node_o : Intersection = map.graph.node_weight(*self.path.get(self.path.len() - 1).unwrap()).unwrap().clone();
-                return Coordinates {x: current_node_o.x, y: current_node_o.y};
+                let current_node_o: Intersection = map
+                    .graph
+                    .node_weight(*self.path.get(self.path.len() - 1).unwrap())
+                    .unwrap()
+                    .clone();
+                return Coordinates {
+                    x: current_node_o.x,
+                    y: current_node_o.y,
+                };
             }
         }
     }
-
 }
 
 #[cfg(test)]

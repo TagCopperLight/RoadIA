@@ -1,6 +1,6 @@
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use serde::{Serialize, Deserialize};
 
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
@@ -11,9 +11,9 @@ pub struct Map {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Coordinates{
-    pub x : f32,
-    pub y : f32,
+pub struct Coordinates {
+    pub x: f32,
+    pub y: f32,
 }
 
 impl Map {
@@ -83,10 +83,9 @@ impl Map {
             .graph
             .edge_indices()
             .map(|e| {
-                let (a, b) = self
-                    .graph
-                    .edge_endpoints(e)
-                    .expect("edge_endpoints returned None for an EdgeIndex produced by edge_indices()");
+                let (a, b) = self.graph.edge_endpoints(e).expect(
+                    "edge_endpoints returned None for an EdgeIndex produced by edge_indices()",
+                );
                 let r = &self.graph[e];
                 json!({
                     "from": self.graph[a].id,
