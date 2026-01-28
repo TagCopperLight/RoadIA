@@ -71,7 +71,7 @@ impl Simulation for SimulationEngine {
                 VehicleState::WaitingToDepart | VehicleState::Arrived => {}
             }
         }
-        return closest_ahead_vehicle;
+        closest_ahead_vehicle
     }
 
     fn distance_between_vehicles(
