@@ -8,7 +8,6 @@ pub enum RoadRule {
     Priority,
     Yield,
     Stop,
-    TrafficLight,
 }
 
 
@@ -43,6 +42,7 @@ impl JunctionController {
         JunctionController
     }
     
+
     /// Retourne les indices des mouvements autorisés à s'engager
     pub fn authorized_indices(requests: &[MovementRequest], all_entry_angles: &[f64]) -> Vec<usize> {
         let mut allowed = Vec::new();
@@ -64,13 +64,11 @@ impl JunctionController {
                     RoadRule::Priority => 3,
                     RoadRule::Yield => 2,//céder le passage
                     RoadRule::Stop => 1,
-                    RoadRule::TrafficLight => 3, // Traffic Light (Green) behaves like Priority. Red blocks earlier.
                 };
                 let other_rank = match other.rule {
                     RoadRule::Priority => 3,
                     RoadRule::Yield => 2,
                     RoadRule::Stop => 1,
-                    RoadRule::TrafficLight => 3,
                 };
 
                 if other_rank > my_rank {
