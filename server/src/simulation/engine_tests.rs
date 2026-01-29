@@ -242,7 +242,7 @@ mod tests {
                 id:1,
                 spec,
                 trip: TripRequest {
-                    origin_id: 0,
+                    origin_id: 1,
                     destination_id: 3,
                     departure_time_s: 0,
                     return_time_s: None,
