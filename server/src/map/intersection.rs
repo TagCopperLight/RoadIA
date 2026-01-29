@@ -1,6 +1,16 @@
 use serde::{Deserialize, Serialize};
 use petgraph::graph::NodeIndex;
-use crate::map::road::RoadRule;
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub enum RoadRule {
+    #[default]
+    Priority,
+    Yield,
+    Stop,
+    TrafficLight,
+}
+
 
 #[derive(Clone)]
 pub struct MovementRequest {
@@ -49,16 +59,18 @@ impl JunctionController {
                     continue;
                 }
 
-                // Critère 0 : Règles de priorité (Stop/Cédez le passage)
+                // critere 1 : stop/céder le passage
                 let my_rank = match req.rule {
                     RoadRule::Priority => 3,
-                    RoadRule::Yield => 2,
+                    RoadRule::Yield => 2,//céder le passage
                     RoadRule::Stop => 1,
+                    RoadRule::TrafficLight => 3, // Traffic Light (Green) behaves like Priority. Red blocks earlier.
                 };
                 let other_rank = match other.rule {
                     RoadRule::Priority => 3,
                     RoadRule::Yield => 2,
                     RoadRule::Stop => 1,
+                    RoadRule::TrafficLight => 3,
                 };
 
                 if other_rank > my_rank {
@@ -69,7 +81,7 @@ impl JunctionController {
                     continue;
                 }
 
-                //critère 1 : quadrant
+                //critère 2 : quadrant
                 let my_cost = Intersection::quadrant_cost(req.entry_angle, req.exit_angle, n);
                 let other_cost = Intersection::quadrant_cost(other.entry_angle, other.exit_angle, n);
 
@@ -82,14 +94,14 @@ impl JunctionController {
                     continue;
                 }
 
-                //critère 2 : FIFO
+                //critère 3 : FIFO
                 if other.arrival_time + 1e-3 < req.arrival_time {
                     blocked = true;
                     break;
                 }
 
                 if (req.arrival_time - other.arrival_time).abs() <= 1e-3
-                    && other.vehicle_id < req.vehicle_id//critère 3 : ID véhicule (dernier recours, random possible sinon)
+                    && other.vehicle_id < req.vehicle_id//critère 4 : ID véhicule (dernier recours, random possible sinon)
                 {
                     blocked = true;
                     break;
@@ -112,6 +124,8 @@ pub struct Intersection {
     pub name: String,
     pub x: f32,
     pub y: f32,
+    #[serde(default)]
+    pub rules: HashMap<u32, RoadRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +133,7 @@ pub enum IntersectionKind {
     Habitation,
     Intersection,
     Workplace,
+    Roundabout,
 }
 
 impl Intersection {
@@ -178,5 +193,5 @@ impl Intersection {
         // Arrondir au secteur le plus proche
         let cost = (diff / sector_size).round() as i32;
         if cost == 0 { n_branches as i32 } else { cost } //cout maximal = demi-tour
-    }
-}//Calcul du coût en quadrants d'un mouvement (premier critère de priorité)
+    }//Calcul du coût en quadrants d'un mouvement (premier critère de priorité)
+}
