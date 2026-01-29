@@ -5,6 +5,10 @@ use crate::simulation::vehicle::{
     fastest_path, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState,
 };
 
+fn all_arrived(sim: &SimulationEngine) -> bool {
+    sim.vehicles.iter().all(|v| v.state == VehicleState::Arrived)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -31,7 +35,7 @@ mod tests {
         // check if step runs without panic
 
         sim.run();
-        assert!(sim.current_time >= 10.0);
+        assert!(all_arrived(&sim));
     }
 
     #[test]
@@ -115,7 +119,7 @@ mod tests {
 
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
-        assert!(true);
+        assert!(all_arrived(&sim));
     }
 
     #[test]
@@ -219,6 +223,6 @@ mod tests {
 
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
-        assert!(false);
+        assert!(all_arrived(&sim));
     }
 }
