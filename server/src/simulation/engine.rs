@@ -1,5 +1,4 @@
 use petgraph::graph::EdgeIndex;
-use std::cmp::{min, max};
 
 use crate::map::model::Map;
 use crate::map::road::Road;
