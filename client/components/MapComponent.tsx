@@ -7,20 +7,26 @@ import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { useCallback, useState, useEffect, type RefObject } from 'react';
 import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
 
-const intersections = [
-	{ x: -400, y: 400 },
-	{ x: -400, y: -400 },
-	{ x: 400, y: -400 },
-	{ x: 400, y: 400 },
-];
+interface MapNode {
+	id: number;
+	kind: "Intersection" | "Habitation" | "Workplace";
+	name: string;
+	x: number;
+	y: number;
+}
 
-const roads = [
-	{ start: intersections[0], end: intersections[1] },
-	{ start: intersections[1], end: intersections[2] },
-	{ start: intersections[2], end: intersections[3] },
-	{ start: intersections[3], end: intersections[0] },
-	{ start: intersections[1], end: intersections[3] },
-];
+interface MapEdge {
+	from: number;
+	id: number;
+	lane_count: number;
+	length: number;
+	to: number;
+}
+
+interface MapData {
+	nodes: MapNode[];
+	edges: MapEdge[];
+}
 
 class CustomViewport extends Viewport {
 	constructor(
@@ -54,8 +60,8 @@ declare module "@pixi/react" {
 
 extend({ Container, Graphics, Sprite, Text, CustomViewport });
 
-function Road({ start, end }: { start: { x: number, y: number }, end: { x: number, y: number } }) {
-	const width = 40;
+function Road({ start, end }: { start: MapNode, end: MapNode }) {
+	const width = 15;
 	return (
 		<pixiGraphics draw={(graphics) => {
 			graphics.clear();
@@ -80,19 +86,19 @@ function Road({ start, end }: { start: { x: number, y: number }, end: { x: numbe
 	);
 }
 
-function Intersection({ x, y }: { x: number, y: number }) {
+function Intersection({ node }: { node: MapNode }) {
 	return (
 		<pixiGraphics draw={(graphics) => {
 			graphics.clear();
-			graphics.position.set(x, y);
-			graphics.setFillStyle({ color: 'lightgray' });
-			graphics.circle(0, 0, 20);
+			graphics.position.set(node.x, node.y);
+			graphics.setFillStyle({ color: node.kind === 'Habitation' ? 'blue' : node.kind === 'Workplace' ? 'red' : 'lightgray' });
+			graphics.circle(0, 0, 10);
 			graphics.fill();
 		}} />
 	);
 }
 
-function Map() {
+function Map({ data }: { data: MapData }) {
 	const { app } = useApplication();
 
 	return (
@@ -103,12 +109,15 @@ function Map() {
 			wheel={{ trackpadPinch: true, percent: 2 }}
 			passiveWheel={false}
 		>
-			<pixiContainer x={app.screen.width / 2} y={app.screen.height / 2}>
-				{roads.map((road, index) => (
-					<Road key={index} start={road.start} end={road.end} />
-				))}
-				{intersections.map((intersection, index) => (
-					<Intersection key={index} x={intersection.x} y={intersection.y} />
+			<pixiContainer>
+				{data.edges.map((edge, index) => {
+					const startNode = data.nodes.find(n => n.id === edge.from);
+					const endNode = data.nodes.find(n => n.id === edge.to);
+					if (!startNode || !endNode) return null;
+					return <Road key={`road-${edge.id}-${index}`} start={startNode} end={endNode} />;
+				})}
+				{data.nodes.map((node) => (
+					<Intersection key={`node-${node.id}`} node={node} />
 				))}
 			</pixiContainer>
 		</pixiCustomViewport>
@@ -118,15 +127,16 @@ function Map() {
 
 interface AppProps {
 	resizeTo: RefObject<HTMLElement> | HTMLElement;
+	mapData: MapData | null;
 }
 
-function App({ resizeTo }: AppProps) {
+function App({ resizeTo, mapData }: AppProps) {
 	const [isInitialized, setIsInitialized] = useState(false);
 	const handleInit = useCallback(() => setIsInitialized(true), []);
 
 	return (
 		<Application onInit={handleInit} background={0xC1D9B7} resizeTo={resizeTo}>
-			{isInitialized && <Map />}
+			{isInitialized && mapData && <Map data={mapData} />}
 		</Application>
 	);
 }
@@ -137,6 +147,8 @@ interface MapComponentProps {
 
 export default function MapComponent({ uuid }: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
+	const [mapData, setMapData] = useState<MapData | null>(null);
+
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
 	}, []);
@@ -146,12 +158,13 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	}, []);
 
 	useWebSocket("map", (data) => {
-		console.log(data);
+		console.log("Received map data:", data);
+		setMapData(data as MapData);
 	});
 
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
-			{container && <App resizeTo={container} />}
+			{container && <App resizeTo={container} mapData={mapData} />}
 			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>
