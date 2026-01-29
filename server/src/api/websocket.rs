@@ -1,23 +1,57 @@
 use axum::{
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State},
     response::IntoResponse,
 };
 use serde_json::{json, Value};
 
 use crate::map::model::Map;
+use crate::api::server::AppState;
+use std::sync::Arc;
 
-pub async fn ws_handler(ws: WebSocketUpgrade) -> impl IntoResponse {
-    ws.on_upgrade(ws_loop)
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "id", content = "data")]
+#[serde(rename_all = "camelCase")]
+pub enum ClientPacket {
+    Connect { token: String },
 }
 
-async fn ws_loop(mut socket: WebSocket) {
+#[derive(Debug, Serialize)]
+#[serde(tag = "id", content = "data")]
+#[serde(rename_all = "camelCase")]
+pub enum ServerPacket {
+    Map { nodes: Vec<Value>, edges: Vec<Value> },
+}
+
+pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| ws_loop(socket, state))
+}
+
+async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
     while let Some(msg) = socket.recv().await {
         if let Ok(msg) = msg {
             match msg {
                 Message::Text(text) => {
-                    match serde_json::from_str::<Value>(&text) {
-                        Ok(json) => println!("Received JSON: {:?}", json),
-                        Err(e) => println!("Failed to parse JSON: {} (text: {})", e, text),
+                    match serde_json::from_str::<ClientPacket>(&text) {
+                        Ok(packet) => {
+                            println!("Received Packet: {:?}", packet);
+                            match packet {
+                                ClientPacket::Connect { token } => {
+                                    println!("Client connected with token: {}", token);
+                                    let (nodes, edges) = serialize_map(&state.map);
+                                    let response = ServerPacket::Map { nodes, edges };
+                                    if let Ok(text) = serde_json::to_string(&response) {
+                                        if let Err(e) = socket.send(Message::Text(text)).await {
+                                            println!("Failed to send message: {}", e);
+                                            break;
+                                        }
+                                    }
+                                }
+
+                            }
+                        }
+                        Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
                     }
                 }
                 _ => {
@@ -32,7 +66,7 @@ async fn ws_loop(mut socket: WebSocket) {
     }
 }
 
-fn serialize_map(map: &Map) -> Value {
+fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
     let nodes: Vec<Value> = map
         .graph
         .node_indices()
@@ -67,8 +101,5 @@ fn serialize_map(map: &Map) -> Value {
         })
         .collect();
 
-    json!({
-        "nodes": nodes,
-        "edges": edges
-    })
+    (nodes, edges)
 }
