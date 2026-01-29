@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use petgraph::graph::NodeIndex;
+use crate::map::road::RoadRule;
 
 #[derive(Clone)]
 pub struct MovementRequest {
@@ -9,6 +10,7 @@ pub struct MovementRequest {
     pub entry_angle: f64,
     pub exit_angle: f64,
     pub arrival_time: f32,
+    pub rule: RoadRule,
 }
 
 impl MovementRequest {
@@ -44,6 +46,26 @@ impl JunctionController {
                 if i == j { continue; }
 
                 if !req.conflicts_with(other, n) {
+                    continue;
+                }
+
+                // Critère 0 : Règles de priorité (Stop/Cédez le passage)
+                let my_rank = match req.rule {
+                    RoadRule::Priority => 3,
+                    RoadRule::Yield => 2,
+                    RoadRule::Stop => 1,
+                };
+                let other_rank = match other.rule {
+                    RoadRule::Priority => 3,
+                    RoadRule::Yield => 2,
+                    RoadRule::Stop => 1,
+                };
+
+                if other_rank > my_rank {
+                    blocked = true;
+                    break;
+                }
+                if my_rank > other_rank {
                     continue;
                 }
 

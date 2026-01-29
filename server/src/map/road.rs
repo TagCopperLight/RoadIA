@@ -9,6 +9,16 @@ pub struct Road {
     pub length_m: f32,
     pub is_blocked: bool,
     pub can_overtake: bool,
+    #[serde(default)]
+    pub rule: RoadRule,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub enum RoadRule {
+    #[default]
+    Priority,
+    Yield,
+    Stop,
 }
 
 impl Road {
@@ -27,6 +37,12 @@ impl Road {
             length_m,
             is_blocked,
             can_overtake,
+            rule: RoadRule::Priority,
         }
+    }
+    
+    pub fn with_rule(mut self, rule: RoadRule) -> Self {
+        self.rule = rule;
+        self
     }
 }
