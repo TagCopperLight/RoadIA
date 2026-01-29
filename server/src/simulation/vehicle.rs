@@ -27,7 +27,7 @@ pub struct TripRequest {
     pub return_time: Option<u64>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum VehicleState {
     WaitingToDepart,
     OnRoad,
