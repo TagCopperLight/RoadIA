@@ -1,6 +1,4 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Intersection {
     pub id: u32,
     pub kind: IntersectionKind,
@@ -9,7 +7,7 @@ pub struct Intersection {
     pub y: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,
