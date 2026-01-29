@@ -15,16 +15,16 @@ mod tests {
         let map = Map::default();
         let vehicles = vec![];
         let config = SimulationConfig {
-            start_time_s: 0.0,
-            end_time_s: 10.0,
-            time_step_s: 1.0,
+            start_time: 0.0,
+            end_time: 10.0,
+            time_step: 1.0,
             minimum_gap: 1.0,
             map,
         };
         let mut sim = SimulationEngine::new(config, vehicles);
 
         assert_eq!(sim.current_time, 0.0);
-        assert_eq!(sim.config.end_time_s, 10.0);
+        assert_eq!(sim.config.end_time, 10.0);
 
         sim.step();
         // step() does NOT increment current_time, run() does.
@@ -70,14 +70,14 @@ mod tests {
             y: 50.0,
         });
 
-        map.add_two_way_road(h1, i1, Road::new(0, 1, 50, 100.0, false, false));
-        map.add_two_way_road(h2, i1, Road::new(1, 1, 50, 100.0, false, false));
-        map.add_two_way_road(i1, w1, Road::new(2, 1, 100, 100.0, false, false));
+        map.add_two_way_road(h1, i1, Road::new(0, 1, 50.0, 100.0, false, false));
+        map.add_two_way_road(h2, i1, Road::new(1, 1, 50.0, 100.0, false, false));
+        map.add_two_way_road(i1, w1, Road::new(2, 1, 100.0, 100.0, false, false));
 
         let config = SimulationConfig {
-            start_time_s: 0.0,
-            end_time_s: 10.0,
-            time_step_s: 0.1,
+            start_time: 0.0,
+            end_time: 10.0,
+            time_step: 0.1,
             minimum_gap: 1.0,
             map: map.clone(),
         };
@@ -154,14 +154,14 @@ mod tests {
             y: 50.0,
         });
 
-        map.add_two_way_road(h1, i1, Road::new(0, 1, 50, 100.0, false, false));
-        map.add_two_way_road(h2, i1, Road::new(1, 1, 50, 100.0, false, false));
-        map.add_two_way_road(i1, w1, Road::new(2, 1, 100, 100.0, false, false));
+        map.add_two_way_road(h1, i1, Road::new(0, 1, 50.0, 100.0, false, false));
+        map.add_two_way_road(h2, i1, Road::new(1, 1, 50.0, 100.0, false, false));
+        map.add_two_way_road(i1, w1, Road::new(2, 1, 100.0, 100.0, false, false));
 
         let config = SimulationConfig {
-            start_time_s: 0.0,
-            end_time_s: 10.0,
-            time_step_s: 0.1,
+            start_time: 0.0,
+            end_time: 10.0,
+            time_step: 0.1,
             minimum_gap: 1.0,
             map: map.clone(),
         };
