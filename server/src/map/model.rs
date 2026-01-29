@@ -50,7 +50,7 @@ impl Map {
     ) -> Option<f32> {
         self.graph
             .find_edge(source, destination)
-            .map(|edge| self.graph[edge].length_m)
+            .map(|edge| self.graph[edge].length)
     }
 
     pub fn intersections_euclidean_distance(

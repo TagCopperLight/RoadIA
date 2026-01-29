@@ -96,7 +96,7 @@ fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "from": map.graph[a].id,
                 "to": map.graph[b].id,
                 "lane_count": r.lane_count,
-                "length": r.length_m,
+                "length": r.length,
             })
         })
         .collect();
