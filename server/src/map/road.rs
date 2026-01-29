@@ -1,4 +1,4 @@
-use crate::simulation::config::MAX_SPEED_MS;
+use crate::simulation::config::MAX_SPEED;
 
 #[derive(Clone)]
 pub struct Road {
@@ -22,7 +22,7 @@ impl Road {
         Self {
             id,
             lane_count,
-            speed_limit_ms: speed_limit_ms.clamp(1, MAX_SPEED_MS),
+            speed_limit_ms: speed_limit_ms.clamp(1, MAX_SPEED),
             length_m,
             is_blocked,
             can_overtake,

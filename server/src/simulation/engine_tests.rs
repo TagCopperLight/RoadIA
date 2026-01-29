@@ -18,7 +18,6 @@ mod tests {
             start_time_s: 0.0,
             end_time_s: 10.0,
             time_step_s: 1.0,
-            acceleration_exponent: 4.0,
             minimum_gap: 1.0,
             map,
         };
@@ -79,7 +78,6 @@ mod tests {
             start_time_s: 0.0,
             end_time_s: 10.0,
             time_step_s: 0.1,
-            acceleration_exponent: 4.0,
             minimum_gap: 1.0,
             map: map.clone(),
         };
@@ -88,8 +86,8 @@ mod tests {
 
         let spec = VehicleSpec {
             kind: VehicleKind::Car,
-            max_speed_ms: 100.0,
-            max_acceleration_ms2: 20.0,
+            max_speed: 100.0,
+            max_acceleration: 20.0,
             comfortable_deceleration: 1.67,
             reaction_time: 1.0,
             length: 5.0,
@@ -101,24 +99,18 @@ mod tests {
             id: 0,
             spec,
             trip: TripRequest {
-                origin_id: 0,
-                destination_id: 3,
+                origin: h1,
+                destination: w1,
                 departure_time: 0,
                 return_time: None,
             },
             state: VehicleState::WaitingToDepart,
-            current_node: h1,
-            next_node: Some(i1),
             path,
             path_index: 0,
-            position_on_edge_m: 0.0,
+            position_on_road: 0.0,
             previous_position: 0.0,
             velocity: 0.0,
             previous_velocity: 0.0,
-            distance_travelled_m: 0.0,
-            fuel_used_l: 0.0,
-            co2_emitted_g: 0.0,
-            intersection_wait_start_time_s: None,
         });
 
         let mut sim = SimulationEngine::new(config, vehicles);
@@ -170,7 +162,6 @@ mod tests {
             start_time_s: 0.0,
             end_time_s: 10.0,
             time_step_s: 0.1,
-            acceleration_exponent: 4.0,
             minimum_gap: 1.0,
             map: map.clone(),
         };
@@ -179,8 +170,8 @@ mod tests {
 
         let spec = VehicleSpec {
             kind: VehicleKind::Car,
-            max_speed_ms: 100.0,
-            max_acceleration_ms2: 20.0,
+            max_speed: 100.0,
+            max_acceleration: 20.0,
             comfortable_deceleration: 1.67,
             reaction_time: 1.0,
             length: 5.0,
@@ -192,24 +183,18 @@ mod tests {
             id: 0,
             spec,
             trip: TripRequest {
-                origin_id: 0,
-                destination_id: 3,
+                origin: h1,
+                destination: w1,
                 departure_time: 0,
                 return_time: None,
             },
             state: VehicleState::WaitingToDepart,
-            current_node: h1,
-            next_node: Some(i1),
             path: path0,
             path_index: 0,
-            position_on_edge_m: 0.0,
+            position_on_road: 0.0,
             previous_position: 0.0,
             velocity: 0.0,
             previous_velocity: 0.0,
-            distance_travelled_m: 0.0,
-            fuel_used_l: 0.0,
-            co2_emitted_g: 0.0,
-            intersection_wait_start_time_s: None,
         });
 
         let path1 = fastest_path(&map, h2, w1);
@@ -218,24 +203,18 @@ mod tests {
             id: 1,
             spec,
             trip: TripRequest {
-                origin_id: 1,
-                destination_id: 3,
+                origin: h2,
+                destination: w1,
                 departure_time: 0,
                 return_time: None,
             },
             state: VehicleState::WaitingToDepart,
-            current_node: h2,
-            next_node: Some(i1),
             path: path1,
             path_index: 0,
-            position_on_edge_m: 0.0,
+            position_on_road: 0.0,
             previous_position: 0.0,
             velocity: 0.0,
             previous_velocity: 0.0,
-            distance_travelled_m: 0.0,
-            fuel_used_l: 0.0,
-            co2_emitted_g: 0.0,
-            intersection_wait_start_time_s: None,
         });
 
         let mut sim = SimulationEngine::new(config, vehicles);
