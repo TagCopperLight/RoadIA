@@ -9,8 +9,6 @@ use crate::simulation::vehicle::{
 mod tests {
     use super::*;
     use crate::{map::model::Map, simulation::config::SimulationConfig};
-    // use crate::simulation::config::SimulationConfig; // Engine creates config now
-    // use crate::simulation::vehicle::Vehicle;
 
     #[test]
     fn test_simulation_engine_creation_and_step() {
