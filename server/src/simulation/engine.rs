@@ -46,7 +46,7 @@ impl Simulation for SimulationEngine {
         current_vehicle_position: f32,
     ) -> Option<Vehicle> {
         let mut closest_ahead_vehicle: Option<Vehicle> = None;
-        let mut closest_ahead_position: f32 = 0.0;
+        let mut closest_ahead_position: f32 = -1.0;
         for vehicle in vehicles {
             match vehicle.state {
                 VehicleState::EnRoute | VehicleState::AtIntersection
@@ -58,7 +58,7 @@ impl Simulation for SimulationEngine {
                     {
                         if edge_index == road_index
                             && vehicle.previous_position <= current_vehicle_position
-                            && closest_ahead_position < vehicle.position_on_edge_m
+                            && closest_ahead_position < vehicle.previous_position
                         {
                             closest_ahead_position = vehicle.previous_position;
                             closest_ahead_vehicle = Some(vehicle.clone());

@@ -111,9 +111,10 @@ impl Vehicle {
     pub fn compute_acceleration_free_road(
         &self,
         desired_velocity: f32,
-        acceleration_exponent: f32
+        acceleration_exponent: f32,
     ) -> f32 {
-        self.spec.max_acceleration_ms2 * (1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent))
+        self.spec.max_acceleration_ms2
+            * (1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent))
     }
 
     pub fn compute_acceleration_follower(
@@ -126,7 +127,8 @@ impl Vehicle {
     ) -> f32 {
         let s: f32 = minimum_gap
             + self.previous_velocity * self.spec.reaction_time
-            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
+            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity)
+                / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
         let new_acceleration: f32 = self.spec.max_acceleration_ms2
             * (1.0
                 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent)
@@ -138,11 +140,17 @@ impl Vehicle {
         match self.state {
             VehicleState::WaitingToDepart => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
-                Coordinates { x: current_node_o.x, y: current_node_o.y }
+                Coordinates {
+                    x: current_node_o.x,
+                    y: current_node_o.y,
+                }
             }
             VehicleState::AtIntersection => {
                 let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
-                Coordinates { x: next_node_o.x, y: next_node_o.y }
+                Coordinates {
+                    x: next_node_o.x,
+                    y: next_node_o.y,
+                }
             }
             VehicleState::EnRoute => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
@@ -168,7 +176,10 @@ impl Vehicle {
                     .node_weight(*self.path.last().unwrap())
                     .unwrap()
                     .clone();
-                Coordinates { x: current_node_o.x, y: current_node_o.y }
+                Coordinates {
+                    x: current_node_o.x,
+                    y: current_node_o.y,
+                }
             }
         }
     }
