@@ -1,14 +1,11 @@
-use petgraph::graph::EdgeIndex;
-
-use crate::map::model::Map;
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
+use petgraph::graph::EdgeIndex;
 
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
-    fn ahead_vehicle(
-        vehicles: &[Vehicle],
-        map: &Map,
+    fn vehicle_ahead(
+        &mut self,
         road_index: EdgeIndex,
         current_vehicle_id: u64,
         current_vehicle_position: f32,
@@ -37,21 +34,22 @@ impl Simulation for SimulationEngine {
         }
     }
 
-    fn ahead_vehicle(
-        vehicles: &[Vehicle],
-        map: &Map,
+    fn vehicle_ahead(
+        &mut self,
         road_index: EdgeIndex,
         current_vehicle_id: u64,
         current_vehicle_position: f32,
     ) -> Option<Vehicle> {
         let mut closest_ahead_vehicle: Option<Vehicle> = None;
         let mut closest_ahead_position: f32 = -1.0;
-        for vehicle in vehicles {
+        for vehicle in self.vehicles {
             match vehicle.state {
                 VehicleState::EnRoute | VehicleState::AtIntersection
                     if vehicle.id != current_vehicle_id =>
                 {
-                    if let Some(edge_index) = map
+                    if let Some(edge_index) = self
+                        .config
+                        .map
                         .graph
                         .find_edge(vehicle.get_current_node(), vehicle.get_next_node().unwrap())
                     {
@@ -94,7 +92,6 @@ impl Simulation for SimulationEngine {
     }
 
     fn step(&mut self) {
-        //MAJ des attributs tempons
         for vehicle in &mut self.vehicles {
             vehicle.previous_velocity = vehicle.velocity;
             vehicle.previous_position = vehicle.position_on_road;
@@ -103,143 +100,50 @@ impl Simulation for SimulationEngine {
 
         let vehicles_len = self.vehicles.len();
         for i in 0..vehicles_len {
+            let vehicle = &mut self.vehicles[i];
             let state = self.vehicles[i].state;
             match state {
                 VehicleState::WaitingToDepart => {
-                    let (current_node, next_node, vid) = {
-                        let v = &self.vehicles[i];
-                        (v.current_node, v.next_node, v.id)
-                    };
-                    let current_road_index = self
-                        .config
-                        .map
-                        .graph
-                        .find_edge(current_node, next_node.unwrap())
-                        .unwrap();
-                    let current_road = self
-                        .config
-                        .map
-                        .graph
-                        .edge_weight(current_road_index)
-                        .unwrap();
-                    let ahead = {
-                        let vehicles_imm = &self.vehicles;
-                        Self::ahead_vehicle(
-                            vehicles_imm,
-                            &self.config.map,
-                            current_road_index,
-                            vid,
-                            current_road.length_m,
-                        )
-                    };
-                    //println!("[WaitingForDepart] Current Road {}", current_road.id);
-                    let vehicle = &mut self.vehicles[i];
-                    let distance_ahead: f32 =
-                        Self::calculate_free_distance(current_road.length_m, ahead);
-                    if distance_ahead >= vehicle.spec.length {
-                        vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_road = current_road.length_m - vehicle.spec.length;
+                    let available_distance_ahead =
+                        vehicle.get_available_distance_ahead(&self.config.map);
+                    if available_distance_ahead >= vehicle.spec.length {
+                        vehicle.position_on_road = vehicle.spec.length;
+                        vehicle.state = VehicleState::EnRoute
                     }
                 }
                 VehicleState::EnRoute => {
-                    let (current_node, next_node, pos, vid) = {
-                        let v = &self.vehicles[i];
-                        (v.current_node, v.next_node, v.previous_position, v.id)
+                    let current_road = vehicle.get_current_road(&self.config.map);
+                    let current_speed_limit_ms = current_road.speed_limit_ms as f32;
+                    let vehicle_ahead =
+                        self.vehicle_ahead(current_road, vehicle.id, vehicle.position_on_road);
+                    let vehicle_ahead_option = match vehicle_ahead {
+                        Some(vehicle_ahead) => Some((
+                            vehicle_ahead.previous_position
+                                - vehicle_ahead.spec.length
+                                - vehicle.position_on_road,
+                            vehicle_ahead.previous_velocity,
+                        )),
+                        None => None,
                     };
-                    let current_road_index = self
-                        .config
-                        .map
-                        .graph
-                        .find_edge(current_node, next_node.unwrap())
-                        .unwrap();
-                    let current_road = self
-                        .config
-                        .map
-                        .graph
-                        .edge_weight(current_road_index)
-                        .unwrap();
-                    let ahead = {
-                        let vehicles_imm = &self.vehicles;
-                        Self::ahead_vehicle(
-                            vehicles_imm,
-                            &self.config.map,
-                            current_road_index,
-                            vid,
-                            pos,
-                        )
-                    };
-                    let vehicle = &mut self.vehicles[i];
-                    let new_acceleration = match ahead {
-                        Some(v) => vehicle.compute_acceleration_follower(
-                            vehicle.previous_position - v.previous_position - v.spec.length,
-                            v.previous_velocity,
-                            current_road.speed_limit_ms as f32,
-                            self.config.minimum_gap,
-                            self.config.acceleration_exponent,
-                        ),
-                        None => vehicle.compute_acceleration_free_road(
-                            current_road.speed_limit_ms as f32,
-                            self.config.acceleration_exponent,
-                        ),
-                    };
-                    vehicle.velocity += self.config.time_step_s * new_acceleration;
-                    vehicle.velocity = vehicle
-                        .velocity
-                        .clamp(0.0, current_road.speed_limit_ms as f32);
-                    //println!("");
-                    //println!("Acceleration : {}", new_acceleration);
-                    //println!("Velocity : {}", vehicle.velocity);
+                    let acceleration = vehicle.compute_acceleration(
+                        current_speed_limit_ms,
+                        self.config.minimum_gap,
+                        vehicle_ahead_option,
+                    );
+                    vehicle.velocity +=
+                        self.config.time_step_s * acceleration.clamp(0.0, current_speed_limit_ms);
+
                     vehicle.position_on_road -= vehicle.velocity * self.config.time_step_s;
-                    if vehicle.position_on_road < 0.0 {
-                        vehicle.position_on_road = 0.0;
-                        vehicle.velocity = 0.0;
-                        vehicle.previous_velocity = 0.0;
-                        vehicle.state = VehicleState::AtIntersection;
-                        if vehicle.path_index == vehicle.path.len() - 2 {
-                            vehicle.state = VehicleState::Arrived;
-                        }
+
+                    if vehicle.position_on_road < current_road.length_m {
+                        vehicle.on_node_reached();
                     }
                 }
                 VehicleState::AtIntersection => {
-                    let (path_idx, vid) = {
-                        let v = &self.vehicles[i];
-                        (v.path_index, v.id)
-                    };
-                    let n1 = *{
-                        let v = &self.vehicles[i];
-                        v.path.get(path_idx + 1).unwrap()
-                    };
-                    let n2 = *{
-                        let v = &self.vehicles[i];
-                        v.path.get(path_idx + 2).unwrap()
-                    };
-                    let next_road_index = self.config.map.graph.find_edge(n1, n2);
-                    let next_road = self
-                        .config
-                        .map
-                        .graph
-                        .edge_weight(next_road_index.unwrap())
-                        .unwrap();
-                    let ahead = {
-                        let vehicles_imm = &self.vehicles;
-                        Self::ahead_vehicle(
-                            vehicles_imm,
-                            &self.config.map,
-                            next_road_index.unwrap(),
-                            vid,
-                            next_road.length_m,
-                        )
-                    };
-                    let vehicle = &mut self.vehicles[i];
-                    let distance_ahead: f32 =
-                        Self::calculate_free_distance(next_road.length_m, ahead);
-                    if distance_ahead >= vehicle.spec.length {
-                        vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_road = next_road.length_m - vehicle.spec.length;
-                        vehicle.previous_position = vehicle.position_on_road;
-                        vehicle.path_index += 1;
-                        vehicle.current_node = *vehicle.path.get(vehicle.path_index).unwrap();
-                        vehicle.next_node = vehicle.path.get(vehicle.path_index + 1).copied();
+                    let available_distance_ahead =
+                        vehicle.get_available_distance_ahead(&self.config.map);
+                    if available_distance_ahead >= vehicle.spec.length {
+                        vehicle.enter_next_road();
                     }
                 }
                 VehicleState::Arrived => {}
