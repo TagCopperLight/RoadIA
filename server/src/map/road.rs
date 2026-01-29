@@ -22,7 +22,7 @@ impl Road {
         Self {
             id,
             lane_count,
-            speed_limit_ms: speed_limit_ms.max(1).min(MAX_SPEED_MS),
+            speed_limit_ms: speed_limit_ms.clamp(1, MAX_SPEED_MS),
             length_m,
             is_blocked,
             can_overtake,

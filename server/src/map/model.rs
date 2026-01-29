@@ -54,10 +54,15 @@ impl Map {
             .map(|edge| self.graph[edge].length_m)
     }
 
-    pub fn index_from_id(&self, id: u32) -> NodeIndex {
-        self.graph
-            .node_indices()
-            .find(|i| self.graph[*i].id == id)
-            .unwrap()
+    pub fn intersections_euclidean_distance(
+        &self,
+        source: NodeIndex,
+        destination: NodeIndex,
+    ) -> f32 {
+        let n1 = &self.graph[source];
+        let n2 = &self.graph[destination];
+        let dx = n1.x - n2.x;
+        let dy = n1.y - n2.y;
+        (dx * dx + dy * dy).sqrt()
     }
 }
