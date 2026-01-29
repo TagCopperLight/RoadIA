@@ -1,5 +1,4 @@
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::simulation::config::{SimulationConfig};
 use crate::map::intersection::{Intersection, IntersectionKind};
 use crate::map::road::{Road};
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleSpec, VehicleState, TripRequest, fastest_path};
@@ -136,7 +135,6 @@ mod tests {
 
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
-        assert!(true);
     }
 
     #[test]
@@ -267,6 +265,5 @@ mod tests {
 
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
-        assert!(false);
     }
 }

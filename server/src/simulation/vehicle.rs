@@ -126,14 +126,11 @@ impl Vehicle {
     ) -> f32 {
         //println!("[Compute acceleration] {} {} {} {} {}", b2b_distance, next_vehicle_velocity, desired_velocity, minimum_gap, acceleration_exponent);
         //println!("params for s {} {} {}", self.previous_velocity, self.spec.reaction_time, 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5));
-        let s: f32 = minimum_gap
-            + self.previous_velocity * self.spec.reaction_time
-            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
+        let s: f32 = self.previous_velocity.mul_add(self.spec.reaction_time, minimum_gap)
+            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).sqrt();
         //println!("S value {}", s);
         let new_acceleration: f32 = self.spec.max_acceleration_ms2
-            * (1.0
-                - (self.previous_velocity / desired_velocity).powf(acceleration_exponent)
-                - (s / b2b_distance).powf(2.0));
+            * (s / b2b_distance).mul_add(-(s / b2b_distance), 1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent));
         new_acceleration
     }
 
@@ -167,14 +164,14 @@ impl Vehicle {
 
                 let pos_rate: f32 = self.position_on_edge_m / current_road.length_m;
                 Coordinates {
-                    x: current_node_o.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
-                    y: current_node_o.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
+                    x: current_node_o.x.mul_add(1.0 - pos_rate, next_node_o.x * pos_rate),
+                    y: current_node_o.y.mul_add(1.0 - pos_rate, next_node_o.y * pos_rate),
                 }
             }
             VehicleState::Arrived => {
                 let current_node_o: Intersection = map
                     .graph
-                    .node_weight(*self.path.get(self.path.len() - 1).unwrap())
+                    .node_weight(*self.path.last().unwrap())
                     .unwrap()
                     .clone();
                 Coordinates {

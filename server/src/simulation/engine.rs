@@ -1,7 +1,6 @@
 use petgraph::graph::EdgeIndex;
 
 use crate::map::model::Map;
-use crate::map::road::Road;
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
 
@@ -15,7 +14,6 @@ pub trait Simulation {
         current_vehicle_position: f32,
     ) -> Option<Vehicle>;
     fn next_obstacle_position(
-        current_road: Road,
         current_vehicle_position: f32,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32;
@@ -67,15 +65,13 @@ impl Simulation for SimulationEngine {
                         }
                     }
                 }
-                VehicleState::EnRoute | VehicleState::AtIntersection => {}
-                VehicleState::WaitingToDepart | VehicleState::Arrived => {}
-            }
+                VehicleState::EnRoute | VehicleState::AtIntersection | VehicleState::WaitingToDepart | VehicleState::Arrived => {}
+                }
         }
         closest_ahead_vehicle
     }
 
     fn next_obstacle_position(//renvoie la position de l'obstacle devant le plus proche (voiture / fin de route)
-        current_road: Road,
         current_vehicle_position: f32,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32 {
@@ -97,10 +93,7 @@ impl Simulation for SimulationEngine {
 
     fn step(&mut self) {
         //MAJ des attributs tempons
-        let vehicles_len = self.vehicles.len();
-        let vehicles_slice = &mut self.vehicles;
-        for i in 0..vehicles_len {
-            let vehicle = &mut vehicles_slice[i];
+        for vehicle in &mut self.vehicles {
             vehicle.previous_velocity = vehicle.velocity;
             vehicle.previous_position = vehicle.position_on_edge_m;
         }
@@ -141,7 +134,7 @@ impl Simulation for SimulationEngine {
                     //println!("[WaitingForDepart] Current Road {}", current_road.id);
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
-                        Self::next_obstacle_position(current_road.clone(), vehicle.previous_position, ahead);
+                        Self::next_obstacle_position(vehicle.previous_position, ahead);
                     //println!("Distance ahead : {} cond : {}", distance_ahead, current_road.length_m - distance_ahead >= vehicle.spec.length_m);
                     if current_road.length_m - distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
@@ -237,7 +230,7 @@ impl Simulation for SimulationEngine {
                     };
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
-                        Self::next_obstacle_position(next_road.clone(), vehicle.previous_position, ahead);
+                        Self::next_obstacle_position(vehicle.previous_position, ahead);
                     println!("Distance ahead : {}", distance_ahead);
                     if next_road.length_m - distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
