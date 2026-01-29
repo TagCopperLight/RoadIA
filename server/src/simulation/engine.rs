@@ -53,7 +53,7 @@ impl Simulation for SimulationEngine {
                 {
                     if let Some(edge_index) = map
                         .graph
-                        .find_edge(vehicle.current_node, vehicle.next_node.unwrap())
+                        .find_edge(vehicle.get_current_node(), vehicle.get_next_node().unwrap())
                     {
                         if edge_index == road_index
                             && vehicle.previous_position <= current_vehicle_position
@@ -97,7 +97,7 @@ impl Simulation for SimulationEngine {
         //MAJ des attributs tempons
         for vehicle in &mut self.vehicles {
             vehicle.previous_velocity = vehicle.velocity;
-            vehicle.previous_position = vehicle.position_on_edge_m;
+            vehicle.previous_position = vehicle.position_on_road;
         }
         //MAJ des vitesses et des états
 
@@ -138,7 +138,7 @@ impl Simulation for SimulationEngine {
                         Self::calculate_free_distance(current_road.length_m, ahead);
                     if distance_ahead >= vehicle.spec.length {
                         vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_edge_m = current_road.length_m - vehicle.spec.length;
+                        vehicle.position_on_road = current_road.length_m - vehicle.spec.length;
                     }
                 }
                 VehicleState::EnRoute => {
@@ -189,9 +189,9 @@ impl Simulation for SimulationEngine {
                     //println!("");
                     //println!("Acceleration : {}", new_acceleration);
                     //println!("Velocity : {}", vehicle.velocity);
-                    vehicle.position_on_edge_m -= vehicle.velocity * self.config.time_step_s;
-                    if vehicle.position_on_edge_m < 0.0 {
-                        vehicle.position_on_edge_m = 0.0;
+                    vehicle.position_on_road -= vehicle.velocity * self.config.time_step_s;
+                    if vehicle.position_on_road < 0.0 {
+                        vehicle.position_on_road = 0.0;
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
                         vehicle.state = VehicleState::AtIntersection;
@@ -235,8 +235,8 @@ impl Simulation for SimulationEngine {
                         Self::calculate_free_distance(next_road.length_m, ahead);
                     if distance_ahead >= vehicle.spec.length {
                         vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_edge_m = next_road.length_m - vehicle.spec.length;
-                        vehicle.previous_position = vehicle.position_on_edge_m;
+                        vehicle.position_on_road = next_road.length_m - vehicle.spec.length;
+                        vehicle.previous_position = vehicle.position_on_road;
                         vehicle.path_index += 1;
                         vehicle.current_node = *vehicle.path.get(vehicle.path_index).unwrap();
                         vehicle.next_node = vehicle.path.get(vehicle.path_index + 1).copied();
