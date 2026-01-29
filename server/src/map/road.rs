@@ -1,7 +1,6 @@
 use crate::simulation::config::MAX_SPEED_MS;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Road {
     pub id: u32,
     pub lane_count: u8,

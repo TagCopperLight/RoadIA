@@ -1,37 +1,26 @@
+use std::sync::Arc;
+use tokio::io;
+use tokio::net::TcpListener;
+use axum::{Router, routing::get};
 use crate::map::model::Map;
-use crate::simulation::handle::Handle;
-use axum::extract::ws::{Message, WebSocket};
-use serde::Serialize;
-use tokio::time::{sleep, Duration};
+use crate::api::websocket::ws_handler;
 
-#[derive(Serialize)]
-pub struct VehicleUpdate {
-    pub id: u64,
-    pub x: f32,
-    pub y: f32,
-    pub state: String,
+pub struct AppState {
+    pub map: Map,
 }
 
-pub async fn websocket_loop(mut socket: WebSocket, handle: Handle, map: &Map) {
-    loop {
-        let vehicles = handle.snapshot_vehicles();
+pub async fn run() -> io::Result<()> {
+    let map = Map::new();
+    
+    let shared_state = Arc::new(AppState { map });
 
-        let updates: Vec<VehicleUpdate> = vehicles
-            .into_iter()
-            .map(|a| VehicleUpdate {
-                id: a.id,
-                x: a.get_coordinates(map).x,
-                y: a.get_coordinates(map).y,
-                state: format!("{:?}", a.state),
-            })
-            .collect();
+    let app = Router::new()
+        .route("/ws", get(ws_handler))
+        .with_state(shared_state);
 
-        let json = serde_json::to_string(&updates).unwrap();
-
-        if socket.send(Message::Text(json)).await.is_err() {
-            break;
-        }
-
-        sleep(Duration::from_millis(100)).await;
-    }
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+    println!("Listening on {}", listener.local_addr()?);
+    axum::serve(listener, app).await?;
+    
+    Ok(())
 }
