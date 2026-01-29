@@ -20,7 +20,7 @@ use crate::{
     map::{
         intersection::{Intersection, IntersectionKind, JunctionController, MovementRequest},
         model::Map,
-        road::Road,
+        road::{Road, RoadRule},
     },
     simulation::{
         config::SimulationConfig,
@@ -234,6 +234,24 @@ async fn intersection_tests_json() -> Json<serde_json::Value> {
                 {"id": 2, "name": "V2 (216°->288°)", "entry_angle": 216.0, "exit_angle": 288.0, "arrival_time": 0.0}
             ],
             "authorized": []
+        }),
+        json!({
+            "id": 14,
+            "name": "Validation Stop : V1(Stop) vs V0(Prio)",
+            "vehicles": [
+                {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
+                {"id": 1, "name": "V1 (Ouest->Est) AVEC STOP", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0, "rule": "stop"}
+            ],
+            "authorized": []
+        }),
+        json!({
+            "id": 15,
+            "name": "Validation Cédez-le-Passage : V1(Cédez) vs V0(Prio)",
+            "vehicles": [
+                {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
+                {"id": 1, "name": "V1 (Ouest->Est) AVEC CEDEZ", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0, "rule": "yield"}
+            ],
+            "authorized": []
         })
     ];
     
@@ -249,6 +267,8 @@ struct TestVehicle {
     entry_angle: f64,
     exit_angle: f64,
     arrival_time: f32,
+    #[serde(default)]
+    rule: Option<String>, // "stop", "yield", "priority"
 }
 
 #[derive(Debug, Deserialize)]
@@ -350,12 +370,28 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
                 entry_angle: v.entry_angle, 
                 exit_angle: v.exit_angle,
                 arrival_time: -1.0, 
+                rule: RoadRule::Priority,
             });
             mix_map.push(idx);
         }
 
         for &idx in &candidates {
             let v = &payload.vehicles[idx];
+            
+            // Determine Rule from JSON
+            let rule = match v.rule.as_deref() {
+                Some("stop") => RoadRule::Stop,
+                Some("yield") => RoadRule::Yield,
+                _ => RoadRule::Priority,
+            };
+
+            // Stop Logic Simulation
+            if rule == RoadRule::Stop {
+                if time - (v.arrival_time as f64) < 3.0 {
+                    continue; 
+                }
+            }
+
             let exit_int = ((v.exit_angle + 360.0) % 360.0 * 10.0).round() as i64;
             requests_mix.push(MovementRequest {
                 vehicle_index: idx, 
@@ -364,6 +400,7 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
                 entry_angle: v.entry_angle,
                 exit_angle: v.exit_angle,
                 arrival_time: v.arrival_time,
+                rule,
             });
             mix_map.push(idx);
         }
@@ -479,6 +516,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
             entry_angle: north_angle,
             exit_angle: ldt_angle,
             arrival_time: 0.0,
+            rule: RoadRule::Priority,
         },
         MovementRequest {
             vehicle_index: 1,
@@ -487,6 +525,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
             entry_angle: east_angle,
             exit_angle: ldt_angle,
             arrival_time: 0.0,
+            rule: RoadRule::Priority,
         },
         MovementRequest {
             vehicle_index: 2,
@@ -495,6 +534,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
             entry_angle: south_angle,
             exit_angle: ldt_angle,
             arrival_time: 0.0,
+            rule: RoadRule::Priority,
         },
     ];
     
