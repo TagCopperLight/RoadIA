@@ -3,9 +3,6 @@ use crate::map::model::Coordinates;
 use crate::{map::model::Map, simulation::config::MAX_SPEED_MS};
 use petgraph::graph::NodeIndex;
 
-use crate::map::model::{Coordinates};
-use crate::map::intersection::{Intersection};
-
 #[derive(Debug, Clone, Copy)]
 pub enum VehicleKind {
     Car,
