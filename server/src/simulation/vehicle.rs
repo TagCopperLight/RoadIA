@@ -111,10 +111,9 @@ impl Vehicle {
     pub fn compute_acceleration_free_road(
         &self,
         desired_velocity: f32,
-        acceleration_exponent: f32,
+        acceleration_exponent: f32
     ) -> f32 {
-        self.spec.max_acceleration_ms2
-            * (1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent))
+        self.spec.max_acceleration_ms2 * (1.0 - (self.previous_velocity / desired_velocity).powf(acceleration_exponent))
     }
 
     pub fn compute_acceleration_follower(
@@ -125,28 +124,13 @@ impl Vehicle {
         minimum_gap: f32,
         acceleration_exponent: f32,
     ) -> f32 {
-        //println!("[Compute acceleration] {} {} {} {} {}", b2b_distance, next_vehicle_velocity, desired_velocity, minimum_gap, acceleration_exponent);
-        //println!("params for s {} {} {}", self.previous_velocity, self.spec.reaction_time, 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5));
-        let v_ratio = if desired_velocity.abs() > f32::EPSILON {
-            self.previous_velocity / desired_velocity
-        } else {
-            0.0
-        };
-
-        let s: f32 = self
-            .previous_velocity
-            .mul_add(self.spec.reaction_time, minimum_gap)
-            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity)
-                / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).sqrt();
-
-        let s_ratio = if b2b_distance.abs() > f32::EPSILON {
-            s / b2b_distance
-        } else {
-            0.0
-        };
-
+        let s: f32 = minimum_gap
+            + self.previous_velocity * self.spec.reaction_time
+            + 0.5 * self.previous_velocity * (self.previous_velocity - next_vehicle_velocity) / (self.spec.max_acceleration_ms2 * self.spec.comfortable_deceleration).powf(0.5);
         let new_acceleration: f32 = self.spec.max_acceleration_ms2
-            * (s_ratio).mul_add(-(s_ratio), 1.0 - v_ratio.powf(acceleration_exponent));
+            * (1.0
+                - (self.previous_velocity / desired_velocity).powf(acceleration_exponent)
+                - (s / b2b_distance).powf(2.0));
         new_acceleration
     }
 
@@ -172,18 +156,10 @@ impl Vehicle {
                     )
                     .unwrap();
 
-                let pos_rate: f32 = if current_road.length_m.abs() > f32::EPSILON {
-                    self.position_on_edge_m / current_road.length_m
-                } else {
-                    0.0
-                };
+                let pos_rate: f32 = self.position_on_edge_m / current_road.length_m;
                 Coordinates {
-                    x: current_node_o
-                        .x
-                        .mul_add(1.0 - pos_rate, next_node_o.x * pos_rate),
-                    y: current_node_o
-                        .y
-                        .mul_add(1.0 - pos_rate, next_node_o.y * pos_rate),
+                    x: current_node_o.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
+                    y: current_node_o.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
                 }
             }
             VehicleState::Arrived => {
