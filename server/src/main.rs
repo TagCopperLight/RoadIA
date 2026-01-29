@@ -2,6 +2,7 @@ mod api;
 mod map;
 mod simulation;
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use axum::{
@@ -18,9 +19,9 @@ use serde_json::json;
 
 use crate::{
     map::{
-        intersection::{Intersection, IntersectionKind, JunctionController, MovementRequest},
+        intersection::{Intersection, IntersectionKind, JunctionController, MovementRequest, RoadRule},
         model::Map,
-        road::{Road, RoadRule},
+        road::{Road},
     },
     simulation::{
         config::SimulationConfig,
@@ -44,6 +45,7 @@ async fn main() -> anyhow::Result<()> {
         name: "Intersection".to_string(),
         x: 0.0,
         y: 0.0,
+        rules: HashMap::new(),
     });
 
     let ldt = map.add_intersection(Intersection {
@@ -52,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
         name: "LDT".to_string(),
         x: 0.0,
         y: -150.0,
+        rules: HashMap::new(),
     });
 
     let h_north = map.add_intersection(Intersection {
@@ -60,6 +63,7 @@ async fn main() -> anyhow::Result<()> {
         name: "H-North".to_string(),
         x: 0.0,
         y: 100.0,
+        rules: HashMap::new(),
     });
 
     let h_east = map.add_intersection(Intersection {
@@ -68,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
         name: "H-East".to_string(),
         x: 100.0,
         y: 0.0,
+        rules: HashMap::new(),
     });
 
     let h_south = map.add_intersection(Intersection {
@@ -76,6 +81,7 @@ async fn main() -> anyhow::Result<()> {
         name: "H-South".to_string(),
         x: -100.0,
         y: 0.0,
+        rules: HashMap::new(),
     });
 
     map.add_two_way_road(h_north, inter, Road::new(1, 1, 12, 100.0, false, false));
@@ -249,7 +255,7 @@ async fn intersection_tests_json() -> Json<serde_json::Value> {
             "name": "Validation Cédez-le-Passage : V1(Cédez) vs V0(Prio)",
             "vehicles": [
                 {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Ouest->Est) AVEC CEDEZ", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0, "rule": "yield"}
+                {"id": 1, "name": "V1 (Ouest->Est) AVEC CEDEZ", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0, "rule": "Let_passage"}
             ],
             "authorized": []
         })
@@ -268,7 +274,7 @@ struct TestVehicle {
     exit_angle: f64,
     arrival_time: f32,
     #[serde(default)]
-    rule: Option<String>, // "stop", "yield", "priority"
+    rule: Option<String>, // "stop", "Let_passage", "priority"
 }
 
 #[derive(Debug, Deserialize)]
@@ -467,6 +473,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
         name: "Center".to_string(),
         x: 0.0,
         y: 0.0,
+        rules: HashMap::new(),
     };
 
     let north = Intersection {
@@ -475,6 +482,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
         name: "H-North".to_string(),
         x: 0.0,
         y: 100.0, 
+        rules: HashMap::new(),
     };
 
     let east = Intersection {
@@ -483,6 +491,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
         name: "H-East".to_string(),
         x: 100.0, 
         y: 0.0,
+        rules: HashMap::new(),
     };
 
     let south = Intersection {
@@ -491,6 +500,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
         name: "H-South".to_string(),
         x: 0.0,
         y: -100.0,
+        rules: HashMap::new(),
     };
 
     let ldt = Intersection {
@@ -499,6 +509,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
         name: "LDT".to_string(),
         x: -100.0,
         y: 0.0,
+        rules: HashMap::new(),
     };
 
     let north_angle = center.compute_road_angle(&north); 

@@ -2,9 +2,9 @@
 
 use petgraph::graph::{EdgeIndex, NodeIndex};
 
-use crate::map::intersection::{JunctionController, MovementRequest};
+use crate::map::intersection::{JunctionController, MovementRequest, RoadRule};
 use crate::map::model::Map;
-use crate::map::road::{Road, RoadRule};
+use crate::map::road::Road;
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
 
@@ -196,17 +196,20 @@ impl Simulation for SimulationConfig {
             let via = self.vehicles[idx].path[path_idx + 1];
             let to = self.vehicles[idx].path[path_idx + 2];
 
-            // STOP Logic implementation
+            // logique des stops
             let incoming_edge = self.map.graph.find_edge(from, via).unwrap();
             let incoming_road = &self.map.graph[incoming_edge];
+            let intersection_node = &self.map.graph[via];
+            
+            let rule = intersection_node.rules.get(&incoming_road.id).copied().unwrap_or(RoadRule::Priority);
 
-            if incoming_road.rule == RoadRule::Stop {
+            if rule == RoadRule::Stop {
                 let arrive_time = self.vehicles[idx]
                     .intersection_wait_start_time_s
                     .unwrap_or(self.current_time);
                 
                 if self.current_time - arrive_time < 3.0 {
-                    // Stop constraint: Vehicle remains forced waiting
+                    // règle les 3 sec d'arrêt à un stop
                     continue;
                 }
             }
@@ -229,7 +232,7 @@ impl Simulation for SimulationConfig {
                 entry_angle,
                 exit_angle,
                 arrival_time,
-                rule: incoming_road.rule,
+                rule,
             });
         }
 
