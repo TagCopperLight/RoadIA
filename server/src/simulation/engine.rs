@@ -13,7 +13,7 @@ pub trait Simulation {
         current_vehicle_id: u64,
         current_vehicle_position: f32,
     ) -> Option<Vehicle>;
-    fn next_obstacle_position(
+    fn calculate_free_distance(
         current_vehicle_position: f32,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32;
@@ -65,27 +65,30 @@ impl Simulation for SimulationEngine {
                         }
                     }
                 }
-                VehicleState::EnRoute | VehicleState::AtIntersection | VehicleState::WaitingToDepart | VehicleState::Arrived => {}
-                }
+                VehicleState::EnRoute
+                | VehicleState::AtIntersection
+                | VehicleState::WaitingToDepart
+                | VehicleState::Arrived => {}
+            }
         }
         closest_ahead_vehicle
     }
 
-    fn next_obstacle_position(//renvoie la position de l'obstacle devant le plus proche (voiture / fin de route)
+    fn calculate_free_distance(
         current_vehicle_position: f32,
         ahead_vehicle: Option<Vehicle>,
     ) -> f32 {
-        print!("[Distance ahead] ");
         match ahead_vehicle {
-            Some(v) => {println!(": {}, {}, {}", current_vehicle_position, v.previous_position, v.spec.length_m);v.previous_position + v.spec.length_m},
-            None => {println!(": {}", 0.0); 0.0},
+            Some(v) => {
+                let obstacle_position = v.previous_position + v.spec.length_m;
+                current_vehicle_position - obstacle_position
+            }
+            None => current_vehicle_position,
         }
     }
 
     fn run(&mut self) {
-        println!("Début de la simulation");
         while self.current_time < self.config.end_time_s {
-            println!("Current time {}", self.current_time);
             self.step();
             self.current_time += self.config.time_step_s;
         }
@@ -102,7 +105,6 @@ impl Simulation for SimulationEngine {
         let vehicles_len = self.vehicles.len();
         for i in 0..vehicles_len {
             let state = self.vehicles[i].state;
-            println!("Vehicle {:?} AT ({} / {:?}) {:?}", self.vehicles[i].id, self.vehicles[i].position_on_edge_m, self.vehicles[i].current_node, self.vehicles[i].state);
             match state {
                 VehicleState::WaitingToDepart => {
                     let (current_node, next_node, vid) = {
@@ -134,11 +136,10 @@ impl Simulation for SimulationEngine {
                     //println!("[WaitingForDepart] Current Road {}", current_road.id);
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
-                        Self::next_obstacle_position(vehicle.previous_position, ahead);
-                    //println!("Distance ahead : {} cond : {}", distance_ahead, current_road.length_m - distance_ahead >= vehicle.spec.length_m);
-                    if current_road.length_m - distance_ahead >= vehicle.spec.length_m {
+                        Self::calculate_free_distance(current_road.length_m, ahead);
+                    if distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_edge_m = current_road.length_m - distance_ahead;
+                        vehicle.position_on_edge_m = current_road.length_m - vehicle.spec.length_m;
                     }
                 }
                 VehicleState::EnRoute => {
@@ -170,20 +171,22 @@ impl Simulation for SimulationEngine {
                     };
                     let vehicle = &mut self.vehicles[i];
                     let new_acceleration = match ahead {
-                            Some(v) => vehicle.compute_acceleration_follower(
-                                vehicle.previous_position - v.previous_position - v.spec.length_m,
-                                v.previous_velocity,
-                                current_road.speed_limit_ms as f32,
-                                self.config.minimum_gap,
-                                self.config.acceleration_exponent,
-                            ),
-                            None => vehicle.compute_acceleration_free_road(
-                                current_road.speed_limit_ms as f32,
-                                self.config.acceleration_exponent,
-                            ),
-                        };
-                    vehicle.velocity += self.config.time_step_s
-                        * new_acceleration;
+                        Some(v) => vehicle.compute_acceleration_follower(
+                            vehicle.previous_position - v.previous_position - v.spec.length_m,
+                            v.previous_velocity,
+                            current_road.speed_limit_ms as f32,
+                            self.config.minimum_gap,
+                            self.config.acceleration_exponent,
+                        ),
+                        None => vehicle.compute_acceleration_free_road(
+                            current_road.speed_limit_ms as f32,
+                            self.config.acceleration_exponent,
+                        ),
+                    };
+                    vehicle.velocity += self.config.time_step_s * new_acceleration;
+                    vehicle.velocity = vehicle
+                        .velocity
+                        .clamp(0.0, current_road.speed_limit_ms as f32);
                     //println!("");
                     //println!("Acceleration : {}", new_acceleration);
                     //println!("Velocity : {}", vehicle.velocity);
@@ -193,7 +196,7 @@ impl Simulation for SimulationEngine {
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
                         vehicle.state = VehicleState::AtIntersection;
-                        if vehicle.path_index == vehicle.path.len() - 2{
+                        if vehicle.path_index == vehicle.path.len() - 2 {
                             vehicle.state = VehicleState::Arrived;
                         }
                     }
@@ -230,9 +233,8 @@ impl Simulation for SimulationEngine {
                     };
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
-                        Self::next_obstacle_position(vehicle.previous_position, ahead);
-                    println!("Distance ahead : {}", distance_ahead);
-                    if next_road.length_m - distance_ahead >= vehicle.spec.length_m {
+                        Self::calculate_free_distance(next_road.length_m, ahead);
+                    if distance_ahead >= vehicle.spec.length_m {
                         vehicle.state = VehicleState::EnRoute;
                         vehicle.position_on_edge_m = next_road.length_m - vehicle.spec.length_m;
                         vehicle.previous_position = vehicle.position_on_edge_m;
