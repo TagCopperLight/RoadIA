@@ -138,17 +138,11 @@ impl Vehicle {
         match self.state {
             VehicleState::WaitingToDepart => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
-                Coordinates {
-                    x: current_node_o.x,
-                    y: current_node_o.y,
-                }
+                Coordinates { x: current_node_o.x, y: current_node_o.y }
             }
             VehicleState::AtIntersection => {
                 let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
-                Coordinates {
-                    x: next_node_o.x,
-                    y: next_node_o.y,
-                }
+                Coordinates { x: next_node_o.x, y: next_node_o.y }
             }
             VehicleState::EnRoute => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
@@ -174,10 +168,7 @@ impl Vehicle {
                     .node_weight(*self.path.last().unwrap())
                     .unwrap()
                     .clone();
-                Coordinates {
-                    x: current_node_o.x,
-                    y: current_node_o.y,
-                }
+                Coordinates { x: current_node_o.x, y: current_node_o.y }
             }
         }
     }
