@@ -1,7 +1,6 @@
 use crate::simulation::vehicle::Vehicle;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone)]
 pub struct SimulationMetrics {
     pub travel_times_s: Vec<u32>,
     pub total_fuel_l: f32,

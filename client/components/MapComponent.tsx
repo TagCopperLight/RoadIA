@@ -4,7 +4,8 @@ import Image from "next/image";
 import { Application, extend, PixiReactElementProps, useApplication } from '@pixi/react';
 import { IViewportOptions, Viewport, IWheelOptions } from 'pixi-viewport';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { useCallback, useState, type RefObject } from 'react';
+import { useCallback, useState, useEffect, type RefObject } from 'react';
+import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
 
 const intersections = [
 	{ x: -400, y: 400 },
@@ -139,6 +140,14 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
 	}, []);
+
+	useEffect(() => {
+		sendConnectionToken("auth-token");
+	}, []);
+
+	useWebSocket("map", (data) => {
+		console.log(data);
+	});
 
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">

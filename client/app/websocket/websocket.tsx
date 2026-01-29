@@ -9,6 +9,8 @@ class WebSocketClient {
     private reconnectInterval: number = 5000;
     private shouldReconnect: boolean = true;
 
+    private messageQueue: string[] = [];
+
     constructor(url: string) {
         this.url = url;
         this.connect();
@@ -22,13 +24,14 @@ class WebSocketClient {
 
         this.socket.onopen = () => {
             console.log(`[WebSocket] Connected to ${this.url}`);
+            this.flushQueue();
         };
 
         this.socket.onmessage = (event: MessageEvent) => {
             try {
                 const json = JSON.parse(event.data);
-                const packetID = json.PacketID;
-                const data = json.Data;
+                const packetID = json.id;
+                const data = json.data;
                 this.dispatch(packetID, data);
             } catch (e) {
                 console.error("[WebSocket] Failed to parse message:", e);
@@ -46,6 +49,17 @@ class WebSocketClient {
             console.error("[WebSocket] Error:", error);
             this.socket?.close();
         };
+    }
+
+    private flushQueue() {
+        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+            while (this.messageQueue.length > 0) {
+                const message = this.messageQueue.shift();
+                if (message) {
+                    this.socket.send(message);
+                }
+            }
+        }
     }
 
     private dispatch(packetID: string, data: any) {
@@ -72,11 +86,12 @@ class WebSocketClient {
     }
 
     public send(packetID: string, data: any) {
+        const payload = JSON.stringify({ id: packetID, data: data });
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            const payload = { PacketID: packetID, Data: data };
-            this.socket.send(JSON.stringify(payload));
+            this.socket.send(payload);
         } else {
-            console.warn("[WebSocket] Cannot send message, socket is not open.");
+            console.warn("[WebSocket] Socket not open, queueing message");
+            this.messageQueue.push(payload);
         }
     }
 
@@ -86,21 +101,10 @@ class WebSocketClient {
     }
 }
 
-export const wsClient = new WebSocketClient("ws://localhost:8080");
-
-function defaultLoadMap(data: any) {
-    console.log("[WebSocket] Loading map:", data);
-}
-
-function defaultUpdateCars(data: any) {
-    console.log("[WebSocket] Updating cars:", data);
-}
-
-wsClient.on("map", defaultLoadMap);
-wsClient.on("cars", defaultUpdateCars);
+export const wsClient = new WebSocketClient("ws://localhost:8080/ws");
 
 export function sendConnectionToken(token: string) {
-    wsClient.send("connect", { Token: token });
+    wsClient.send("connect", { token: token });
 }
 
 export function useWebSocket(packetID: string, callback: Listener) {
