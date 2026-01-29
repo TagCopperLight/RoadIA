@@ -1,35 +1,37 @@
-use crate::map::intersection::Intersection;
-use crate::map::model::Coordinates;
-use crate::{map::model::Map, simulation::config::MAX_SPEED_MS};
+use crate::simulation::config::MAX_SPEED_MS;
 use petgraph::graph::NodeIndex;
 
-#[derive(Debug, Clone, Copy)]
+use crate::map::{
+    intersection::Intersection,
+    model::Coordinates,
+    model::Map,
+};
+
+#[derive(Copy, Clone)]
 pub enum VehicleKind {
     Car,
     Bus,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Copy, Clone)]
 pub struct VehicleSpec {
     pub kind: VehicleKind,
     pub max_speed_ms: f32,
     pub max_acceleration_ms2: f32,
     pub comfortable_deceleration: f32,
     pub reaction_time: f32,
-    pub length_m: f32,
-    pub fuel_consumption_l_per_100km: f32,
-    pub co2_g_per_km: f32,
+    pub length: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TripRequest {
     pub origin_id: u64,
     pub destination_id: u64,
-    pub departure_time_s: u32,
-    pub return_time_s: Option<u32>,
+    pub departure_time: u32,
+    pub return_time: Option<u32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Copy, Clone)]
 pub enum VehicleState {
     WaitingToDepart,
     EnRoute,
@@ -37,7 +39,7 @@ pub enum VehicleState {
     Arrived,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Vehicle {
     pub id: u64,
     pub spec: VehicleSpec,

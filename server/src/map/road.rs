@@ -1,6 +1,6 @@
 use crate::simulation::config::MAX_SPEED_MS;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Road {
     pub id: u32,
     pub lane_count: u8,

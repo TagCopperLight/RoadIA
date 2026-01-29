@@ -21,7 +21,6 @@ pub trait Simulation {
     fn step(&mut self);
 }
 
-#[derive(Debug)]
 pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,
@@ -80,7 +79,7 @@ impl Simulation for SimulationEngine {
     ) -> f32 {
         match ahead_vehicle {
             Some(v) => {
-                let obstacle_position = v.previous_position + v.spec.length_m;
+                let obstacle_position = v.previous_position + v.spec.length;
                 current_vehicle_position - obstacle_position
             }
             None => current_vehicle_position,
@@ -137,9 +136,9 @@ impl Simulation for SimulationEngine {
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
                         Self::calculate_free_distance(current_road.length_m, ahead);
-                    if distance_ahead >= vehicle.spec.length_m {
+                    if distance_ahead >= vehicle.spec.length {
                         vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_edge_m = current_road.length_m - vehicle.spec.length_m;
+                        vehicle.position_on_edge_m = current_road.length_m - vehicle.spec.length;
                     }
                 }
                 VehicleState::EnRoute => {
@@ -172,7 +171,7 @@ impl Simulation for SimulationEngine {
                     let vehicle = &mut self.vehicles[i];
                     let new_acceleration = match ahead {
                         Some(v) => vehicle.compute_acceleration_follower(
-                            vehicle.previous_position - v.previous_position - v.spec.length_m,
+                            vehicle.previous_position - v.previous_position - v.spec.length,
                             v.previous_velocity,
                             current_road.speed_limit_ms as f32,
                             self.config.minimum_gap,
@@ -234,9 +233,9 @@ impl Simulation for SimulationEngine {
                     let vehicle = &mut self.vehicles[i];
                     let distance_ahead: f32 =
                         Self::calculate_free_distance(next_road.length_m, ahead);
-                    if distance_ahead >= vehicle.spec.length_m {
+                    if distance_ahead >= vehicle.spec.length {
                         vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_edge_m = next_road.length_m - vehicle.spec.length_m;
+                        vehicle.position_on_edge_m = next_road.length_m - vehicle.spec.length;
                         vehicle.previous_position = vehicle.position_on_edge_m;
                         vehicle.path_index += 1;
                         vehicle.current_node = *vehicle.path.get(vehicle.path_index).unwrap();

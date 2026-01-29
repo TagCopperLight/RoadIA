@@ -1,6 +1,5 @@
 use crate::simulation::vehicle::Vehicle;
 
-#[derive(Debug, Default, Clone)]
 pub struct SimulationMetrics {
     pub travel_times_s: Vec<u32>,
     pub total_fuel_l: f32,
@@ -9,8 +8,8 @@ pub struct SimulationMetrics {
 
 impl SimulationMetrics {
     pub fn collect_from_vehicle(&mut self, vehicle: &Vehicle) {
-        if let Some(arrival) = vehicle.trip.return_time_s {
-            let travel: u32 = arrival.saturating_sub(vehicle.trip.departure_time_s);
+        if let Some(arrival) = vehicle.trip.return_time {
+            let travel: u32 = arrival.saturating_sub(vehicle.trip.departure_time);
             self.travel_times_s.push(travel);
             self.total_fuel_l += vehicle.fuel_used_l;
             self.total_co2_g += vehicle.co2_emitted_g;
