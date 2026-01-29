@@ -178,7 +178,7 @@ impl Simulation for SimulationEngine {
                     let vehicle = &mut self.vehicles[i];
                     let new_acceleration = match ahead {
                             Some(v) => vehicle.compute_acceleration_follower(
-                                vehicle.previous_position - v.previous_position,
+                                vehicle.previous_position - v.previous_position - v.spec.length_m,
                                 v.previous_velocity,
                                 current_road.speed_limit_ms as f32,
                                 self.config.minimum_gap,
