@@ -100,7 +100,7 @@ impl Vehicle {
             previous_velocity: 0.0,
             velocity: 0.0,
             position_on_edge_m: 0.0,
-            previous_position : 0.0,
+            previous_position: 0.0,
             distance_travelled_m: 0.0,
             fuel_used_l: 0.0,
             co2_emitted_g: 0.0,
