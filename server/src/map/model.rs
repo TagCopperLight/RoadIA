@@ -3,12 +3,11 @@ use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
 }
 
-#[derive(Debug, Clone)]
 pub struct Coordinates{
     pub x : f32,
     pub y : f32,
@@ -51,7 +50,7 @@ impl Map {
     ) -> Option<f32> {
         self.graph
             .find_edge(source, destination)
-            .map(|edge| self.graph[edge].length_m)
+            .map(|edge| self.graph[edge].length)
     }
 
     pub fn intersections_euclidean_distance(
