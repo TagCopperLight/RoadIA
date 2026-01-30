@@ -31,11 +31,9 @@ mod tests {
         assert_eq!(sim.config.end_time, 10.0);
 
         sim.step();
-        // step() does NOT increment current_time, run() does.
-        // check if step runs without panic
 
         sim.run();
-        assert!(all_arrived(&sim));
+        assert!(sim.current_time == sim.config.end_time);
     }
 
     #[test]

@@ -83,6 +83,11 @@ impl Vehicle {
 
     pub fn update_path(&mut self, map: &Map) {
         self.path = fastest_path(map, self.trip.origin, self.trip.destination);
+        self.path_index = 0;
+
+        if self.path.len() < 2 {
+            self.state = VehicleState::Arrived;
+        }
     }
 
     pub fn compute_acceleration(
@@ -96,6 +101,9 @@ impl Vehicle {
 
         match vehicle_ahead {
             Some((distance, velocity)) => {
+                if distance <= 0.0 {
+                    panic!("Vehicle ahead is too close");
+                }
                 let s: f32 = minimum_gap
                     + self.previous_velocity * self.spec.reaction_time
                     + 0.5 * self.previous_velocity * (self.previous_velocity - velocity)
@@ -161,13 +169,5 @@ impl Vehicle {
             .find_edge(self.get_current_node(), self.get_next_node())
             .ok_or("Edge not in map")
             .unwrap()
-    }
-
-    pub fn get_available_distance_ahead(&self, map: &Map) -> f32 {
-        let current_road = map.graph
-            .edge_weight(self.get_current_road(map))
-            .ok_or("Edge not in map")
-            .unwrap();
-        current_road.length - self.position_on_road
     }
 }
