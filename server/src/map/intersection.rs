@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Intersection {
     pub id: u32,
     pub kind: IntersectionKind,
