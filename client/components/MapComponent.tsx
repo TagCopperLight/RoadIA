@@ -98,8 +98,39 @@ function Intersection({ node }: { node: MapNode }) {
 	);
 }
 
+interface VehicleData {
+    id: number;
+    x: number;
+    y: number;
+    kind: string;
+    state: string;
+}
+
+interface VehicleProps {
+    data: VehicleData;
+}
+
+function Vehicle({ data }: VehicleProps) {
+    return (
+        <pixiGraphics draw={(graphics) => {
+            graphics.clear();
+            graphics.position.set(data.x, data.y);
+            graphics.setFillStyle({ color: 'purple' }); // Different color for vehicles
+            graphics.circle(0, 0, 5); // Slightly smaller than intersections
+            graphics.fill();
+        }} />
+    );
+}
+
 function Map({ data }: { data: MapData }) {
 	const { app } = useApplication();
+    const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+
+    useWebSocket("vehicleUpdate", (eventData) => {
+        if (eventData && eventData.vehicles) {
+            setVehicles(eventData.vehicles);
+        }
+    });
 
 	return (
 		<pixiCustomViewport
@@ -119,11 +150,13 @@ function Map({ data }: { data: MapData }) {
 				{data.nodes.map((node) => (
 					<Intersection key={`node-${node.id}`} node={node} />
 				))}
+                {vehicles.map((vehicle) => (
+                    <Vehicle key={`vehicle-${vehicle.id}`} data={vehicle} />
+                ))}
 			</pixiContainer>
 		</pixiCustomViewport>
 	);
 }
-
 
 interface AppProps {
 	resizeTo: RefObject<HTMLElement> | HTMLElement;
