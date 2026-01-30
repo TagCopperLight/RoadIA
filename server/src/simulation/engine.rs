@@ -146,8 +146,9 @@ impl Simulation for SimulationEngine {
                     );
 
                     vehicle.velocity += acceleration * self.config.time_step;
+                    vehicle.velocity = vehicle.velocity.clamp(0.0, current_road.speed_limit);
 
-                    vehicle.position_on_road += vehicle.velocity.clamp(0.0, current_road.speed_limit) * self.config.time_step;
+                    vehicle.position_on_road += vehicle.velocity * self.config.time_step;
 
                     if vehicle.position_on_road >= current_road.length {
                         vehicle.position_on_road = current_road.length;
@@ -156,6 +157,7 @@ impl Simulation for SimulationEngine {
                         
                         if vehicle.path_index + 1 == vehicle.path.len() - 1 {
                             vehicle.state = VehicleState::Arrived;
+                            vehicle.path_index += 1;
                         } else {
                             vehicle.state = VehicleState::AtIntersection;
                         }
@@ -178,7 +180,7 @@ impl Simulation for SimulationEngine {
                         None => self.config.map.graph.edge_weight(next_road_index).unwrap().length,
                     };
 
-                    if available_distance > vehicle.spec.length {
+                    if available_distance >= vehicle.spec.length {
                         vehicle.position_on_road = vehicle.spec.length;
                         vehicle.previous_position = 0.0;
                         vehicle.path_index += 1;
