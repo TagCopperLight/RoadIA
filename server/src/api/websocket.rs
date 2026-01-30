@@ -22,6 +22,7 @@ pub enum ClientPacket {
 #[serde(rename_all = "camelCase")]
 pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
+    VehicleUpdate { vehicles: Vec<Value> },
 }
 
 pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> impl IntoResponse {
@@ -29,39 +30,57 @@ pub async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>
 }
 
 async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
-    while let Some(msg) = socket.recv().await {
-        if let Ok(msg) = msg {
-            match msg {
-                Message::Text(text) => {
-                    match serde_json::from_str::<ClientPacket>(&text) {
-                        Ok(packet) => {
-                            println!("Received Packet: {:?}", packet);
-                            match packet {
-                                ClientPacket::Connect { token } => {
-                                    println!("Client connected with token: {}", token);
-                                    let (nodes, edges) = serialize_map(&state.map);
-                                    let response = ServerPacket::Map { nodes, edges };
-                                    if let Ok(text) = serde_json::to_string(&response) {
-                                        if let Err(e) = socket.send(Message::Text(text)).await {
-                                            println!("Failed to send message: {}", e);
-                                            break;
+    let mut rx = state.tx.subscribe();
+    
+    loop {
+        tokio::select! {
+            msg = socket.recv() => {
+                match msg {
+                    Some(Ok(msg)) => {
+                        match msg {
+                            Message::Text(text) => {
+                                match serde_json::from_str::<ClientPacket>(&text) {
+                                    Ok(packet) => {
+                                        println!("Received Packet: {:?}", packet);
+                                        match packet {
+                                            ClientPacket::Connect { token } => {
+                                                println!("Client connected with token: {}", token);
+                                                let (nodes, edges) = serialize_map(&state.map);
+                                                let response = ServerPacket::Map { nodes, edges };
+                                                if let Ok(text) = serde_json::to_string(&response) {
+                                                    if let Err(e) = socket.send(Message::Text(text)).await {
+                                                        println!("Failed to send message: {}", e);
+                                                        break;
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
+                                    Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
                                 }
-
+                            }
+                            _ => {
+                                println!("Client disconnected");
+                                break;
                             }
                         }
-                        Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
+                    }
+                    Some(Err(e)) => {
+                        println!("WebSocket error: {}", e);
+                        break;
+                    }
+                    None => {
+                        println!("Client disconnected");
+                        break;
                     }
                 }
-                _ => {
-                    println!("Client disconnected");
+            }
+            Ok(msg) = rx.recv() => {
+                if let Err(e) = socket.send(Message::Text(msg)).await {
+                    println!("Failed to send broadcast message: {}", e);
                     break;
                 }
             }
-        } else {
-            println!("Client disconnected");
-            break;
         }
     }
 }
