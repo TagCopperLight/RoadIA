@@ -1,13 +1,12 @@
 use std::sync::Arc;
 use tokio::io;
 use tokio::net::TcpListener;
-use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration};
 use axum::{Router, routing::get};
 use serde_json::json;
 
 use crate::map::model::Map;
-use crate::api::websocket::{ws_handler, ServerPacket};
+use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest, VehicleState};
@@ -18,7 +17,7 @@ use crate::map::road::Road;
 
 pub struct AppState {
     pub map: Map,
-    pub tx: broadcast::Sender<String>,
+    pub websocket_service: Arc<WebSocketService>,
 }
 
 pub async fn run() -> io::Result<()> {
@@ -27,7 +26,7 @@ pub async fn run() -> io::Result<()> {
     
     let config = SimulationConfig {
         start_time: 0.0,
-        end_time: f32::MAX, // Infinite simulation
+        end_time: f32::MAX,
         time_step: 0.1,
         minimum_gap: 2.0,
         map: map.clone(),
@@ -40,10 +39,10 @@ pub async fn run() -> io::Result<()> {
         vehicle.update_path(&simulation.config.map);
     }
     
-    let (tx, _rx) = broadcast::channel(100);
+    let websocket_service = Arc::new(WebSocketService::new());
     
     // Spawn simulation loop
-    let sx = tx.clone();
+    let ws_service = websocket_service.clone();
     let sim_map = map.clone();
     tokio::spawn(async move {
         loop {
@@ -71,9 +70,7 @@ pub async fn run() -> io::Result<()> {
             }).collect();
             
             let packet = ServerPacket::VehicleUpdate { vehicles: vehicles_data };
-            if let Ok(msg) = serde_json::to_string(&packet) {
-                let _ = sx.send(msg);
-            }
+            ws_service.send(packet);
 
             let elapsed = start.elapsed();
             if elapsed < Duration::from_millis(30) {
@@ -82,7 +79,7 @@ pub async fn run() -> io::Result<()> {
         }
     });
 
-    let shared_state = Arc::new(AppState { map, tx });
+    let shared_state = Arc::new(AppState { map, websocket_service });
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
