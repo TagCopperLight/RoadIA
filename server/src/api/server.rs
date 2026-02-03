@@ -21,7 +21,8 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_connected_map(200, 1500.0, 1500.0);
+    //let map = create_connected_map(200, 1500.0, 1500.0);
+    let map = create_bone_map();
     let vehicles = create_random_vehicles(&map, 100);
     
     let config = SimulationConfig {
@@ -170,6 +171,7 @@ fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             name: format!("node_{}", id),
             x: rand::random_range(0.0..width),
             y: rand::random_range(0.0..height),
+            occupied: false
         });
         nodes.push(node_idx);
     }
@@ -247,5 +249,224 @@ fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
         }
     }
 
+    map
+}
+
+fn create_one_road_map() -> Map{
+    let mut map = Map::new();
+    let h1 = map.add_intersection(Intersection{
+        id:0,
+        kind:IntersectionKind::Habitation,
+        name:"habitation".into(),
+        x:0.0,
+        y:0.0,
+        occupied:false
+    });
+    let w1 = map.add_intersection(Intersection{
+        id:1,
+        kind:IntersectionKind::Workplace,
+        name:"workplace".into(),
+        x:1000.0,
+        y:0.0,
+        occupied:false
+    });
+    map.add_two_way_road(
+        h1,
+        w1,
+        Road::new(
+            0,
+            1,
+            40.0,
+            100.0,
+            false,
+            false
+        )
+    );
+    map
+}
+
+fn create_one_intersection_congestion_map() -> Map{
+    let mut map = Map::new();
+    let h1 = map.add_intersection(Intersection{
+        id:0,
+        kind:IntersectionKind::Habitation,
+        name:"habitation 1".into(),
+        x:0.0,
+        y:0.0,
+        occupied:false
+    });
+    let h2 = map.add_intersection(Intersection{
+        id:1,
+        kind:IntersectionKind::Habitation,
+        name:"habitation 2".into(),
+        x:0.0,
+        y:100.0,
+        occupied:false
+    });
+    let i1 = map.add_intersection(Intersection{
+        id:2,
+        kind:IntersectionKind::Intersection,
+        name:"intersection 1".into(),
+        x:50.0,
+        y:50.0,
+        occupied:false
+    });
+    let w1 = map.add_intersection(Intersection{
+        id:3,
+        kind:IntersectionKind::Workplace,
+        name:"workplace 1".into(),
+        x:950.0,
+        y:50.0,
+        occupied:false
+    });
+    map.add_two_way_road(
+        h1,
+        i1,
+        Road::new(
+            0,
+            1,
+            40.0,
+            70.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        h2,
+        i1,
+        Road::new(
+            1,
+            1,
+            40.0,
+            70.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i1,
+        w1,
+        Road::new(
+            2,
+            1,
+            40.0,
+            950.0,
+            false,
+            false
+        )
+    );
+    map
+}
+
+fn create_bone_map()-> Map{
+    let mut map = Map::new();
+    let h1 = map.add_intersection(Intersection{
+        id:0,
+        kind:IntersectionKind::Habitation,
+        name:"habitation 1".into(),
+        x:0.0,
+        y:0.0,
+        occupied:false
+    });
+    let h2 = map.add_intersection(Intersection{
+        id:1,
+        kind:IntersectionKind::Habitation,
+        name:"habitation 2".into(),
+        x:1000.0,
+        y:0.0,
+        occupied:false
+    });
+    let i1 = map.add_intersection(Intersection{
+        id:2,
+        kind:IntersectionKind::Intersection,
+        name:"intersection 1".into(),
+        x:50.0,
+        y:50.0,
+        occupied:false
+    });
+    let i2 = map.add_intersection(Intersection{
+        id:3,
+        kind:IntersectionKind::Intersection,
+        name:"intersection 2".into(),
+        x:950.0,
+        y:50.0,
+        occupied:false
+    });
+    let w1 = map.add_intersection(Intersection{
+        id:4,
+        kind:IntersectionKind::Workplace,
+        name:"workplace 1".into(),
+        x:0.0,
+        y:100.0,
+        occupied:false
+    });
+    let w2 = map.add_intersection(Intersection{
+        id:5,
+        kind:IntersectionKind::Workplace,
+        name:"workplace 1".into(),
+        x:1000.0,
+        y:100.0,
+        occupied:false
+    });
+    map.add_two_way_road(
+        h1,
+        i1,
+        Road::new(
+            0,
+            1,
+            40.0,
+            70.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        h2,
+        i2,
+        Road::new(
+            1,
+            1,
+            40.0,
+            70.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i1,
+        w1,
+        Road::new(
+            2,
+            1,
+            40.0,
+            70.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i2,
+        w2,
+        Road::new(
+            3,
+            1,
+            40.0,
+            70.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i1,
+        i2,
+        Road::new(
+            4,
+            1,
+            40.0,
+            900.0,
+            false,
+            false
+        )
+    );
     map
 }

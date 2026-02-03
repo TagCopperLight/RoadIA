@@ -5,6 +5,7 @@ pub struct Intersection {
     pub name: String,
     pub x: f32,
     pub y: f32,
+    pub occupied: bool
 }
 
 #[derive(Debug, Clone)]
