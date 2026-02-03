@@ -160,6 +160,7 @@ impl Simulation for SimulationEngine {
                             vehicle.path_index += 1;
                         } else {
                             vehicle.state = VehicleState::AtIntersection;
+                            vehicle.path_index += 1;
                         }
                         
                         let v_id = vehicle.id;
@@ -170,9 +171,7 @@ impl Simulation for SimulationEngine {
                 }
 
                 VehicleState::AtIntersection => {
-                    let next_node = vehicle.path[vehicle.path_index + 1];
-                    let target_node = vehicle.path[vehicle.path_index + 2];
-                    let next_road_index = self.config.map.graph.find_edge(next_node, target_node).unwrap();
+                    let next_road_index = vehicle.get_current_road(&self.config.map);
 
                     let vehicle_ahead = Self::get_vehicle_ahead(&self.vehicles_by_road, &proxies, next_road_index, vehicle.id, 0.0);
                     let available_distance = match vehicle_ahead {
@@ -183,7 +182,6 @@ impl Simulation for SimulationEngine {
                     if available_distance >= vehicle.spec.length {
                         vehicle.position_on_road = vehicle.spec.length;
                         vehicle.previous_position = 0.0;
-                        vehicle.path_index += 1;
                         vehicle.state = VehicleState::OnRoad;
                         
                         self.vehicles_by_road.entry(next_road_index).or_insert(Vec::new()).push(vehicle_index);
