@@ -5,7 +5,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum RoadRule {
     #[default]
-    Priority,
+    Priority,//par défaut
     Yield,
     Stop,
 }
@@ -191,5 +191,106 @@ impl Intersection {
         // Arrondir au secteur le plus proche
         let cost = (diff / sector_size).round() as i32;
         if cost == 0 { n_branches as i32 } else { cost } //cout maximal = demi-tour
-    }//Calcul du coût en quadrants d'un mouvement (premier critère de priorité)
+    } // End of quadrant_cost
+} // End of impl Intersection
+
+use crate::map::model::Map;
+use crate::map::road::Road;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Roundabout {
+    pub id: u32,
+    pub name: String,
+    pub center_x: f32,
+    pub center_y: f32,
+    pub radius: f32,
+}
+
+impl Roundabout {
+    pub fn new(id: u32, name: String, x: f32, y: f32, radius: f32) -> Self {//radius = rayon en mètre pour la taille physique
+        Self {
+            id,
+            name,
+            center_x: x,
+            center_y: y,
+            radius,
+        }
+    }
+    
+    pub fn build(&self, map: &mut Map, connected_intersections: Vec<NodeIndex>) -> Vec<NodeIndex> {
+        if connected_intersections.is_empty() {//cas limite : pas de branches
+            return vec![];
+        }
+
+        let mut ring_nodes = Vec::new();//liste des noeuds de l'anneau
+        let mut node_angles = Vec::new();
+
+        for (i, &neighbor_idx) in connected_intersections.iter().enumerate() {//création des noeuds de l'anneau sous formes d'intersections
+            let neighbor = &map.graph[neighbor_idx];
+            let dx = neighbor.x - self.center_x;
+            let dy = neighbor.y - self.center_y;
+            let angle = dy.atan2(dx);//angle entre le centre du rond-point et le voisin
+
+            let px = self.center_x + self.radius * angle.cos();//coordonnées du noeud sur l'anneau en x
+            let py = self.center_y + self.radius * angle.sin();//coordonnées du noeud sur l'anneau en y
+
+            let ring_node_id = self.id * 1000 + (i as u32); //génération id pour la nouvelle intersection
+
+            let node = map.add_intersection(Intersection {
+                id: ring_node_id,
+                kind: IntersectionKind::Roundabout, //marque l'appartenance au rond-point
+                name: format!("{}-Node-{}", self.name, i), //nommage descriptif avec id
+                x: px,
+                y: py,
+                rules: HashMap::new(),
+            });
+
+            ring_nodes.push(node);
+            node_angles.push((angle, node, neighbor_idx));
+        }
+
+        node_angles.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());//tri angulaire pour garantir le sens anti-horaire
+
+        let n = node_angles.len();
+        for i in 0..n {
+            let (_angle_current, current_node, neighbor_idx) = node_angles[i];
+            let (_angle_next, next_node, _next_neighbor) = node_angles[(i + 1) % n];
+
+            //1) création du noeud interne de l'anneau
+            
+            //calcul delta_theta pour longeur de la route
+            let mut d_theta = _angle_next - _angle_current;
+            if d_theta <= 0.0 {
+                d_theta += 2.0 * std::f32::consts::PI as f32; // On boucle le cercle si on passe 0 radian
+            }
+
+            let arc_length = (self.radius * d_theta).max(5.0);//calcul longueur de l'arc avec sécurité à 5m (évite blocage véh si pas assez de place)
+
+            let road_ring = Road::new(
+                    self.id * 10000 + (i as u32), //génération id (à revoir si grosse ville)
+                    1, //1 seule voie (à adapter aux rond-points, voir plus tard avec import de map)
+                    8, //30km/h (à discuter si vitesse trop forte car dépends de la taille du rond-point, utilisation de formule d'adhérence possible)
+                    arc_length, //longueur calculée précisément
+                    false,
+                    false  //pas de dépassement (à modifier)
+            );
+            map.add_road(current_node, next_node, road_ring);
+
+            //2) création des routes entrantes
+            let road_in = Road::new(self.id * 20000 + (i as u32), 1, 13, 50.0, false, false);
+            let edge_in = map.add_road(neighbor_idx, current_node, road_in);
+            
+            //3) application de la règle de priorité
+            let incoming_road_id = map.graph[edge_in].id;
+            if let Some(inter) = map.graph.node_weight_mut(current_node) {
+                 inter.rules.insert(incoming_road_id, RoadRule::Yield);
+            }
+
+            //4) création des routes sortantes
+            let road_out = Road::new(self.id * 30000 + (i as u32), 1, 13, 50.0, false, false);
+            map.add_road(current_node, neighbor_idx, road_out);
+        }
+        
+        ring_nodes//retourne la liste des noeuds créés
+    }
 }

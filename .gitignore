@@ -1,2 +1,4 @@
 .vscode/
 server/target/
+server/static/
+server/src/main.rs
