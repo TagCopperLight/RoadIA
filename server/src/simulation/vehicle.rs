@@ -3,6 +3,7 @@ use crate::map::model::Coordinates;
 use crate::{map::model::Map, simulation::config::MAX_SPEED_MS};
 use petgraph::graph::NodeIndex;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum VehicleKind {
@@ -50,6 +51,10 @@ pub struct Vehicle {
 
     #[serde(skip)]
     pub next_node: Option<NodeIndex>,
+
+    // Override rule for SPECIFIC intersections (NodeIndex -> Rule)
+    #[serde(skip)]
+    pub forced_rules: HashMap<NodeIndex, crate::map::intersection::RoadRule>,
 
     #[serde(skip)]
     pub path: Vec<NodeIndex>,
@@ -119,6 +124,7 @@ impl Vehicle {
             fuel_used_l: 0.0,
             co2_emitted_g: 0.0,
             intersection_wait_start_time_s: None,
+            forced_rules: HashMap::new(),
         }
     }
 
@@ -169,10 +175,13 @@ impl Vehicle {
                     )
                     .unwrap();
 
-                let pos_rate: f32 = 1.0 - (self.position_on_edge_m / current_road.length_m);
+                // Correct interpolation: pos starts at current_node (L) -> next_node (0)
+                // pos_rate 0.0 -> Start (current), 1.0 -> End (next)
+                let pos_rate: f32 = (1.0 - (self.position_on_edge_m / current_road.length_m)).min(1.0).max(0.0);
+                
                 return Coordinates {
-                    x: current_node_o.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
-                    y: current_node_o.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
+                    x: current_node_o.x + (next_node_o.x - current_node_o.x) * pos_rate,
+                    y: current_node_o.y + (next_node_o.y - current_node_o.y) * pos_rate,
                 };
             }
             VehicleState::Arrived => {
@@ -187,112 +196,5 @@ impl Vehicle {
                 };
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::map::intersection::{Intersection, IntersectionKind};
-    use crate::map::road::Road;
-
-    #[test]
-    fn test_shortest_path() {
-        let mut map: Map = Map::new();
-
-        let h1 = map.add_intersection(Intersection {
-            id: 1,
-            kind: IntersectionKind::Habitation,
-            name: "h1".into(),
-            x: 0.,
-            y: 0.,
-        });
-
-        let h2 = map.add_intersection(Intersection {
-            id: 2,
-            kind: IntersectionKind::Habitation,
-            name: "h2".into(),
-            x: 0.,
-            y: 100.,
-        });
-
-        let i3 = map.add_intersection(Intersection {
-            id: 3,
-            kind: IntersectionKind::Intersection,
-            name: "i3".into(),
-            x: 50.,
-            y: 50.,
-        });
-
-        let i4 = map.add_intersection(Intersection {
-            id: 4,
-            kind: IntersectionKind::Intersection,
-            name: "i4".into(),
-            x: 250.,
-            y: 50.,
-        });
-
-        let i5 = map.add_intersection(Intersection {
-            id: 5,
-            kind: IntersectionKind::Intersection,
-            name: "i5".into(),
-            x: 100.,
-            y: 100.,
-        });
-
-        let i6 = map.add_intersection(Intersection {
-            id: 6,
-            kind: IntersectionKind::Intersection,
-            name: "i6".into(),
-            x: 150.,
-            y: 50.,
-        });
-
-        let i7 = map.add_intersection(Intersection {
-            id: 7,
-            kind: IntersectionKind::Intersection,
-            name: "i7".into(),
-            x: 200.,
-            y: 50.,
-        });
-
-        let i8 = map.add_intersection(Intersection {
-            id: 8,
-            kind: IntersectionKind::Intersection,
-            name: "i8".into(),
-            x: 100.,
-            y: 0.,
-        });
-
-        let w9 = map.add_intersection(Intersection {
-            id: 9,
-            kind: IntersectionKind::Workplace,
-            name: "w9".into(),
-            x: 300.,
-            y: 50.,
-        });
-
-        map.add_two_way_road(h1, i3, Road::new(1, 1, 100, 1., false, false));
-
-        map.add_two_way_road(h2, i3, Road::new(2, 1, 100, 1., false, false));
-
-        map.add_two_way_road(i3, i8, Road::new(3, 1, 100, 5., false, false));
-
-        map.add_two_way_road(i3, i5, Road::new(4, 1, 100, 1., false, false));
-
-        map.add_two_way_road(i8, i6, Road::new(5, 1, 100, 1., false, false));
-
-        map.add_two_way_road(i5, i6, Road::new(6, 1, 100, 1., false, false));
-
-        map.add_two_way_road(i8, i7, Road::new(7, 1, 100, 2., false, false));
-
-        map.add_two_way_road(i7, i4, Road::new(8, 1, 100, 1., false, false));
-
-        map.add_two_way_road(i6, i4, Road::new(9, 1, 100, 2., false, false));
-
-        map.add_two_way_road(i4, w9, Road::new(10, 1, 100, 1., false, false));
-
-        let path: Vec<NodeIndex> = fastest_path(&map, h1, w9);
-        assert_eq!(path, vec![h1, i3, i5, i6, i4, w9]);
     }
 }

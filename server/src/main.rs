@@ -37,58 +37,8 @@ struct AppState {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let mut map = Map::new();
-
-    let inter = map.add_intersection(Intersection {
-        id: 1,
-        kind: IntersectionKind::Intersection,
-        name: "Intersection".to_string(),
-        x: 0.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
-
-    let ldt = map.add_intersection(Intersection {
-        id: 5,
-        kind: IntersectionKind::Workplace,
-        name: "LDT".to_string(),
-        x: 0.0,
-        y: -150.0,
-        rules: HashMap::new(),
-    });
-
-    let h_north = map.add_intersection(Intersection {
-        id: 2,
-        kind: IntersectionKind::Habitation,
-        name: "H-North".to_string(),
-        x: 0.0,
-        y: 100.0,
-        rules: HashMap::new(),
-    });
-
-    let h_east = map.add_intersection(Intersection {
-        id: 3,
-        kind: IntersectionKind::Habitation,
-        name: "H-East".to_string(),
-        x: 100.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
-
-    let h_south = map.add_intersection(Intersection {
-        id: 4,
-        kind: IntersectionKind::Habitation,
-        name: "H-South".to_string(),
-        x: -100.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
-
-    map.add_two_way_road(h_north, inter, Road::new(1, 1, 12, 100.0, false, false));
-    map.add_two_way_road(h_east, inter, Road::new(2, 1, 12, 100.0, false, false));
-    map.add_two_way_road(h_south, inter, Road::new(3, 1, 12, 100.0, false, false));
-
-    map.add_two_way_road(inter, ldt, Road::new(4, 1, 12, 150.0, false, false));
+    // UTILISATION DE LA CARTE DE TEST (ROND-POINT)
+    let map = crate::map::tests::create_roundabout_map();
 
     let state = AppState { map };
 
@@ -115,154 +65,10 @@ async fn intersection_dynamic() -> impl IntoResponse {
 }
 
 async fn intersection_tests_json() -> Json<serde_json::Value> {
-    let scenarios = vec![
-        json!({
-            "id": 1,
-            "name": "FIFO (Tout Droit)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Sud)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 5.0} // Arrive plus tard
-            ],
-            "authorized": [0]
-        }),
-        json!({
-            "id": 2,
-            "name": "Conflit Direct (Départage ID)",
-            "vehicles": [
-                {"id": 2, "name": "V2 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 10.0},
-                {"id": 5, "name": "V5 (Nord->Sud)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 10.0}
-            ],
-            "authorized": [2]
-        }),
-        json!({
-            "id": 3,
-            "name": "Virages à Droite Simultanés",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Est)", "entry_angle": 180.0, "exit_angle": 90.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Ouest)", "entry_angle": 0.0, "exit_angle": 270.0, "arrival_time": 0.0}
-            ],
-            "authorized": [0, 1]
-        }),
-        json!({
-            "id": 4,
-            "name": "Priorité à Droite (3 voies)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Ouest->Sud)", "entry_angle": 270.0, "exit_angle": 180.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Est)", "entry_angle": 0.0, "exit_angle": 90.0, "arrival_time": 0.0},
-                {"id": 2, "name": "V2 (Est->Nord)", "entry_angle": 90.0, "exit_angle": 0.0, "arrival_time": 0.0}
-            ],
-            "authorized": [0, 2]
-        }),
-        json!({
-            "id": 5,
-            "name": "Face-à-Face (Tout Droit)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Sud)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 0.0}
-            ],
-            "authorized": [0, 1]
-        }),
-        json!({
-            "id": 6,
-            "name": "Virage Gauche (Prioritaire) vs Tout Droit",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Ouest : Gauche)", "entry_angle": 180.0, "exit_angle": 270.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Sud : Tout Droit)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 0.0}
-            ],
-            "authorized": [1]
-        }),
-        json!({
-            "id": 7,
-            "name": "Virage Droite Prioritaire",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Est : Droite)", "entry_angle": 180.0, "exit_angle": 90.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Sud : Tout Droit)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 0.0}
-            ],
-            "authorized": [0, 1]
-        }),
-        json!({
-            "id": 8,
-            "name": "4 Voies (Tout Droit)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Ouest->Est)", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Sud)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 0.0},
-                {"id": 2, "name": "V2 (Est->Ouest)", "entry_angle": 90.0, "exit_angle": 270.0, "arrival_time": 0.0},
-                {"id": 3, "name": "V3 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0}
-            ],
-            "authorized": [0]
-        }),
-        json!({
-            "id": 9,
-            "name": "Insertion sous traffic (Interblocage partiel)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Ouest->Est)", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Sud)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 0.0},
-                {"id": 2, "name": "V2 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0}
-            ],
-            "authorized": [0]
-        }),
-        json!({
-            "id": 10,
-            "name": "Tourne à gauche multiple",
-             "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Ouest)", "entry_angle": 180.0, "exit_angle": 270.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Nord->Est)", "entry_angle": 0.0, "exit_angle": 90.0, "arrival_time": 0.0}
-            ],
-            "authorized": []
-        }),
-        json!({
-            "id": 11,
-            "name": "Interblocage Circulaire (4 Gauches)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Ouest)", "entry_angle": 180.0, "exit_angle": 270.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Ouest->Nord)", "entry_angle": 270.0, "exit_angle": 0.0, "arrival_time": 0.0},
-                {"id": 2, "name": "V2 (Nord->Est)", "entry_angle": 0.0, "exit_angle": 90.0, "arrival_time": 0.0},
-                {"id": 3, "name": "V3 (Est->Sud)", "entry_angle": 90.0, "exit_angle": 180.0, "arrival_time": 0.0}
-            ],
-            "authorized": []
-        }),
-        json!({
-            "id": 12,
-            "name": "6 Voies (Hexagone) - Croisement Central",
-            "vehicles": [
-                {"id": 0, "name": "V0 (0°->180°)", "entry_angle": 0.0, "exit_angle": 180.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (60°->240°)", "entry_angle": 60.0, "exit_angle": 240.0, "arrival_time": 0.0},
-                {"id": 2, "name": "V2 (120°->300°)", "entry_angle": 120.0, "exit_angle": 300.0, "arrival_time": 0.0}
-            ],
-            "authorized": []
-        }),
-        json!({
-            "id": 13,
-            "name": "5 Voies - Conflit Complexe",
-            "vehicles": [
-                {"id": 0, "name": "V0 (0°->144°)", "entry_angle": 0.0, "exit_angle": 144.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (72°->216°)", "entry_angle": 72.0, "exit_angle": 216.0, "arrival_time": 0.0},
-                {"id": 2, "name": "V2 (216°->288°)", "entry_angle": 216.0, "exit_angle": 288.0, "arrival_time": 0.0}
-            ],
-            "authorized": []
-        }),
-        json!({
-            "id": 14,
-            "name": "Validation Stop : V1(Stop) vs V0(Prio)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Ouest->Est) AVEC STOP", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0, "rule": "stop"}
-            ],
-            "authorized": []
-        }),
-        json!({
-            "id": 15,
-            "name": "Validation Cédez-le-Passage : V1(Cédez) vs V0(Prio)",
-            "vehicles": [
-                {"id": 0, "name": "V0 (Sud->Nord)", "entry_angle": 180.0, "exit_angle": 0.0, "arrival_time": 0.0},
-                {"id": 1, "name": "V1 (Ouest->Est) AVEC CEDEZ", "entry_angle": 270.0, "exit_angle": 90.0, "arrival_time": 0.0, "rule": "Let_passage"}
-            ],
-            "authorized": []
-        })
-    ];
-    
+    let scenarios = crate::map::tests::get_test_scenarios();
     Json(json!({ "scenarios": scenarios }))
 }
+
 
 
 #[derive(Debug, Deserialize)]
@@ -283,14 +89,77 @@ struct SolveRequest {
 }
 
 async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::Value> {
-    use petgraph::graph::NodeIndex;
-    use std::collections::{HashSet, HashMap};
+    use crate::simulation::config::SimulationConfig;
+    use crate::simulation::engine::Simulation;
     use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest, VehicleState};
+    use crate::map::model::Map;
+    use petgraph::graph::NodeIndex;
 
-    let compute_crossing_duration = |distance_m: f32, initial_v: f32| -> f64 {
+    // 1. Détecter le type de carte (Rond point ou Intersection)
+    let is_roundabout = payload.vehicles.iter().any(|v| (v.entry_angle % 90.0).abs() > 0.1);
+    
+    // 2. Créer la carte
+    let mut map = if is_roundabout {
+        crate::map::tests::create_roundabout_map()
+    } else {
+        crate::map::tests::create_standard_intersection_map()
+    };
+
+    // 3. Helper pour trouver les noeuds (Entrée/Sortie)
+    let find_node = |m: &Map, angle_deg: f64| -> Option<NodeIndex> {
+        // Logique de conversion Angle -> Position sur la carte
+        // Convention : 
+        // 0° (Nord) -> x=0, y=100
+        // 90° (Est) -> x=100, y=0
+        // 180° (Sud) -> x=0, y=-100
+        // 270° (Ouest) -> x=-100, y=0
+        let mut best_node = None;
+        let mut min_dist = f32::MAX;
+        
+        // On convertit l'angle "Trigo standard" vers coordonnées cartésiennes
+        // Dans le modèle Test : 0° est Nord (y+), Sens Horaire ?
+        // Vérif via `create_standard_intersection_map` :
+        // North (id 2) : (0, 100)
+        // East (id 3) : (100, 0)
+        // South (id 4) : (0, -100)
+        // West (id 5) : (-100, 0)
+        
+        let target_x = 100.0 * (angle_deg.to_radians().sin() as f32); // 0->0, 90->1
+        let target_y = 100.0 * (angle_deg.to_radians().cos() as f32); // 0->1, 90->0
+        
+        for idx in m.graph.node_indices() {
+             let node = &m.graph[idx];
+             // Filtre noeuds internes
+             if node.name.contains("Node-") 
+                || node.name == "Intersection" 
+                || node.name.contains("RondPoint") { 
+                 continue; 
+             }
+             
+             let dist = ((node.x - target_x).powi(2) + (node.y - target_y).powi(2)).sqrt();
+             if dist < min_dist {
+                 min_dist = dist;
+                 best_node = Some(idx);
+             }
+        }
+        best_node
+    };
+
+    // 4. Préparer les véhicules
+    let mut pending_vehicles: Vec<(f32, Vehicle)> = Vec::new();
+    
+    // Pour chaque véhicule, on configure le chemin ET les règles de priorité (stop, céder le passage...)
+    for (_i, v_req) in payload.vehicles.iter().enumerate() {
+        // Angle entrée : on vient DE cet angle. Donc si entry_angle=180 (Sud), on part du Sud pour aller au Nord.
+        // Le noeud source est donc celui à 180°.
+        let entry_node = find_node(&map, v_req.entry_angle).unwrap_or(NodeIndex::new(0));
+        let exit_node = find_node(&map, v_req.exit_angle).unwrap_or(NodeIndex::new(0));
+
+        let current_time = v_req.arrival_time;
+        
         let spec = VehicleSpec {
             kind: VehicleKind::Car,
-            max_speed_ms: 13.8, // ~50 km/h
+            max_speed_ms: if is_roundabout { 8.33 } else { 13.8 },
             max_acceleration_ms2: 3.0,
             comfortable_deceleration: 2.0,
             reaction_time: 1.0,
@@ -298,168 +167,140 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
             fuel_consumption_l_per_100km: 5.0,
             co2_g_per_km: 100.0,
         };
-        
-        if distance_m <= 0.001 { return 0.0; }
 
-        let mut v = initial_v;
-        let mut d = 0.0f32;
-        let mut t = 0.0f64;
-        let dt = 0.1;
-        
-        while d < distance_m {
-            let acc = spec.max_acceleration_ms2 * (1.0 - (v / spec.max_speed_ms).powi(4));
-            v += acc * dt as f32;
-            if v < 0.0 { v = 0.0; }
-            d += v * dt as f32;
-            t += dt;
-        }
-        t
-    };
+        let path = crate::simulation::vehicle::fastest_path(&map, entry_node, exit_node);
+        if path.len() < 2 { continue; }
 
-    let crossing_dist_m = 40.0;
-
-    let mut angles_set = HashSet::new();
-    for v in &payload.vehicles {
-        let entry = (v.entry_angle + 360.0) % 360.0;
-        let exit = (v.exit_angle + 360.0) % 360.0;
-        let entry_int = (entry * 10.0).round() as i64;
-        let exit_int = (exit * 10.0).round() as i64;
-        angles_set.insert(entry_int);
-        angles_set.insert(exit_int);
-    }
-    let all_entry_angles: Vec<f64> = angles_set.clone().into_iter().map(|a| a as f64 / 10.0).collect();
-
-    let angle_to_node: HashMap<i64, NodeIndex> = angles_set.into_iter()
-        .enumerate()
-        .map(|(i, angle)| (angle, NodeIndex::new(i)))
-        .collect();
-
-    let mut time = 0.0;
-    let tick = 0.1;
-    
-    let mut schedule: HashMap<u64, (f64, f64, f32)> = HashMap::new(); // id -> (start, end, v_init)
-    let mut finished: HashSet<u64> = HashSet::new();
-    
-    while finished.len() < payload.vehicles.len() && time < 60.0 {
-        let mut active_crossing: Vec<usize> = Vec::new();
-        
-        for (i, v) in payload.vehicles.iter().enumerate() {
-            if let Some(&(start, end, _)) = schedule.get(&v.id) {
-                if time >= start && time < end {
-                    active_crossing.push(i);
-                }
-                if time >= end {
-                    finished.insert(v.id);
-                }
-            }
-        }
-
-        let mut candidates: Vec<usize> = Vec::new(); 
-        for (i, v) in payload.vehicles.iter().enumerate() {
-            if !schedule.contains_key(&v.id) && v.arrival_time <= (time as f32) + 0.01 {
-                candidates.push(i);
-            }
-        }
-
-        let mut authorized_now: Vec<usize> = Vec::new();
-        
-        let mut requests_mix: Vec<MovementRequest> = Vec::new();
-        let mut mix_map: Vec<usize> = Vec::new(); 
-
-        for &idx in &active_crossing {
-            let v = &payload.vehicles[idx];
-            let exit_int = ((v.exit_angle + 360.0) % 360.0 * 10.0).round() as i64;
-            requests_mix.push(MovementRequest {
-                vehicle_index: idx,
-                vehicle_id: v.id,
-                to: *angle_to_node.get(&exit_int).unwrap_or(&NodeIndex::new(0)),
-                entry_angle: v.entry_angle, 
-                exit_angle: v.exit_angle,
-                arrival_time: -1.0, 
-                rule: RoadRule::Priority,
-            });
-            mix_map.push(idx);
-        }
-
-        for &idx in &candidates {
-            let v = &payload.vehicles[idx];
+        // --- Injection des Règles (Stop/Yield) ---
+        // On modifie la map.graph[intersection] pour ajouter la règle venant de cette route
+        if let Some(rule_str) = &v_req.rule {
+            use crate::map::intersection::RoadRule;
             
-            // Determine Rule from JSON
-            let rule = match v.rule.as_deref() {
-                Some("stop") => RoadRule::Stop,
-                Some("yield") => RoadRule::Yield,
+            // Le véhicule va de path[0] vers path[1].
+            // path[1] est l'intersection (ou le premier carrefour).
+            // L'arête path[0]->path[1] est la route entrante.
+            
+            let source_node = path[0];
+            let intersection_node = path[1];
+            
+            if let Some(edge_idx) = map.graph.find_edge(source_node, intersection_node) {
+                let road_id = map.graph[edge_idx].id;
+                
+                let parsed_rule = match rule_str.as_str() {
+                    "stop" | "Stop" => RoadRule::Stop,
+                    "yield" | "Yield" | "Let_passage" => RoadRule::Yield,
+                    "priority" | "Priority" => RoadRule::Priority,
+                    _ => RoadRule::Priority,
+                };
+                
+                println!("[DEBUG] Injecting Rule '{:?}' for Vehicle {} on Road ID {} at Intersection {:?}", 
+                        parsed_rule, v_req.id, road_id, intersection_node);
+
+                // On applique la règle sur le noeud intersection
+                if let Some(inter) = map.graph.node_weight_mut(intersection_node) {
+                    inter.rules.insert(road_id, parsed_rule);
+                }
+            }
+        }
+        // -----------------------------------------
+
+        let mut vehicle = Vehicle::new(
+            v_req.id,
+            spec,
+            TripRequest { origin_id: 0, destination_id: 0, departure_time_s: 0, return_time_s: None },
+            entry_node,
+        );
+        vehicle.path = path.clone();
+        if vehicle.path.len() > 1 {
+            vehicle.next_node = Some(vehicle.path[1]);
+        }
+
+        // --- Forced Rule Injection into Vehicle (Bypasses Map) ---
+        if let Some(rule_str) = &v_req.rule {
+            use crate::map::intersection::RoadRule;
+            let parsed_rule = match rule_str.as_str() {
+                "stop" | "Stop" => RoadRule::Stop,
+                "yield" | "Yield" | "Let_passage" => RoadRule::Yield,
+                "priority" | "Priority" => RoadRule::Priority,
                 _ => RoadRule::Priority,
             };
-
-            // Stop Logic Simulation
-            if rule == RoadRule::Stop {
-                if time - (v.arrival_time as f64) < 3.0 {
-                    continue; 
-                }
+            // On associe la règle FORCEE uniquement à la première intersection du chemin
+            if path.len() > 1 {
+                 vehicle.forced_rules.insert(path[1], parsed_rule);
             }
-
-            let exit_int = ((v.exit_angle + 360.0) % 360.0 * 10.0).round() as i64;
-            requests_mix.push(MovementRequest {
-                vehicle_index: idx, 
-                vehicle_id: v.id,
-                to: *angle_to_node.get(&exit_int).unwrap_or(&NodeIndex::new(0)),
-                entry_angle: v.entry_angle,
-                exit_angle: v.exit_angle,
-                arrival_time: v.arrival_time,
-                rule,
-            });
-            mix_map.push(idx);
         }
-
-        let allowed_in_mix = JunctionController::authorized_indices(&requests_mix, &all_entry_angles);
+        // ---------------------------------------------------------
         
-        for &mix_idx in &allowed_in_mix {
-             let original_idx = mix_map[mix_idx];
-             if candidates.contains(&original_idx) {
-                 authorized_now.push(original_idx);
-             }
-        }
-
-        if active_crossing.is_empty() && !candidates.is_empty() && authorized_now.is_empty() {
-            candidates.sort_by_key(|&idx| payload.vehicles[idx].id);
-            if let Some(&winner_idx) = candidates.first() {
-                authorized_now.push(winner_idx);
-            }
-        }
-
-        if !authorized_now.is_empty() {
-            for &idx in &authorized_now {
-                let v = &payload.vehicles[idx];
-                let vid = v.id;
-                
-                let waited = time > (v.arrival_time as f64 + 0.15); 
-                let v_init = if waited { 0.0 } else { 13.8 }; 
-                let duration = compute_crossing_duration(crossing_dist_m, v_init);
-
-                schedule.insert(vid, (time, time + duration, v_init));
-            }
-        }
-
-        time += tick;
+        pending_vehicles.push((current_time, vehicle));
     }
 
-    let vehicles_resp: Vec<serde_json::Value> = payload.vehicles.iter().map(|v| {
-        let (start, end, v_init) = *schedule.get(&v.id).unwrap_or(&(999.0, 999.0, 0.0));
-        json!({
-            "id": v.id,
-            "name": if v.name.is_empty() { format!("V{}", v.id) } else { v.name.clone() },
-            "entry_angle": v.entry_angle,
-            "exit_angle": v.exit_angle,
-            "arrival_time": v.arrival_time,
-            "start_time": start,
-            "end_time": end,
-            "initial_velocity": v_init
-        })
-    }).collect();
+    
+    pending_vehicles.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+    // 5. Initialiser la simulation
+    let mut sim = SimulationConfig::new(
+        map, 0.0, 60.0, 0.1, Vec::new(), 2.5, 4.0,
+    );
+
+    // 6. Boucle de Simulation
+    let mut frames = Vec::new();
+    let steps = (60.0 / 0.1) as usize;
+
+    for _step in 0..steps {
+        let time = sim.current_time;
+
+        // Injection
+        while !pending_vehicles.is_empty() {
+            if pending_vehicles[0].0 <= time {
+                let (_, v) = pending_vehicles.remove(0);
+                sim.vehicles.push(v);
+            } else {
+                break;
+            }
+        }
+
+        sim.step();
+
+        let frame_data: Vec<serde_json::Value> = sim.vehicles.iter().map(|v| {
+            let coords = v.get_coordinates(&sim.map);
+            let mut angle = 0.0;
+            // Calcul approximatif de l'angle pour affichage
+            if v.state == VehicleState::EnRoute {
+                 if let (Some(curr), Some(next)) = (sim.map.graph.node_weight(v.current_node), v.next_node.and_then(|n| sim.map.graph.node_weight(n))) {
+                     let dx = next.x - curr.x;
+                     let dy = next.y - curr.y;
+                     angle = dy.atan2(dx).to_degrees();
+                 }
+            } else if v.state == VehicleState::WaitingToDepart {
+                 if let (Some(curr), Some(next)) = (sim.map.graph.node_weight(v.current_node), v.next_node.and_then(|n| sim.map.graph.node_weight(n))) {
+                     let dx = next.x - curr.x;
+                     let dy = next.y - curr.y;
+                     angle = dy.atan2(dx).to_degrees();
+                 }
+            }
+            
+            json!({
+                "id": v.id,
+                "x": coords.x,
+                "y": coords.y,
+                "angle": angle,
+                "speed": v.velocity,
+                "state": format!("{:?}", v.state)
+            })
+        }).collect();
+
+        frames.push(json!({ "time": time, "vehicles": frame_data }));
+        
+        sim.current_time += 0.1;
+        if pending_vehicles.is_empty() && sim.vehicles.iter().all(|v| v.state == VehicleState::Arrived) {
+            break;
+        }
+    }
 
     Json(json!({
-        "vehicles": vehicles_resp,
-        "debug_log": "Simulation computed server-side with Physics V2"
+        "mode": "replay",
+        "frames": frames,
+        "debug_log": "Simulation computed with ENGINE.RS (Real Physics)"
     }))
 }
 

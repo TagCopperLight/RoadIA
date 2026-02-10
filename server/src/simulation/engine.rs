@@ -152,27 +152,60 @@ impl Simulation for SimulationConfig {
                         )
                     };
                     let vehicle = &mut self.vehicles[i];
+                    
+                    // Look up rule at next intersection
+                    let next_node_idx = next_node.unwrap();
+                    let intersection_node = &self.map.graph[next_node_idx];
+                    let mut rule = intersection_node.rules.get(&current_road.id).copied().unwrap_or(RoadRule::Priority);
+
+                    if let Some(forced) = vehicle.forced_rules.get(&next_node_idx) {
+                       rule = *forced;
+                    }
+
                     vehicle.velocity += self.time_step_s
                         * match ahead {
                             Some(v) => vehicle.compute_acceleration(
-                                vehicle.position_on_edge_m - v.position_on_edge_m,
+                                vehicle.position_on_edge_m - v.position_on_edge_m - v.spec.length_m,
                                 v.previous_velocity,
                                 current_road.speed_limit_ms as f32,
                                 self.minimum_gap,
                                 self.acceleration_exponent,
                             ),
-                            None => vehicle.compute_acceleration(
-                                vehicle.position_on_edge_m,
-                                0.0,
-                                current_road.speed_limit_ms as f32,
-                                self.minimum_gap,
-                                self.acceleration_exponent,
-                            ),
+                            None => {
+                                // If no car ahead, check if we need to stop at intersection
+                                match rule {
+                                    RoadRule::Stop => {
+                                         // Treat intersection (pos=0) as a static obstacle
+                                         vehicle.compute_acceleration(
+                                            vehicle.position_on_edge_m,
+                                            0.0,
+                                            current_road.speed_limit_ms as f32, // Desired speed is still high, but gap is closing
+                                            self.minimum_gap,
+                                            self.acceleration_exponent,
+                                        )
+                                    },
+                                    RoadRule::Yield | RoadRule::Priority => {
+                                         vehicle.compute_acceleration(
+                                            10000.0,
+                                            0.0,
+                                            current_road.speed_limit_ms as f32,
+                                            self.minimum_gap,
+                                            self.acceleration_exponent,
+                                        )
+                                    }
+                                }
+                            },
                         };
                 }
                 VehicleState::AtIntersection => {
                     if self.vehicles[i].intersection_wait_start_time_s.is_none() {
                         self.vehicles[i].intersection_wait_start_time_s = Some(self.current_time);
+                    }
+                    // If we have been waiting for more than 1 tick, kill the velocity to prevent "launching" after a long wait
+                    if let Some(start_time) = self.vehicles[i].intersection_wait_start_time_s {
+                         if self.current_time - start_time > self.time_step_s * 1.5 {
+                             self.vehicles[i].velocity = 0.0;
+                         }
                     }
                 }
                 VehicleState::Arrived => {}
@@ -201,7 +234,19 @@ impl Simulation for SimulationConfig {
             let incoming_road = &self.map.graph[incoming_edge];
             let intersection_node = &self.map.graph[via];
             
-            let rule = intersection_node.rules.get(&incoming_road.id).copied().unwrap_or(RoadRule::Priority);
+            // Debug: Check if rule exists
+            if let Some(r) = intersection_node.rules.get(&incoming_road.id) {
+                // Rule found
+            } else {
+               // println!("Warning: No rule found for Road ID {} at Inter {}. Defaulting to Priority.", incoming_road.id, intersection_node.name);
+            }
+            
+            // Prefer forced rule on vehicle IF it matches this intersection, otherwise lookup map
+            let mut rule = intersection_node.rules.get(&incoming_road.id).copied().unwrap_or(RoadRule::Priority);
+            
+            if let Some(forced) = self.vehicles[idx].forced_rules.get(&via) {
+                 rule = *forced;
+            }
 
             if rule == RoadRule::Stop {
                 let arrive_time = self.vehicles[idx]
@@ -218,7 +263,16 @@ impl Simulation for SimulationConfig {
             let intersection = &self.map.graph[via];
             let next_intersection = &self.map.graph[to];
 
-            let entry_angle = prev_intersection.compute_road_angle(intersection);
+            // NOTE:
+            // entry_angle doit être l'angle d'arrivée sur l'intersection.
+            // intersection.compute_road_angle(prev) donne l'angle du segment "Centre -> Source".
+            // C'est la position angulaire de la route entrante (ex: Sud = 180°).
+            // (Avant, on utilisait prev.compute(inter) qui donnait le cap du véhicule vers le nord = 0°, ce qui faussait tout).
+            let entry_angle = intersection.compute_road_angle(prev_intersection);
+            
+            // exit_angle est l'angle de la route sortante.
+            // intersection.compute_road_angle(next) donne l'angle du segment "Centre -> Destination".
+            // (ex: Ouest = 270°).
             let exit_angle = intersection.compute_road_angle(next_intersection);
 
             let arrival_time = self.vehicles[idx]
@@ -299,13 +353,28 @@ impl Simulation for SimulationConfig {
                         self.vehicles[i].next_node.unwrap(),
                     )
                     .unwrap();
-                let _current_road = self.map.graph.edge_weight(current_road_index).unwrap();
-                self.vehicles[i].position_on_edge_m -= self.vehicles[i].velocity;
+                let current_road = self.map.graph.edge_weight(current_road_index).unwrap();
+                // FIX: Apply time_step_s to position update!
+                self.vehicles[i].position_on_edge_m -= self.vehicles[i].velocity * self.time_step_s;
                 self.vehicles[i].velocity = self.vehicles[i].velocity.max(0.0);
-                if self.vehicles[i].position_on_edge_m <= self.vehicles[i].spec.length_m {
+
+                if self.vehicles[i].position_on_edge_m <= 0.5 { // Small buffer instead of length_m to let them reach the line
                     self.vehicles[i].position_on_edge_m = 0.0;
                     self.vehicles[i].state = VehicleState::AtIntersection;
                     self.vehicles[i].intersection_wait_start_time_s = Some(self.current_time);
+                    
+                    // Check rule to force stop physically if needed
+                    let next_node_idx = self.vehicles[i].next_node.unwrap();
+                    let current_road = self.map.graph.edge_weight(current_road_index).unwrap(); // Re-fetch to be safe
+                    
+                    let mut rule = self.map.graph[next_node_idx].rules.get(&current_road.id).copied().unwrap_or(RoadRule::Priority);
+                    if let Some(forced) = self.vehicles[i].forced_rules.get(&next_node_idx) {
+                        rule = *forced;
+                    }
+                    
+                    if rule == RoadRule::Stop {
+                        self.vehicles[i].velocity = 0.0;
+                    }
                 }
             }
         }
