@@ -10,6 +10,12 @@ pub enum RoadRule {
     Stop,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum TrafficLightColor {
+    Red,
+    Orange,
+    Green,
+}
 
 #[derive(Clone)]
 pub struct MovementRequest {
@@ -20,6 +26,7 @@ pub struct MovementRequest {
     pub exit_angle: f64,
     pub arrival_time: f32,
     pub rule: RoadRule,
+    pub light_color: Option<TrafficLightColor>,
 }
 
 impl MovementRequest {
@@ -41,28 +48,35 @@ impl JunctionController {
     pub fn new() -> Self {
         JunctionController
     }
-    
 
     /// Retourne les indices des mouvements autorisés à s'engager
     pub fn authorized_indices(requests: &[MovementRequest], all_entry_angles: &[f64]) -> Vec<usize> {
         let mut allowed = Vec::new();
-        
         let n = all_entry_angles.len();
 
         for (i, req) in requests.iter().enumerate() {
-            let mut blocked = false;
+            // 1) Feux tricolores
+            if let Some(color) = req.light_color {
+                if color == TrafficLightColor::Red || color == TrafficLightColor::Orange {
+                     continue; 
+                }
+            }
+
+            let mut blocked_reason: Option<String> = None;
 
             for (j, other) in requests.iter().enumerate() {
                 if i == j { continue; }
+                if blocked_reason.is_some() { break; } 
 
-                if !req.conflicts_with(other, n) {
-                    continue;
+                // 1) Feux tricolores (actuellement un vert)
+                 if let Some(color) = other.light_color {
+                    if color == TrafficLightColor::Red || color == TrafficLightColor::Orange { continue; }
                 }
 
-                // critere 1 : stop/céder le passage
+                // 2) régle de priorité (priority > Yield > Stop)
                 let my_rank = match req.rule {
                     RoadRule::Priority => 3,
-                    RoadRule::Yield => 2,//céder le passage
+                    RoadRule::Yield => 2,    // Cédez le passage
                     RoadRule::Stop => 1,
                 };
                 let other_rank = match other.rule {
@@ -71,44 +85,72 @@ impl JunctionController {
                     RoadRule::Stop => 1,
                 };
 
-                if other_rank > my_rank {
-                    blocked = true;
-                    break;
-                }
-                if my_rank > other_rank {
-                    continue;
-                }
-
-                //critère 2 : quadrant
-                let my_cost = Intersection::quadrant_cost(req.entry_angle, req.exit_angle, n);
-                let other_cost = Intersection::quadrant_cost(other.entry_angle, other.exit_angle, n);
-
-                if other_cost < my_cost {
-                    blocked = true;
-                    break;
-                }
+                if other_rank > my_rank {//gestion des conflits (autres prioritaires)
+                    if req.conflicts_with(other, n) {
+                        blocked_reason = Some(format!("Rank (V{} {:?} > V{} {:?}) & Physical Conflict", 
+                            other.vehicle_id, other.rule, req.vehicle_id, req.rule));
+                        break;
+                    }
+                    continue; 
+                } 
                 
-                if my_cost < other_cost {
+                if my_rank > other_rank {//gestion des conflits (je suis prioritaire)
                     continue;
                 }
 
-                //critère 3 : FIFO
-                if other.arrival_time + 1e-3 < req.arrival_time {
-                    blocked = true;
+                // 3) conflit physique (si rangs égaux)
+                if !req.conflicts_with(other, n) {
+                    continue;
+                }
+
+                // 4) priorité à droite
+                let delta = (other.entry_angle - req.entry_angle + 360.0) % 360.0;// calcul de la position relative de l'autre véhicule
+                
+                if delta > 180.0 + 1e-3 {//angle>180 => viens de droite => je suis prioritaire 
+                    blocked_reason = Some(format!("Right Hand Priority (Delta {:.1}°)", delta));
                     break;
+                }
+                if delta < 180.0 - 1e-3 {//angle<180 => viens de gauche => l'autre est prioritaire
+                    continue;
+                }
+
+                // 5) FIFO/ID (random)
+                if other.arrival_time + 1e-3 < req.arrival_time {
+                     blocked_reason = Some(format!("FIFO (V{} arrived first)", other.vehicle_id));
+                     break;
                 }
 
                 if (req.arrival_time - other.arrival_time).abs() <= 1e-3
-                    && other.vehicle_id < req.vehicle_id//critère 4 : ID véhicule (dernier recours, random possible sinon)
+                    && other.vehicle_id < req.vehicle_id 
                 {
-                    blocked = true;
-                    break;
+                     blocked_reason = Some(format!("ID Tie-Breaker (V{} < V{})", other.vehicle_id, req.vehicle_id));
+                     break;
                 }
             }
 
-            if !blocked {
-                allowed.push(i);
+            if blocked_reason.is_none() {
+                 allowed.push(i);
             }
+        }
+        
+        // 6) gestion interblocage
+        if allowed.is_empty() && !requests.is_empty() {
+             let candidates: Vec<(usize, &MovementRequest)> = requests.iter().enumerate()
+                .filter(|(_, r)| match r.light_color {
+                    Some(TrafficLightColor::Red) | Some(TrafficLightColor::Orange) => false,
+                    _ => true
+                })
+                .collect();
+             
+             if !candidates.is_empty() {
+                 if let Some((best_idx, _)) = candidates.iter().min_by(|(_, a), (_, b)| {
+                        a.arrival_time.partial_cmp(&b.arrival_time).unwrap_or(std::cmp::Ordering::Equal)
+                            .then_with(|| a.vehicle_id.cmp(&b.vehicle_id))
+                    }) 
+                 {
+                     allowed.push(*best_idx); // Ce véhicule force le passage pour débloquer le carrefour
+                 }
+             }
         }
 
         allowed
@@ -124,17 +166,71 @@ pub struct Intersection {
     pub y: f32,
     #[serde(default)]
     pub rules: HashMap<u32, RoadRule>,
+    
+    //feu tricolore
+    #[serde(default)]
+    pub traffic_lights: HashMap<u32, TrafficLightColor>,
+    #[serde(skip)]
+    pub timer: f32,
+    #[serde(default)]
+    pub current_green_idx: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,
     Workplace,
     Roundabout,
+    TrafficLight,
 }
 
 impl Intersection {
+    pub fn new(id: u32, kind: IntersectionKind, name: String, x: f32, y: f32) -> Self {
+        Self {
+            id,
+            kind,
+            name,
+            x,
+            y,
+            rules: HashMap::new(),
+            traffic_lights: HashMap::new(),
+            timer: 0.0,
+            current_green_idx: 0,
+        }
+    }
+
+    pub fn update_traffic_lights(&mut self, dt: f32, incoming_roads: &[u32]) {//gestion feu tricolore
+        if self.kind != IntersectionKind::TrafficLight {
+            return;
+        }
+        if incoming_roads.is_empty() { return; }
+        let active_roads = incoming_roads;
+        self.timer += dt;
+        let green_duration = 10.0;
+        let orange_duration = 3.0;
+        let red_clearance = 2.0;
+        let cycle_step_duration = green_duration + orange_duration + red_clearance;
+        if self.timer > cycle_step_duration {
+            self.timer = 0.0;
+            self.current_green_idx = (self.current_green_idx + 1) % active_roads.len();
+        }
+        let current_road_id = active_roads[self.current_green_idx];
+        for road_id in active_roads {
+             if *road_id == current_road_id {
+                 if self.timer < green_duration {
+                     self.traffic_lights.insert(*road_id, TrafficLightColor::Green);
+                 } else if self.timer < green_duration + orange_duration {
+                     self.traffic_lights.insert(*road_id, TrafficLightColor::Orange);
+                 } else {
+                     self.traffic_lights.insert(*road_id, TrafficLightColor::Red);
+                 }
+             } else {
+                 self.traffic_lights.insert(*road_id, TrafficLightColor::Red);
+             }
+        }
+    }
+
     pub fn compute_road_angle(&self, to: &Intersection) -> f64 {
         let dx = (to.x - self.x) as f64;
         let dy = (to.y - self.y) as f64;
@@ -191,15 +287,22 @@ impl Intersection {
         // Arrondir au secteur le plus proche
         let cost = (diff / sector_size).round() as i32;
         if cost == 0 { n_branches as i32 } else { cost } //cout maximal = demi-tour
-    } // End of quadrant_cost
-} // End of impl Intersection
+    }
+}
 
 use crate::map::model::Map;
 use crate::map::road::Road;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum RoundaboutKind {
+    Standard, //rdp
+    Gyratory, //carrrefou à sens giratoire
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Roundabout {
     pub id: u32,
+    pub kind: RoundaboutKind,
     pub name: String,
     pub center_x: f32,
     pub center_y: f32,
@@ -207,9 +310,10 @@ pub struct Roundabout {
 }
 
 impl Roundabout {
-    pub fn new(id: u32, name: String, x: f32, y: f32, radius: f32) -> Self {//radius = rayon en mètre pour la taille physique
+    pub fn new(id: u32, name: String, x: f32, y: f32, radius: f32, kind: RoundaboutKind) -> Self {
         Self {
             id,
+            kind,
             name,
             center_x: x,
             center_y: y,
@@ -236,14 +340,13 @@ impl Roundabout {
 
             let ring_node_id = self.id * 1000 + (i as u32); //génération id pour la nouvelle intersection
 
-            let node = map.add_intersection(Intersection {
-                id: ring_node_id,
-                kind: IntersectionKind::Roundabout, //marque l'appartenance au rond-point
-                name: format!("{}-Node-{}", self.name, i), //nommage descriptif avec id
-                x: px,
-                y: py,
-                rules: HashMap::new(),
-            });
+            let node = map.add_intersection(Intersection::new(
+                ring_node_id,
+                IntersectionKind::Roundabout,
+                format!("{}-Node-{}", self.name, i),
+                px,
+                py,
+            ));
 
             ring_nodes.push(node);
             node_angles.push((angle, node, neighbor_idx));
@@ -282,8 +385,21 @@ impl Roundabout {
             
             //3) application de la règle de priorité
             let incoming_road_id = map.graph[edge_in].id;
+            
+            // Id de la route de l'anneau qui arrive sur ce noeud (pour le mode Gyratory)
+            let prev_idx = (i + n - 1) % n;
+            let incoming_ring_road_id = self.id * 10000 + (prev_idx as u32);//id à revoir si grosse ville
+
             if let Some(inter) = map.graph.node_weight_mut(current_node) {
-                 inter.rules.insert(incoming_road_id, RoadRule::Yield);
+                 match self.kind {
+                     RoundaboutKind::Standard => {
+                         inter.rules.insert(incoming_road_id, RoadRule::Yield);//cédez le passage pour rdp
+                     },
+                     RoundaboutKind::Gyratory => {//donne règle giratoire
+                         inter.rules.insert(incoming_ring_road_id, RoadRule::Yield);
+                         inter.rules.insert(incoming_road_id, RoadRule::Priority);
+                     }
+                 }
             }
 
             //4) création des routes sortantes

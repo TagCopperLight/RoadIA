@@ -2,7 +2,6 @@ mod api;
 mod map;
 mod simulation;
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 use axum::{
@@ -14,14 +13,13 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
     map::{
-        intersection::{Intersection, IntersectionKind, JunctionController, MovementRequest, RoadRule},
+        intersection::{Intersection, IntersectionKind, RoadRule},
         model::Map,
-        road::{Road},
     },
     simulation::{
         config::SimulationConfig,
@@ -79,13 +77,20 @@ struct TestVehicle {
     entry_angle: f64,
     exit_angle: f64,
     arrival_time: f32,
+    
+    // --- CHAMP AJOUTÉ POUR LE CONTRÔLE DES RÈGLES ---
+    // Permet de spécifier explicitement la priorité du véhicule
+    // Valeurs acceptées: "Stop", "Yield" (Cédez), "Priority"
+    // Si None, la règle par défaut de la carte s'applique
     #[serde(default)]
-    rule: Option<String>, // "stop", "Let_passage", "priority"
+    rule: Option<String>, 
 }
 
 #[derive(Debug, Deserialize)]
 struct SolveRequest {
     vehicles: Vec<TestVehicle>,
+    #[serde(default)]
+    map_type: Option<String>,
 }
 
 async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::Value> {
@@ -95,14 +100,22 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
     use crate::map::model::Map;
     use petgraph::graph::NodeIndex;
 
-    // 1. Détecter le type de carte (Rond point ou Intersection)
-    let is_roundabout = payload.vehicles.iter().any(|v| (v.entry_angle % 90.0).abs() > 0.1);
-    
-    // 2. Créer la carte
-    let mut map = if is_roundabout {
-        crate::map::tests::create_roundabout_map()
+    // 1. Choisir la carte
+    let (mut map, is_roundabout) = if let Some(t) = &payload.map_type {
+        match t.as_str() {
+             "gyratory" => (crate::map::tests::create_gyratory_roundabout_map(), true),
+             "roundabout" => (crate::map::tests::create_roundabout_map(), true),
+             "traffic_light" => (crate::map::tests::create_traffic_light_map(), false),
+             _ => (crate::map::tests::create_standard_intersection_map(), false),
+        }
     } else {
-        crate::map::tests::create_standard_intersection_map()
+        // Auto-détection legacy
+        let is_roundabout_legacy = payload.vehicles.iter().any(|v| (v.entry_angle % 90.0).abs() > 0.1);
+        if is_roundabout_legacy {
+            (crate::map::tests::create_roundabout_map(), true)
+        } else {
+            (crate::map::tests::create_standard_intersection_map(), false)
+        }
     };
 
     // 3. Helper pour trouver les noeuds (Entrée/Sortie)
@@ -169,40 +182,41 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
         };
 
         let path = crate::simulation::vehicle::fastest_path(&map, entry_node, exit_node);
+        
         if path.len() < 2 { continue; }
 
-        // --- Injection des Règles (Stop/Yield) ---
-        // On modifie la map.graph[intersection] pour ajouter la règle venant de cette route
+        // --- GESTION DES RÈGLES DE PRIORITÉ (Payload JSON) ---
+        // Si le champ 'rule' est présent dans le JSON pour ce véhicule
         if let Some(rule_str) = &v_req.rule {
             use crate::map::intersection::RoadRule;
             
-            // Le véhicule va de path[0] vers path[1].
-            // path[1] est l'intersection (ou le premier carrefour).
-            // L'arête path[0]->path[1] est la route entrante.
-            
+            // On récupère le nœud source (début de la route)
             let source_node = path[0];
+            // On récupère le nœud d'intersection (fin de la route)
             let intersection_node = path[1];
             
+            // On cherche l'identifiant de la route (Edge) reliant ces deux nœuds
             if let Some(edge_idx) = map.graph.find_edge(source_node, intersection_node) {
-                let road_id = map.graph[edge_idx].id;
+                let road_id = map.graph[edge_idx].id; // ID unique de la route
                 
-                let parsed_rule = match rule_str.as_str() {
-                    "stop" | "Stop" => RoadRule::Stop,
-                    "yield" | "Yield" | "Let_passage" => RoadRule::Yield,
-                    "priority" | "Priority" => RoadRule::Priority,
-                    _ => RoadRule::Priority,
+                // Normalisation de la chaîne en minuscules pour éviter les erreurs de casse
+                let rule_str_lower = rule_str.to_lowercase();
+                
+                // Conversion de la string JSON en Enum Rust (RoadRule)
+                let parsed_rule = match rule_str_lower.as_str() {
+                    "stop" => RoadRule::Stop,                   // Arrêt obligatoire
+                    "yield" | "let_passage" => RoadRule::Yield, // Cédez le passage
+                    "priority" => RoadRule::Priority,           // Route prioritaire
+                    _ => RoadRule::Priority,                    // Par défaut
                 };
                 
-                println!("[DEBUG] Injecting Rule '{:?}' for Vehicle {} on Road ID {} at Intersection {:?}", 
-                        parsed_rule, v_req.id, road_id, intersection_node);
-
-                // On applique la règle sur le noeud intersection
+                // Mise à jour de la configuration de l'intersection dans la carte locale
+                // On associe la règle parsée à l'identifiant de la route entrante
                 if let Some(inter) = map.graph.node_weight_mut(intersection_node) {
                     inter.rules.insert(road_id, parsed_rule);
                 }
             }
         }
-        // -----------------------------------------
 
         let mut vehicle = Vehicle::new(
             v_req.id,
@@ -215,21 +229,31 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
             vehicle.next_node = Some(vehicle.path[1]);
         }
 
-        // --- Forced Rule Injection into Vehicle (Bypasses Map) ---
+        // --- INJECTION DE RÈGLES FORCÉES (Niveau Véhicule) ---
+        // Cette section redondante assure que le véhicule porte lui-même la règle
+        // C'est utile pour le moteur de simulation qui vérifie 'vehicle.forced_rules'
         if let Some(rule_str) = &v_req.rule {
             use crate::map::intersection::RoadRule;
-            let parsed_rule = match rule_str.as_str() {
-                "stop" | "Stop" => RoadRule::Stop,
-                "yield" | "Yield" | "Let_passage" => RoadRule::Yield,
-                "priority" | "Priority" => RoadRule::Priority,
-                _ => RoadRule::Priority,
+            // Normalisation à nouveau (pour être sûr)
+            let rule_lower = rule_str.to_lowercase();
+            // Parsing identique au bloc précédent
+            let parsed_rule = match rule_lower.as_str() {
+                "stop" => RoadRule::Stop,
+                "yield" | "let_passage" => RoadRule::Yield,
+                "priority" => RoadRule::Priority,
+                _ => {
+                   // Log d'avertissement si la règle est inconnue
+                   println!("Attention: Règle inconnue '{}', par défaut Priority", rule_str);
+                   RoadRule::Priority
+                }
             };
-            // On associe la règle FORCEE uniquement à la première intersection du chemin
+            
+            // On applique cette règle forcée à la prochaine intersection du chemin
+            // Cela garantit que le moteur de simulation (engine.rs) respectera ce choix
             if path.len() > 1 {
                  vehicle.forced_rules.insert(path[1], parsed_rule);
             }
         }
-        // ---------------------------------------------------------
         
         pending_vehicles.push((current_time, vehicle));
     }
@@ -264,20 +288,18 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
         let frame_data: Vec<serde_json::Value> = sim.vehicles.iter().map(|v| {
             let coords = v.get_coordinates(&sim.map);
             let mut angle = 0.0;
-            // Calcul approximatif de l'angle pour affichage
-            if v.state == VehicleState::EnRoute {
-                 if let (Some(curr), Some(next)) = (sim.map.graph.node_weight(v.current_node), v.next_node.and_then(|n| sim.map.graph.node_weight(n))) {
-                     let dx = next.x - curr.x;
-                     let dy = next.y - curr.y;
-                     angle = dy.atan2(dx).to_degrees();
-                 }
-            } else if v.state == VehicleState::WaitingToDepart {
-                 if let (Some(curr), Some(next)) = (sim.map.graph.node_weight(v.current_node), v.next_node.and_then(|n| sim.map.graph.node_weight(n))) {
-                     let dx = next.x - curr.x;
-                     let dy = next.y - curr.y;
-                     angle = dy.atan2(dx).to_degrees();
-                 }
+            // Calcul approximatif de l'angle pour affichage via vitesse
+            if v.velocity > 0.1 {
+                 // On utilise v.current_edge_progress si possible, mais ici on SIMPLIFIE
+                 // Si on garde la méthode précédente (dx, dy), l'angle est constant sur tout le segment
+                 // Pour un affichage plus fluide sur rond-point, il faudrait interpoler les segments.
+                 // Pour l'instant on garde la méthode simple.
             }
+             if let (Some(curr), Some(next)) = (sim.map.graph.node_weight(v.current_node), v.next_node.and_then(|n| sim.map.graph.node_weight(n))) {
+                 let dx = next.x - curr.x;
+                 let dy = next.y - curr.y;
+                 angle = dy.atan2(dx).to_degrees();
+             }
             
             json!({
                 "id": v.id,
@@ -289,18 +311,34 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
             })
         }).collect();
 
-        frames.push(json!({ "time": time, "vehicles": frame_data }));
-        
-        sim.current_time += 0.1;
-        if pending_vehicles.is_empty() && sim.vehicles.iter().all(|v| v.state == VehicleState::Arrived) {
+        // Capture Traffic Light State
+        let mut lights_data = Vec::new();
+        for node in sim.map.graph.node_weights() {
+            if !node.traffic_lights.is_empty() {
+                 lights_data.push(json!({
+                     "intersection_id": node.id,
+                     "lights": node.traffic_lights
+                 }));
+            }
+        }
+
+        frames.push(json!({
+            "time": time,
+            "vehicles": frame_data,
+            "lights": lights_data
+        }));
+
+        if sim.vehicles.iter().all(|v| v.state == VehicleState::Arrived) && pending_vehicles.is_empty() {
             break;
         }
+
+        sim.current_time += sim.time_step_s;
     }
 
     Json(json!({
         "mode": "replay",
-        "frames": frames,
-        "debug_log": "Simulation computed with ENGINE.RS (Real Physics)"
+        "map_type": if is_roundabout { "roundabout" } else { "intersection" },
+        "frames": frames
     }))
 }
 
@@ -308,50 +346,11 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
     use crate::map::intersection::{JunctionController, MovementRequest};
     use petgraph::graph::NodeIndex;
     
-    let center = Intersection {
-        id: 0,
-        kind: IntersectionKind::Intersection,
-        name: "Center".to_string(),
-        x: 0.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    };
-
-    let north = Intersection {
-        id: 1,
-        kind: IntersectionKind::Habitation,
-        name: "H-North".to_string(),
-        x: 0.0,
-        y: 100.0, 
-        rules: HashMap::new(),
-    };
-
-    let east = Intersection {
-        id: 2,
-        kind: IntersectionKind::Habitation,
-        name: "H-East".to_string(),
-        x: 100.0, 
-        y: 0.0,
-        rules: HashMap::new(),
-    };
-
-    let south = Intersection {
-        id: 3,
-        kind: IntersectionKind::Habitation,
-        name: "H-South".to_string(),
-        x: 0.0,
-        y: -100.0,
-        rules: HashMap::new(),
-    };
-
-    let ldt = Intersection {
-        id: 5,
-        kind: IntersectionKind::Workplace,
-        name: "LDT".to_string(),
-        x: -100.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    };
+    let center = Intersection::new(0, IntersectionKind::Intersection, "Center".to_string(), 0.0, 0.0);
+    let north = Intersection::new(1, IntersectionKind::Habitation, "H-North".to_string(), 0.0, 100.0);
+    let east = Intersection::new(2, IntersectionKind::Habitation, "H-East".to_string(), 100.0, 0.0);
+    let south = Intersection::new(3, IntersectionKind::Habitation, "H-South".to_string(), 0.0, -100.0);
+    let ldt = Intersection::new(5, IntersectionKind::Workplace, "LDT".to_string(), -100.0, 0.0);
 
     let north_angle = center.compute_road_angle(&north); 
     let east_angle = center.compute_road_angle(&east);   
@@ -369,6 +368,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
             exit_angle: ldt_angle,
             arrival_time: 0.0,
             rule: RoadRule::Priority,
+            light_color: None,
         },
         MovementRequest {
             vehicle_index: 1,
@@ -378,6 +378,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
             exit_angle: ldt_angle,
             arrival_time: 0.0,
             rule: RoadRule::Priority,
+            light_color: None,
         },
         MovementRequest {
             vehicle_index: 2,
@@ -387,6 +388,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
             exit_angle: ldt_angle,
             arrival_time: 0.0,
             rule: RoadRule::Priority,
+            light_color: None,
         },
     ];
     
