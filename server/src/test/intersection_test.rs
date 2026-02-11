@@ -1,7 +1,7 @@
 use crate::map::model::Map;
-use crate::map::intersection::{Intersection, IntersectionKind, Roundabout, RoadRule};
+use crate::map::intersection::{Intersection, IntersectionKind, Roundabout, RoadRule, RoundaboutKind};
 use crate::map::road::Road;
-use std::collections::HashMap;
+#[allow(unused_imports)]
 use petgraph::graph::NodeIndex;
 
 /// Creates a map with a single roundabout and 4 branches (North, East, South, West)
@@ -14,45 +14,15 @@ pub fn create_roundabout_map() -> Map {
         "RondPoint-Central".to_string(), 
         0.0, 
         0.0, 
-        40.0 // Rayon de 40m pour correspondre à environ R_RING_OUTER visualisé
+        40.0, // Rayon de 40m pour correspondre à environ R_RING_OUTER visualisé
+        RoundaboutKind::Standard
     );
 
     // 2. Create external intersections (inputs/outputs)
-    let north = map.add_intersection(Intersection {
-        id: 101,
-        kind: IntersectionKind::Habitation,
-        name: "North".to_string(),
-        x: 0.0,
-        y: 100.0,
-        rules: HashMap::new(),
-    });
-
-    let east = map.add_intersection(Intersection {
-        id: 102,
-        kind: IntersectionKind::Habitation,
-        name: "East".to_string(),
-        x: 100.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
-
-    let south = map.add_intersection(Intersection {
-        id: 103,
-        kind: IntersectionKind::Habitation,
-        name: "South".to_string(),
-        x: 0.0,
-        y: -100.0,
-        rules: HashMap::new(),
-    });
-
-    let west = map.add_intersection(Intersection {
-        id: 104,
-        kind: IntersectionKind::Habitation,
-        name: "West".to_string(),
-        x: -100.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
+    let north = map.add_intersection(Intersection::new(101, IntersectionKind::Habitation, "North".to_string(), 0.0, 100.0));
+    let east = map.add_intersection(Intersection::new(102, IntersectionKind::Habitation, "East".to_string(), 100.0, 0.0));
+    let south = map.add_intersection(Intersection::new(103, IntersectionKind::Habitation, "South".to_string(), 0.0, -100.0));
+    let west = map.add_intersection(Intersection::new(104, IntersectionKind::Habitation, "West".to_string(), -100.0, 0.0));
 
     // 3. Define the connections (clockwise or counter-clockwise doesn't matter for the input list, 
     // the builder sorts them by angle)
@@ -64,53 +34,39 @@ pub fn create_roundabout_map() -> Map {
     map
 }
 
+pub fn create_gyratory_roundabout_map() -> Map {
+    let mut map = Map::new();
+
+    // 1. Create the Roundabout configuration
+    let roundabout = Roundabout::new(
+        1, 
+        "RondPoint-Gyratoire".to_string(), 
+        0.0, 
+        0.0, 
+        40.0, 
+        RoundaboutKind::Gyratory // Spécifique : Carrefour à sens giratoire (Prio Droite)
+    );
+
+    // 2. Create external intersections
+    let north = map.add_intersection(Intersection::new(101, IntersectionKind::Habitation, "North".to_string(), 0.0, 100.0));
+    let east = map.add_intersection(Intersection::new(102, IntersectionKind::Habitation, "East".to_string(), 100.0, 0.0));
+    let south = map.add_intersection(Intersection::new(103, IntersectionKind::Habitation, "South".to_string(), 0.0, -100.0));
+    let west = map.add_intersection(Intersection::new(104, IntersectionKind::Habitation, "West".to_string(), -100.0, 0.0));
+
+    let connections = vec![north, east, south, west];
+    let _ring_nodes = roundabout.build(&mut map, connections);
+
+    map
+}
+
 pub fn create_standard_intersection_map() -> Map {
     let mut map = Map::new();
 
-    let inter = map.add_intersection(Intersection {
-        id: 1,
-        kind: IntersectionKind::Intersection,
-        name: "Intersection".to_string(),
-        x: 0.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
-
-    let h_north = map.add_intersection(Intersection {
-        id: 2,
-        kind: IntersectionKind::Habitation,
-        name: "H-North".to_string(),
-        x: 0.0,
-        y: 100.0,
-        rules: HashMap::new(),
-    });
-
-    let h_east = map.add_intersection(Intersection {
-        id: 3,
-        kind: IntersectionKind::Habitation,
-        name: "H-East".to_string(),
-        x: 100.0,
-        y: 0.0,
-        rules: HashMap::new(),
-    });
-
-    let h_south = map.add_intersection(Intersection {
-        id: 4,
-        kind: IntersectionKind::Habitation,
-        name: "H-South".to_string(),
-        x: 0.0,
-        y: -100.0,
-        rules: HashMap::new(),
-    });
-    
-    let h_west = map.add_intersection(Intersection {
-        id: 5,
-        kind: IntersectionKind::Habitation,
-        name: "H-West".to_string(),
-        x: -100.0, // Added West for completeness as 4-way
-        y: 0.0,
-        rules: HashMap::new(),
-    });
+    let inter = map.add_intersection(Intersection::new(1, IntersectionKind::Intersection, "Intersection".to_string(), 0.0, 0.0));
+    let h_north = map.add_intersection(Intersection::new(2, IntersectionKind::Habitation, "H-North".to_string(), 0.0, 100.0));
+    let h_east = map.add_intersection(Intersection::new(3, IntersectionKind::Habitation, "H-East".to_string(), 100.0, 0.0));
+    let h_south = map.add_intersection(Intersection::new(4, IntersectionKind::Habitation, "H-South".to_string(), 0.0, -100.0));
+    let h_west = map.add_intersection(Intersection::new(5, IntersectionKind::Habitation, "H-West".to_string(), -100.0, 0.0));
 
     map.add_two_way_road(h_north, inter, Road::new(1, 1, 12, 100.0, false, false));
     map.add_two_way_road(h_east, inter, Road::new(2, 1, 12, 100.0, false, false));
@@ -317,7 +273,7 @@ mod tests {
 
     #[test]
     fn test_roundabout_yield_rules() {
-        let mut map = create_roundabout_map();
+        let map = create_roundabout_map();
 
         // Check that entries have Yield rules
         for node_idx in map.graph.node_indices() {
@@ -341,4 +297,31 @@ mod tests {
              }
         }
     }
+
+    #[test]
+    fn test_gyratory_roundabout_rules() {
+        let map = create_gyratory_roundabout_map();
+
+        // Check that NO entries have Yield or Stop rules (everything is Priority)
+        // And check that we have entries in the rules map (set to Priority)
+        for node_idx in map.graph.node_indices() {
+             let node = &map.graph[node_idx];
+             if node.name.contains("Node") { // It's a ring node
+                 assert!(!node.rules.is_empty(), "Ring node {} should have rules", node.name);
+
+                 // Verify NO Yield
+                 let has_yield = node.rules.values().any(|r| *r == RoadRule::Yield);
+                 assert!(!has_yield, "Gyratory node {} should NOT have a Yield rule", node.name);
+
+                 // Verify NO Stop
+                 let has_stop = node.rules.values().any(|r| *r == RoadRule::Stop);
+                 assert!(!has_stop, "Gyratory node {} should NOT have a Stop rule", node.name);
+
+                 // Verify Priority exist
+                 let has_priority = node.rules.values().any(|r| *r == RoadRule::Priority);
+                 assert!(has_priority, "Gyratory node {} should have Priority rules", node.name);
+             }
+        }
+    }
 }
+

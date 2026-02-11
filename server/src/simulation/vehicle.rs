@@ -156,14 +156,7 @@ impl Vehicle {
                     y: current_node_o.y,
                 };
             }
-            VehicleState::AtIntersection => {
-                let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
-                return Coordinates {
-                    x: next_node_o.x,
-                    y: next_node_o.y,
-                };
-            }
-            VehicleState::EnRoute => {
+            VehicleState::AtIntersection | VehicleState::EnRoute => {
                 let current_node_o = map.graph.node_weight(self.current_node).unwrap();
                 let next_node_o = map.graph.node_weight(self.next_node.unwrap()).unwrap();
                 let current_road = map
