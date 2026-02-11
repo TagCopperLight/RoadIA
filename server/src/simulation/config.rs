@@ -1,8 +1,7 @@
 use crate::map::model::Map;
 use crate::simulation::vehicle::Vehicle;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SimulationConfig {
     pub start_time_s: f32,
     pub end_time_s: f32,
@@ -11,7 +10,6 @@ pub struct SimulationConfig {
     pub acceleration_exponent: f32,
     pub minimum_gap: f32, //between vehicles
 
-    #[serde(skip)]
     pub map: Map,
 
     pub vehicles: Vec<Vehicle>,

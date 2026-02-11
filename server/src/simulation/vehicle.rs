@@ -2,16 +2,15 @@ use crate::map::intersection::Intersection;
 use crate::map::model::Coordinates;
 use crate::{map::model::Map, simulation::config::MAX_SPEED_MS};
 use petgraph::graph::NodeIndex;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy)]
 pub enum VehicleKind {
     Car,
     Bus,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct VehicleSpec {
     pub kind: VehicleKind,
     pub max_speed_ms: f32,
@@ -23,7 +22,7 @@ pub struct VehicleSpec {
     pub co2_g_per_km: f32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct TripRequest {
     pub origin_id: u64,
     pub destination_id: u64,
@@ -31,7 +30,7 @@ pub struct TripRequest {
     pub return_time_s: Option<u32>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VehicleState {
     WaitingToDepart,
     EnRoute,
@@ -39,27 +38,22 @@ pub enum VehicleState {
     Arrived,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Vehicle {
     pub id: u64,
     pub spec: VehicleSpec,
     pub trip: TripRequest,
     pub state: VehicleState,
 
-    #[serde(skip)]
     pub current_node: NodeIndex,
 
-    #[serde(skip)]
     pub next_node: Option<NodeIndex>,
 
     // Override rule for SPECIFIC intersections (NodeIndex -> Rule)
-    #[serde(skip)]
     pub forced_rules: HashMap<NodeIndex, crate::map::intersection::RoadRule>,
 
-    #[serde(skip)]
     pub path: Vec<NodeIndex>,
 
-    #[serde(skip)]
     pub path_index: usize,
 
     pub position_on_edge_m: f32, //distance entre l'avant du véhicule et la fin de la route
@@ -70,7 +64,6 @@ pub struct Vehicle {
     pub fuel_used_l: f32,
     pub co2_emitted_g: f32,
 
-    #[serde(skip)]
     pub intersection_wait_start_time_s: Option<f32>,
 }
 

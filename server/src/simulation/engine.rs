@@ -25,7 +25,11 @@ pub trait Simulation {
         current_vehicle_id: u64,
         current_vehicle_position: f32,
     ) -> Option<Vehicle>;
-    fn run(&mut self);
+    fn distance_between_vehicles(
+        current_road: Road,
+        current_vehicle: &Vehicle,
+        ahead_vehicle: Option<Vehicle>,
+    ) -> f32;
     fn step(&mut self);
 }
 
@@ -84,10 +88,14 @@ impl Simulation for SimulationConfig {
         closest_ahead_vehicle
     }
 
-    fn run(&mut self) {
-        while self.current_time < self.end_time_s {
-            self.step();
-            self.current_time += self.time_step_s;
+    fn distance_between_vehicles(
+        current_road: Road,
+        current_vehicle: &Vehicle,
+        ahead_vehicle: Option<Vehicle>,
+    ) -> f32 {
+        match ahead_vehicle {
+            Some(v) => current_vehicle.position_on_edge_m - v.position_on_edge_m + v.spec.length_m,
+            None => current_road.length_m,
         }
     }
 
@@ -137,12 +145,16 @@ impl Simulation for SimulationConfig {
                             current_road.length_m,
                         )
                     };
-                    let free = free_space_from_start(current_road, ahead.as_ref());
+                    let distance_ahead = SimulationConfig::distance_between_vehicles(
+                        current_road.clone(),
+                        &self.vehicles[i],
+                        ahead,
+                    );
 
-                    if free >= self.vehicles[i].spec.length_m {
+                    if current_road.length_m - distance_ahead >= self.vehicles[i].spec.length_m {
                         let vehicle = &mut self.vehicles[i];
                         vehicle.state = VehicleState::EnRoute;
-                        vehicle.position_on_edge_m = current_road.length_m;
+                        vehicle.position_on_edge_m = current_road.length_m - distance_ahead;
                     }
                 }
                 VehicleState::EnRoute => {
@@ -338,14 +350,19 @@ impl Simulation for SimulationConfig {
                     )
                 };
 
-                let free = free_space_from_start(next_road, ahead.as_ref());
-                if free < self.vehicles[req.vehicle_index].spec.length_m {
+                let dist = SimulationConfig::distance_between_vehicles(
+                    next_road.clone(),
+                    &self.vehicles[req.vehicle_index],
+                    ahead,
+                );
+
+                if next_road.length_m - dist < self.vehicles[req.vehicle_index].spec.length_m {
                     continue;
                 }
 
                 let vehicle = &mut self.vehicles[req.vehicle_index];
                 vehicle.state = VehicleState::EnRoute;
-                vehicle.position_on_edge_m = next_road.length_m;
+                vehicle.position_on_edge_m = next_road.length_m - dist;
                 vehicle.path_index += 1;
                 vehicle.current_node = vehicle.path[vehicle.path_index];
                 vehicle.next_node = vehicle.path.get(vehicle.path_index + 1).copied();
@@ -391,9 +408,3 @@ impl Simulation for SimulationConfig {
     }
 }
 
-fn free_space_from_start(current_road: &Road, ahead_vehicle: Option<&Vehicle>) -> f32 {
-    match ahead_vehicle {
-        Some(v) => (current_road.length_m - (v.position_on_edge_m + v.spec.length_m)).max(0.0),
-        None => current_road.length_m,
-    }
-}
