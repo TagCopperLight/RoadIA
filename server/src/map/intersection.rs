@@ -1,8 +1,7 @@
-use serde::{Deserialize, Serialize};
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum RoadRule {
     #[default]
     Priority,//par défaut
@@ -10,7 +9,7 @@ pub enum RoadRule {
     Stop,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum TrafficLightColor {
     Red,
     Orange,
@@ -45,10 +44,6 @@ impl MovementRequest {
 pub struct JunctionController; //Création de l'agent contrôleur de carrefour
 
 impl JunctionController {
-    pub fn new() -> Self {
-        JunctionController
-    }
-
     /// Retourne les indices des mouvements autorisés à s'engager
     pub fn authorized_indices(requests: &[MovementRequest], all_entry_angles: &[f64]) -> Vec<usize> {
         let mut allowed = Vec::new();
@@ -157,26 +152,22 @@ impl JunctionController {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Intersection {
     pub id: u32,
     pub kind: IntersectionKind,
     pub name: String,
     pub x: f32,
     pub y: f32,
-    #[serde(default)]
     pub rules: HashMap<u32, RoadRule>,
     
     //feu tricolore
-    #[serde(default)]
     pub traffic_lights: HashMap<u32, TrafficLightColor>,
-    #[serde(skip)]
     pub timer: f32,
-    #[serde(default)]
     pub current_green_idx: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,
@@ -279,27 +270,18 @@ impl Intersection {
             vec![(0.0, entry), (exit, 360.0)]
         }
     }//faclilitation de la gestion des intervalles angulaires (problèmes de passage par 0°) 
-
-    pub fn quadrant_cost(entry: f64, exit: f64, n_branches: usize) -> i32 {
-        let diff = (entry - exit + 360.0) % 360.0;
-        let sector_size = 360.0 / (n_branches as f64);
-        
-        // Arrondir au secteur le plus proche
-        let cost = (diff / sector_size).round() as i32;
-        if cost == 0 { n_branches as i32 } else { cost } //cout maximal = demi-tour
-    }
 }
 
 use crate::map::model::Map;
 use crate::map::road::Road;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum RoundaboutKind {
     Standard, //rdp
-    Gyratory, //carrrefou à sens giratoire
+    Gyratory, //carrefour à sens giratoire
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Roundabout {
     pub id: u32,
     pub kind: RoundaboutKind,

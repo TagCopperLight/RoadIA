@@ -2,52 +2,49 @@ mod api;
 mod map;
 mod simulation;
 
-use std::time::Duration;
-
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
+        ws::WebSocketUpgrade,
         State,
     },
-    response::{Html, IntoResponse, Json},
+    response::{IntoResponse, Json},
     routing::{get, post},
     Router,
 };
-use serde::Deserialize;
+use tower_http::cors::CorsLayer;
 use serde_json::json;
 
 use crate::{
+    api::server::websocket_loop,
     map::{
         intersection::{Intersection, IntersectionKind, RoadRule},
         model::Map,
     },
-    simulation::{
-        config::SimulationConfig,
-        engine::Simulation,
-        vehicle::{fastest_path, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState},
-    },
+    simulation::handle::Handle,
 };
 
 #[derive(Clone)]
 struct AppState {
     map: Map,
+    handle: Handle,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // UTILISATION DE LA CARTE DE TEST (ROND-POINT)
     let map = crate::map::tests::create_roundabout_map();
+    let handle = Handle::new();
 
-    let state = AppState { map };
+    let state = AppState { map, handle: handle.clone() };
 
     let app = Router::new()
         .route("/", get(index))
-        .route("/intersection-dynamic", get(intersection_dynamic))
         .route("/api/intersection-tests", get(intersection_tests_json))
         .route("/api/simple-scenario", get(simple_scenario_json))
         .route("/api/solve-scenario", post(solve_scenario))
         .route("/ws", get(ws_handler))
-        .with_state(state);
+        .with_state(state)
+        .layer(CorsLayer::permissive());
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     axum::serve(listener, app).await?;
@@ -55,11 +52,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn index() -> impl IntoResponse {
-    Json(json!({"message": "API Roadia - Routes disponibles: /intersection-dynamic (tests), /api/intersection-tests (JSON), /ws (WebSocket)"}))
-}
-
-async fn intersection_dynamic() -> impl IntoResponse {
-    Html(include_str!("../static/intersection_dynamic.html"))
+    Json(json!({"message": "API Roadia - Routes disponibles: /api/intersection-tests (JSON), /ws (WebSocket)"}))
 }
 
 async fn intersection_tests_json() -> Json<serde_json::Value> {
@@ -69,31 +62,7 @@ async fn intersection_tests_json() -> Json<serde_json::Value> {
 
 
 
-#[derive(Debug, Deserialize)]
-struct TestVehicle {
-    id: u64,
-    #[serde(default)]
-    name: String,
-    entry_angle: f64,
-    exit_angle: f64,
-    arrival_time: f32,
-    
-    // --- CHAMP AJOUTÉ POUR LE CONTRÔLE DES RÈGLES ---
-    // Permet de spécifier explicitement la priorité du véhicule
-    // Valeurs acceptées: "Stop", "Yield" (Cédez), "Priority"
-    // Si None, la règle par défaut de la carte s'applique
-    #[serde(default)]
-    rule: Option<String>, 
-}
-
-#[derive(Debug, Deserialize)]
-struct SolveRequest {
-    vehicles: Vec<TestVehicle>,
-    #[serde(default)]
-    map_type: Option<String>,
-}
-
-async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::Value> {
+async fn solve_scenario(Json(payload): Json<serde_json::Value>) -> Json<serde_json::Value> {
     use crate::simulation::config::SimulationConfig;
     use crate::simulation::engine::Simulation;
     use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest, VehicleState};
@@ -101,8 +70,11 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
     use petgraph::graph::NodeIndex;
 
     // 1. Choisir la carte
-    let (mut map, is_roundabout) = if let Some(t) = &payload.map_type {
-        match t.as_str() {
+    let map_type_str = payload.get("map_type").and_then(|v| v.as_str());
+    let vehicles_array = payload.get("vehicles").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+
+    let (mut map, is_roundabout) = if let Some(t) = map_type_str {
+        match t {
              "gyratory" => (crate::map::tests::create_gyratory_roundabout_map(), true),
              "roundabout" => (crate::map::tests::create_roundabout_map(), true),
              "traffic_light" => (crate::map::tests::create_traffic_light_map(), false),
@@ -110,7 +82,10 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
         }
     } else {
         // Auto-détection legacy
-        let is_roundabout_legacy = payload.vehicles.iter().any(|v| (v.entry_angle % 90.0).abs() > 0.1);
+        let is_roundabout_legacy = vehicles_array.iter().any(|v| {
+            let angle = v.get("entry_angle").and_then(|x| x.as_f64()).unwrap_or(0.0);
+            (angle % 90.0).abs() > 0.1
+        });
         if is_roundabout_legacy {
             (crate::map::tests::create_roundabout_map(), true)
         } else {
@@ -162,13 +137,19 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
     let mut pending_vehicles: Vec<(f32, Vehicle)> = Vec::new();
     
     // Pour chaque véhicule, on configure le chemin ET les règles de priorité (stop, céder le passage...)
-    for (_i, v_req) in payload.vehicles.iter().enumerate() {
+    for (_i, v_json) in vehicles_array.iter().enumerate() {
+        let id = v_json.get("id").and_then(|v| v.as_u64()).unwrap_or(0);
+        let entry_angle = v_json.get("entry_angle").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let exit_angle = v_json.get("exit_angle").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let arrival_time = v_json.get("arrival_time").and_then(|v| v.as_f64()).map(|x| x as f32).unwrap_or(0.0);
+        let rule_str_opt = v_json.get("rule").and_then(|v| v.as_str());
+
         // Angle entrée : on vient DE cet angle. Donc si entry_angle=180 (Sud), on part du Sud pour aller au Nord.
         // Le noeud source est donc celui à 180°.
-        let entry_node = find_node(&map, v_req.entry_angle).unwrap_or(NodeIndex::new(0));
-        let exit_node = find_node(&map, v_req.exit_angle).unwrap_or(NodeIndex::new(0));
+        let entry_node = find_node(&map, entry_angle).unwrap_or(NodeIndex::new(0));
+        let exit_node = find_node(&map, exit_angle).unwrap_or(NodeIndex::new(0));
 
-        let current_time = v_req.arrival_time;
+        let current_time = arrival_time;
         
         let spec = VehicleSpec {
             kind: VehicleKind::Car,
@@ -187,7 +168,7 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
 
         // --- GESTION DES RÈGLES DE PRIORITÉ (Payload JSON) ---
         // Si le champ 'rule' est présent dans le JSON pour ce véhicule
-        if let Some(rule_str) = &v_req.rule {
+        if let Some(rule_str) = rule_str_opt {
             use crate::map::intersection::RoadRule;
             
             // On récupère le nœud source (début de la route)
@@ -219,7 +200,7 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
         }
 
         let mut vehicle = Vehicle::new(
-            v_req.id,
+            id,
             spec,
             TripRequest { origin_id: 0, destination_id: 0, departure_time_s: 0, return_time_s: None },
             entry_node,
@@ -232,7 +213,7 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
         // --- INJECTION DE RÈGLES FORCÉES (Niveau Véhicule) ---
         // Cette section redondante assure que le véhicule porte lui-même la règle
         // C'est utile pour le moteur de simulation qui vérifie 'vehicle.forced_rules'
-        if let Some(rule_str) = &v_req.rule {
+        if let Some(rule_str) = rule_str_opt {
             use crate::map::intersection::RoadRule;
             // Normalisation à nouveau (pour être sûr)
             let rule_lower = rule_str.to_lowercase();
@@ -317,7 +298,7 @@ async fn solve_scenario(Json(payload): Json<SolveRequest>) -> Json<serde_json::V
             if !node.traffic_lights.is_empty() {
                  lights_data.push(json!({
                      "intersection_id": node.id,
-                     "lights": node.traffic_lights
+                     "lights": node.traffic_lights.iter().map(|(id, color)| (*id, format!("{:?}", color))).collect::<std::collections::HashMap<_, _>>()
                  }));
             }
         }
@@ -405,149 +386,8 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, state))
+    ws.on_upgrade(move |socket| websocket_loop(socket, state.handle, state.map))
 }
 
-async fn handle_socket(socket: WebSocket, state: AppState) {
-    let map = state.map;
+// Old handle_socket removed as we now delegate to api::server::websocket_loop
 
-    let inter = map
-        .graph
-        .node_indices()
-        .find(|i| map.graph[*i].id == 1)
-        .expect("Intersection not found");
-    let ldt = map
-        .graph
-        .node_indices()
-        .find(|i| map.graph[*i].id == 5)
-        .expect("LDT not found");
-    let h_north = map
-        .graph
-        .node_indices()
-        .find(|i| map.graph[*i].id == 2)
-        .expect("H-North not found");
-    let h_east = map
-        .graph
-        .node_indices()
-        .find(|i| map.graph[*i].id == 3)
-        .expect("H-East not found");
-    let h_south = map
-        .graph
-        .node_indices()
-        .find(|i| map.graph[*i].id == 4)
-        .expect("H-South not found");
-
-    let spec = VehicleSpec {
-        kind: VehicleKind::Car,
-        max_speed_ms: 12.0,
-        max_acceleration_ms2: 2.5,
-        comfortable_deceleration: 0.5,
-        reaction_time: 1.0,
-        length_m: 4.5,
-        fuel_consumption_l_per_100km: 6.0,
-        co2_g_per_km: 120.0,
-    };
-
-    let mut vehicles = Vec::new();
-
-    for (vehicle_id, (h_node, h_id)) in [(h_north, 2), (h_east, 3), (h_south, 4)].iter().enumerate()
-    {
-        let trip = TripRequest {
-            origin_id: *h_id,
-            destination_id: 5, 
-            departure_time_s: 0,
-            return_time_s: None,
-        };
-
-        let path = fastest_path(&map, *h_node, ldt);
-        let mut vehicle = Vehicle::new((vehicle_id + 1) as u64, spec.clone(), trip, *h_node);
-        vehicle.path = path.clone();
-        vehicle.path_index = 0;
-        vehicle.current_node = *path.first().expect("path should not be empty");
-        vehicle.next_node = path.get(1).copied();
-        vehicle.state = VehicleState::EnRoute;
-        let edge_index = map
-            .graph
-            .find_edge(*h_node, inter)
-            .expect("edge should exist");
-        let road = map.graph.edge_weight(edge_index).expect("road weight");
-        vehicle.position_on_edge_m = road.length_m;
-
-        vehicles.push(vehicle);
-    }
-
-    let mut sim = SimulationConfig::new(map.clone(), 0.0, 120.0, 1.0, vehicles, 2.0, 4.0);
-
-    let inter_coords = &map.graph[inter];
-    let ldt_coords = &map.graph[ldt];
-    let h_north_coords = &map.graph[h_north];
-    let h_east_coords = &map.graph[h_east];
-    let h_south_coords = &map.graph[h_south];
-
-    let roads_data: Vec<_> = map
-        .graph
-        .raw_edges()
-        .iter()
-        .map(|edge| {
-            let (from_idx, to_idx) = (edge.source(), edge.target());
-            let from_id = map.graph[from_idx].id;
-            let to_id = map.graph[to_idx].id;
-            let road = &edge.weight;
-            serde_json::json!({
-                "from_id": from_id,
-                "to_id": to_id,
-                "length_m": road.length_m,
-            })
-        })
-        .collect();
-
-    let init_msg = serde_json::json!({
-        "type": "init",
-        "intersections": [
-            {"id": 1, "name": "Intersection", "x": inter_coords.x, "y": inter_coords.y},
-            {"id": 2, "name": "H-North", "x": h_north_coords.x, "y": h_north_coords.y},
-            {"id": 3, "name": "H-East", "x": h_east_coords.x, "y": h_east_coords.y},
-            {"id": 4, "name": "H-South", "x": h_south_coords.x, "y": h_south_coords.y},
-            {"id": 5, "name": "LDT", "x": ldt_coords.x, "y": ldt_coords.y},
-        ],
-        "roads": roads_data
-    });
-
-    let mut socket = socket;
-    if socket
-        .send(Message::Text(init_msg.to_string()))
-        .await
-        .is_err()
-    {
-        return;
-    }
-
-    while sim.current_time < sim.end_time_s {
-        sim.step();
-        sim.current_time += sim.time_step_s;
-
-        let snapshot = serde_json::json!({
-            "type": "update",
-            "time_s": sim.current_time,
-            "vehicles": sim.vehicles.iter().map(|v| {
-                let coords = v.get_coordinates(&sim.map);
-                serde_json::json!({
-                    "id": v.id,
-                    "state": format!("{:?}", v.state),
-                    "x": coords.x,
-                    "y": coords.y,
-                    "velocity": v.velocity,
-                })
-            }).collect::<Vec<_>>()
-        });
-
-        if socket
-            .send(Message::Text(snapshot.to_string()))
-            .await
-            .is_err()
-        {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis((sim.time_step_s * 1000.0) as u64)).await;
-    }
-}
