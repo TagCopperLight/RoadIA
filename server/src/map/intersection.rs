@@ -1,15 +1,14 @@
 use petgraph::graph::NodeIndex;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Clone, Debug)]
 pub enum RoadRule {
-    #[default]
-    Priority,//par défaut
+    Priority,
     Yield,
     Stop,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum TrafficLightColor {
     Red,
     Orange,
@@ -41,9 +40,9 @@ impl MovementRequest {
     }
 }
 
-pub struct JunctionController; //Création de l'agent contrôleur de carrefour
+pub struct IntersectionController;
 
-impl JunctionController {
+impl IntersectionController {
     /// Retourne les indices des mouvements autorisés à s'engager
     pub fn authorized_indices(requests: &[MovementRequest], all_entry_angles: &[f64]) -> Vec<usize> {
         let mut allowed = Vec::new();
@@ -165,6 +164,8 @@ pub struct Intersection {
     pub traffic_lights: HashMap<u32, TrafficLightColor>,
     pub timer: f32,
     pub current_green_idx: usize,
+
+    pub occupied: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -188,6 +189,7 @@ impl Intersection {
             traffic_lights: HashMap::new(),
             timer: 0.0,
             current_green_idx: 0,
+            occupied: false,
         }
     }
 

@@ -85,6 +85,7 @@ impl Simulation for SimulationEngine {
             self.step();
             self.current_time += self.config.time_step;
         }
+    }
 
     fn step(&mut self) {
         for vehicle in &mut self.vehicles {
