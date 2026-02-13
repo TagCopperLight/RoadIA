@@ -1,14 +1,10 @@
 use crate::map::model::Map;
 use crate::map::intersection::{Intersection, IntersectionKind, Roundabout, RoadRule, RoundaboutKind};
 use crate::map::road::Road;
-#[allow(unused_imports)]
-use petgraph::graph::NodeIndex;
 
-/// Creates a map with a single roundabout and 4 branches (North, East, South, West)
 pub fn create_roundabout_map() -> Map {
     let mut map = Map::new();
 
-    // 1. Create the Roundabout configuration
     let roundabout = Roundabout::new(
         1, 
         "RondPoint-Central".to_string(), 
@@ -68,10 +64,10 @@ pub fn create_standard_intersection_map() -> Map {
     let h_south = map.add_intersection(Intersection::new(4, IntersectionKind::Habitation, "H-South".to_string(), 0.0, -100.0));
     let h_west = map.add_intersection(Intersection::new(5, IntersectionKind::Habitation, "H-West".to_string(), -100.0, 0.0));
 
-    map.add_two_way_road(h_north, inter, Road::new(1, 1, 12, 100.0, false, false));
-    map.add_two_way_road(h_east, inter, Road::new(2, 1, 12, 100.0, false, false));
-    map.add_two_way_road(h_south, inter, Road::new(3, 1, 12, 100.0, false, false));
-    map.add_two_way_road(h_west, inter, Road::new(4, 1, 12, 100.0, false, false));
+    map.add_two_way_road(h_north, inter, Road::new(1, 1, 12.0, 100.0, false, false));
+    map.add_two_way_road(h_east, inter, Road::new(2, 1, 12.0, 100.0, false, false));
+    map.add_two_way_road(h_south, inter, Road::new(3, 1, 12.0, 100.0, false, false));
+    map.add_two_way_road(h_west, inter, Road::new(4, 1, 12.0, 100.0, false, false));
 
     map
 }

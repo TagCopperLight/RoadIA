@@ -45,8 +45,6 @@ pub struct Vehicle {
     pub path: Vec<NodeIndex>,
     pub path_index: usize,
 	
-	pub forced_rules: HashMap<NodeIndex, crate::map::intersection::RoadRule>,
-
     pub position_on_road: f32, // distance entre l'avant du véhicule et le début de la route
     pub previous_position: f32,
     pub velocity: f32,
