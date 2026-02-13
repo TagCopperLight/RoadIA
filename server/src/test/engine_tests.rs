@@ -46,6 +46,7 @@ mod tests {
             name: "h1".into(),
             x: 0.0,
             y: 0.0,
+            occupied: false,
         });
 
         let h2 = map.add_intersection(Intersection {
@@ -54,6 +55,7 @@ mod tests {
             name: "h2".into(),
             x: 0.0,
             y: 100.0,
+            occupied: false,
         });
 
         let i1 = map.add_intersection(Intersection {
@@ -62,6 +64,7 @@ mod tests {
             name: "i1".into(),
             x: 50.0,
             y: 50.0,
+            occupied: false,
         });
 
         let w1 = map.add_intersection(Intersection {
@@ -70,6 +73,7 @@ mod tests {
             name: "w1".into(),
             x: 100.0,
             y: 50.0,
+            occupied: false,
         });
 
         map.add_two_way_road(h1, i1, Road::new(0, 1, 50.0, 100.0, false, false));
@@ -130,6 +134,7 @@ mod tests {
             name: "h1".into(),
             x: 0.0,
             y: 0.0,
+            occupied: false,
         });
 
         let h2 = map.add_intersection(Intersection {
@@ -138,6 +143,7 @@ mod tests {
             name: "h2".into(),
             x: 0.0,
             y: 100.0,
+            occupied: false,
         });
 
         let i1 = map.add_intersection(Intersection {
@@ -146,6 +152,7 @@ mod tests {
             name: "i1".into(),
             x: 50.0,
             y: 50.0,
+            occupied: false,
         });
 
         let w1 = map.add_intersection(Intersection {
@@ -154,6 +161,7 @@ mod tests {
             name: "w1".into(),
             x: 100.0,
             y: 50.0,
+            occupied: false,
         });
 
         map.add_two_way_road(h1, i1, Road::new(0, 1, 50.0, 100.0, false, false));
