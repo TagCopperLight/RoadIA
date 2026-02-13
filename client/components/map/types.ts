@@ -25,4 +25,6 @@ export interface VehicleData {
     y: number;
     kind: string;
     state: string;
+    heading?: number;
+    speed?: number;
 }

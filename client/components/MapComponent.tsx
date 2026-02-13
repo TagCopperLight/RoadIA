@@ -1,7 +1,7 @@
 'use client';
 
 import Image from "next/image";
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData } from './map/types';
@@ -14,6 +14,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
@@ -31,7 +32,38 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 
 	useWebSocket("vehicleUpdate", (data: any) => {
         if (data && Array.isArray(data.vehicles)) {
-		    setVehicles(data.vehicles);
+			const newVehicles = data.vehicles as VehicleData[];
+			const processedVehicles = newVehicles.map(vehicle => {
+				const prevVehicle = prevVehiclesRef.current[vehicle.id];
+				
+				if (prevVehicle) {
+					const dx = vehicle.x - prevVehicle.x;
+					const dy = vehicle.y - prevVehicle.y;
+					const dist = Math.sqrt(dx * dx + dy * dy);
+					
+					if (dist > 0.01) {
+						vehicle.heading = Math.atan2(dy, dx);
+						vehicle.speed = dist;
+					} else {
+						vehicle.heading = prevVehicle.heading;
+						vehicle.speed = 0;
+					}
+				} else {
+                    // Initial heading if unknown, maybe 0 or undefined
+                    vehicle.heading = undefined;
+                    vehicle.speed = 0;
+                }
+				return vehicle;
+			});
+
+			// Update ref for next frame
+			const newPrevVehicles: Record<number, VehicleData> = {};
+			processedVehicles.forEach(v => {
+				newPrevVehicles[v.id] = v;
+			});
+			prevVehiclesRef.current = newPrevVehicles;
+
+		    setVehicles(processedVehicles);
         }
 	});
 
