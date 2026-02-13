@@ -15,6 +15,8 @@ use crate::api::server::AppState;
 #[serde(rename_all = "camelCase")]
 pub enum ClientPacket {
     Connect { token: String },
+    StartSimulation {},
+    StopSimulation {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -58,43 +60,59 @@ async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
     loop {
         tokio::select! {
             msg = socket.recv() => {
-                match msg {
-                    Some(Ok(msg)) => {
-                        match msg {
-                            Message::Text(text) => {
-                                match serde_json::from_str::<ClientPacket>(&text) {
-                                    Ok(packet) => handle_client_packet(packet, &mut socket, &state).await,
-                                    Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
-                                }
-                            }
-                            Message::Close(_) => {
-                                println!("Client disconnected (Close frame)");
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                    Some(Err(e)) => {
-                        println!("WebSocket error: {}", e);
-                        break;
-                    }
-                    None => {
-                        println!("Client disconnected");
-                        break;
-                    }
+                if !process_incoming_msg(msg, &mut socket, &state).await {
+                    break;
                 }
             }
             Ok(packet) = rx.recv() => {
-                 if let Ok(text) = serde_json::to_string(&packet) {
-                    if let Err(e) = socket.send(Message::Text(text)).await {
-                        println!("Failed to send message: {}", e);
-                        break;
-                    }
+                if !process_broadcast_msg(packet, &mut socket).await {
+                    break;
                 }
             }
         }
     }
     println!("WebSocket loop ended");
+}
+
+async fn process_incoming_msg(
+    msg: Option<Result<Message, axum::Error>>,
+    socket: &mut WebSocket,
+    state: &Arc<AppState>,
+) -> bool {
+    match msg {
+        Some(Ok(msg)) => match msg {
+            Message::Text(text) => {
+                match serde_json::from_str::<ClientPacket>(&text) {
+                    Ok(packet) => handle_client_packet(packet, socket, state).await,
+                    Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
+                }
+                true
+            }
+            Message::Close(_) => {
+                println!("Client disconnected (Close frame)");
+                false
+            }
+            _ => true,
+        },
+        Some(Err(e)) => {
+            println!("WebSocket error: {}", e);
+            false
+        }
+        None => {
+            println!("Client disconnected");
+            false
+        }
+    }
+}
+
+async fn process_broadcast_msg(packet: ServerPacket, socket: &mut WebSocket) -> bool {
+    if let Ok(text) = serde_json::to_string(&packet) {
+        if let Err(e) = socket.send(Message::Text(text)).await {
+            println!("Failed to send message: {}", e);
+            return false;
+        }
+    }
+    true
 }
 
 async fn handle_client_packet(
@@ -113,6 +131,14 @@ async fn handle_client_packet(
                     println!("Failed to send initial map: {}", e);
                 }
             }
+        }
+        ClientPacket::StartSimulation {} => {
+            println!("Client started simulation");
+            state.simulation.start();
+        }
+        ClientPacket::StopSimulation {} => {
+            println!("Client stopped simulation");
+            state.simulation.stop();
         }
     }
 }
