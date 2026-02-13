@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::io;
 use tokio::net::TcpListener;
 use tokio::time::{sleep, Duration};
@@ -15,9 +16,35 @@ use petgraph::graph::NodeIndex;
 use crate::map::intersection::{Intersection, IntersectionKind};
 use crate::map::road::Road;
 
+#[derive(Clone)]
+pub struct SimulationController {
+    pub running: Arc<AtomicBool>,
+}
+
+impl SimulationController {
+    pub fn new() -> Self {
+        Self {
+            running: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn start(&self) {
+        self.running.store(true, Ordering::SeqCst);
+    }
+
+    pub fn stop(&self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.running.load(Ordering::SeqCst)
+    }
+}
+
 pub struct AppState {
     pub map: Map,
     pub websocket_service: Arc<WebSocketService>,
+    pub simulation: SimulationController,
 }
 
 pub async fn run() -> io::Result<()> {
@@ -40,12 +67,20 @@ pub async fn run() -> io::Result<()> {
     }
     
     let websocket_service = Arc::new(WebSocketService::new());
+    let simulation_controller = SimulationController::new();
     
     // Spawn simulation loop
     let ws_service = websocket_service.clone();
     let sim_map = map.clone();
+    let sim_running = simulation_controller.running.clone();
+
     tokio::spawn(async move {
         loop {
+            if !sim_running.load(Ordering::SeqCst) {
+                sleep(Duration::from_millis(100)).await;
+                continue;
+            }
+
             let start = tokio::time::Instant::now();
             simulation.step();
             
@@ -79,7 +114,7 @@ pub async fn run() -> io::Result<()> {
         }
     });
 
-    let shared_state = Arc::new(AppState { map, websocket_service });
+    let shared_state = Arc::new(AppState { map, websocket_service, simulation: simulation_controller });
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
