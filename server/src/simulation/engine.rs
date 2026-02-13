@@ -174,8 +174,11 @@ impl Simulation for SimulationEngine {
                                 if random_bool(self.config.path_mistake_rate as f64){
                                     let current_node = vehicle.get_current_node();
                                     let next_node = self.config.map.random_neighbor(current_node);
-                                    vehicle.update_path(&self.config.map, next_node.unwrap());
-                                    vehicle.path.insert(0, current_node);
+                                    if let Some(node) = next_node {//if it's false, it means that we are arrived
+                                        vehicle.update_path(&self.config.map, node);
+                                        vehicle.path.insert(0, current_node);
+                                    }
+                                    
                                 }
                                 let node = &mut self.config.map.graph[next_node_idx];
                                 node.occupied = true;
