@@ -170,6 +170,7 @@ fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             name: format!("node_{}", id),
             x: rand::random_range(0.0..width),
             y: rand::random_range(0.0..height),
+            occupied: false
         });
         nodes.push(node_idx);
     }

@@ -54,7 +54,6 @@ impl SimulationEngine {
                 }
             }
         }
-
         closest_ahead_vehicle
     }
 
@@ -155,17 +154,22 @@ impl Simulation for SimulationEngine {
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
                         
-                        if vehicle.path_index + 1 == vehicle.path.len() - 1 {
-                            vehicle.state = VehicleState::Arrived;
-                            vehicle.path_index += 1;
-                        } else {
-                            vehicle.state = VehicleState::AtIntersection;
-                            vehicle.path_index += 1;
-                        }
-                        
-                        let v_id = vehicle.id;
-                        if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
-                             road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
+                        let intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
+                        if !intersection_node.occupied {
+                            if vehicle.path_index + 1 == vehicle.path.len() - 1 {
+                                vehicle.state = VehicleState::Arrived;
+                                vehicle.path_index += 1;
+                                intersection_node.occupied = false;
+                            } else {
+                                intersection_node.occupied = true;
+                                vehicle.state = VehicleState::AtIntersection;
+                                vehicle.path_index += 1;
+                            }
+                            
+                            let v_id = vehicle.id;
+                            if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
+                                road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
+                            }
                         }
                     }
                 }
@@ -178,8 +182,9 @@ impl Simulation for SimulationEngine {
                         Some(ahead) => ahead.previous_position - ahead.length,
                         None => self.config.map.graph.edge_weight(next_road_index).unwrap().length,
                     };
-
                     if available_distance >= vehicle.spec.length {
+                        let intersection_node = &mut self.config.map.graph[vehicle.get_current_node()];
+                        intersection_node.occupied = false;
                         vehicle.position_on_road = vehicle.spec.length;
                         vehicle.previous_position = 0.0;
                         vehicle.state = VehicleState::OnRoad;
