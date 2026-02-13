@@ -1,12 +1,11 @@
 use crate::map::model::Map;
-use crate::simulation::handle::Handle;
 use axum::extract::ws::{Message, WebSocket};
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 
 
 
-pub async fn websocket_loop(mut socket: WebSocket, handle: Handle, map: Map) {
+pub async fn websocket_loop(mut socket: WebSocket, map: Map) {
     // 1. Send Map Init
     let roads_data: Vec<_> = map
         .graph
@@ -45,31 +44,6 @@ pub async fn websocket_loop(mut socket: WebSocket, handle: Handle, map: Map) {
     }
 
     loop {
-        let vehicles = handle.snapshot_vehicles();
-
-        let vehicle_updates: Vec<serde_json::Value> = vehicles
-            .into_iter()
-            .map(|v| {
-                let coords = v.get_coordinates(&map);
-                
-                // Calcul angle simple (similaire à main.rs précédent)
-                let mut angle = 0.0;
-                if let (Some(curr), Some(next)) = (map.graph.node_weight(v.current_node), v.next_node.and_then(|n| map.graph.node_weight(n))) {
-                     let dx = next.x - curr.x;
-                     let dy = next.y - curr.y;
-                     angle = dy.atan2(dx).to_degrees();
-                }
-
-                json!({
-                    "id": v.id,
-                    "x": coords.x,
-                    "y": coords.y,
-                    "angle": angle,
-                    "speed": v.velocity,
-                    "state": format!("{:?}", v.state)
-                })
-            })
-            .collect();
             
         // Capture traffic lights
         let mut lights_data = Vec::new();
@@ -85,7 +59,6 @@ pub async fn websocket_loop(mut socket: WebSocket, handle: Handle, map: Map) {
         let update_msg = json!({
             "type": "update",
             "time_s": 0.0, // TODO: pass time via handle if needed
-            "vehicles": vehicle_updates,
             "lights": lights_data
         });
 

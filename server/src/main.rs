@@ -20,22 +20,18 @@ use crate::{
         intersection::{Intersection, IntersectionKind, RoadRule},
         model::Map,
     },
-    simulation::handle::Handle,
 };
 
 #[derive(Clone)]
 struct AppState {
     map: Map,
-    handle: Handle,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // UTILISATION DE LA CARTE DE TEST (ROND-POINT)
     let map = crate::map::tests::create_roundabout_map();
-    let handle = Handle::new();
-
-    let state = AppState { map, handle: handle.clone() };
+    let state = AppState { map };
 
     let app = Router::new()
         .route("/", get(index))
@@ -386,7 +382,7 @@ async fn simple_scenario_json() -> Json<serde_json::Value> {
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| websocket_loop(socket, state.handle, state.map))
+    ws.on_upgrade(move |socket| websocket_loop(socket, state.map))
 }
 
 // Old handle_socket removed as we now delegate to api::server::websocket_loop
