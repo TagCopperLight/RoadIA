@@ -155,7 +155,7 @@ impl Simulation for SimulationEngine {
                         vehicle.previous_velocity = 0.0;
                         
                         let intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
-                        if !intersection_node.occupied{
+                        if !intersection_node.occupied {
                             if vehicle.path_index + 1 == vehicle.path.len() - 1 {
                                 vehicle.state = VehicleState::Arrived;
                                 vehicle.path_index += 1;
