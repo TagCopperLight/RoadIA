@@ -1,7 +1,7 @@
 use crate::map::model::Map;
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
-use petgraph::graph::{EdgeIndex, NodeIndex};
+use petgraph::graph::EdgeIndex;
 use std::collections::HashMap;
 
 pub trait Simulation {
@@ -63,15 +63,6 @@ impl SimulationEngine {
             None => map.graph.edge_weight(vehicle.get_current_road(map)).unwrap().length - vehicle.position_on_road,
         }
     }
-
-    fn is_intersection_occupied(vehicles: &[Vehicle], intersection_index : NodeIndex) -> bool{
-        for vehicle in vehicles {
-            if vehicle.get_current_node() == intersection_index && vehicle.state == VehicleState::AtIntersection{
-                return true;
-            }
-        }
-        false
-    }
 }
 
 impl Simulation for SimulationEngine {
@@ -118,8 +109,7 @@ impl Simulation for SimulationEngine {
             match vehicle.state {
                 VehicleState::WaitingToDepart => {
                     let vehicle_ahead = Self::get_vehicle_ahead(&self.vehicles_by_road, &proxies, vehicle.get_current_road(&self.config.map), vehicle.id, vehicle.position_on_road);
-                    let dist = Self::get_available_distance_ahead(&self.config.map, vehicle, vehicle_ahead);
-                    if dist > vehicle.spec.length {
+                    if Self::get_available_distance_ahead(&self.config.map, vehicle, vehicle_ahead) > vehicle.spec.length {
                         vehicle.position_on_road = vehicle.spec.length;
                         vehicle.state = VehicleState::OnRoad;
 
@@ -130,8 +120,6 @@ impl Simulation for SimulationEngine {
                             proxy.previous_position = vehicle.position_on_road;
                             proxy.road_index = Some(current_road_index);
                         }
-                    }else{
-                        //println!("Can't start cuz {} {}", dist, vehicle.spec.length);
                     }
                 }
 
@@ -166,11 +154,12 @@ impl Simulation for SimulationEngine {
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
                         
-                        let mut intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
+                        let intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
                         if !intersection_node.occupied{
                             if vehicle.path_index + 1 == vehicle.path.len() - 1 {
                                 vehicle.state = VehicleState::Arrived;
                                 vehicle.path_index += 1;
+                                intersection_node.occupied = false;
                             } else {
                                 intersection_node.occupied = true;
                                 vehicle.state = VehicleState::AtIntersection;
@@ -194,7 +183,7 @@ impl Simulation for SimulationEngine {
                         None => self.config.map.graph.edge_weight(next_road_index).unwrap().length,
                     };
                     if available_distance >= vehicle.spec.length {
-                        let mut intersection_node = &mut self.config.map.graph[vehicle.get_current_node()];
+                        let intersection_node = &mut self.config.map.graph[vehicle.get_current_node()];
                         intersection_node.occupied = false;
                         vehicle.position_on_road = vehicle.spec.length;
                         vehicle.previous_position = 0.0;
