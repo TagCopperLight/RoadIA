@@ -7,8 +7,8 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-use crate::map::model::Map;
-use crate::api::server::AppState;
+use crate::{map::model::Map, simulation::vehicle::{Vehicle, VehicleKind, VehicleState}};
+use crate::api::runner::runner::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "id", content = "data")]
@@ -143,7 +143,7 @@ async fn handle_client_packet(
     }
 }
 
-fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
+pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
     let nodes: Vec<Value> = map
         .graph
         .node_indices()
@@ -180,3 +180,23 @@ fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 
     (nodes, edges)
 }
+
+pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
+    let coords = vehicle.get_coordinates(&sim_map);
+    json!({
+        "id": vehicle.id,
+        "x": coords.x,
+        "y": coords.y,
+        "kind": match vehicle.spec.kind {
+                VehicleKind::Car => "Car",
+                VehicleKind::Bus => "Bus",
+        },
+        "state": match vehicle.state {
+            VehicleState::WaitingToDepart => "Waiting",
+            VehicleState::OnRoad => "Moving",
+            VehicleState::AtIntersection => "Intersection",
+            VehicleState::Arrived => "Arrived",
+        }
+    })
+}
+    
