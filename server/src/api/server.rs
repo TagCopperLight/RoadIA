@@ -29,6 +29,7 @@ pub async fn run() -> io::Result<()> {
         end_time: f32::MAX,
         time_step: 0.1,
         minimum_gap: 2.0,
+        path_mistake_rate: 0.1,
         map: map.clone(),
     };
 
@@ -36,7 +37,7 @@ pub async fn run() -> io::Result<()> {
     
     // Initialize vehicle paths
     for vehicle in &mut simulation.vehicles {
-        vehicle.update_path(&simulation.config.map);
+        vehicle.init_path(&simulation.config.map);
     }
     
     let websocket_service = Arc::new(WebSocketService::new());

@@ -3,6 +3,13 @@ use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
 use petgraph::graph::EdgeIndex;
 use std::collections::HashMap;
+use rand::Rng;
+
+pub fn random_bool(p: f64) -> bool {
+    assert!((0.0..=1.0).contains(&p), "p must be between 0 and 1");
+    let mut rng = rand::thread_rng();
+    rng.gen::<f64>() < p
+}
 
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
@@ -78,7 +85,7 @@ impl Simulation for SimulationEngine {
 
     fn run(&mut self) {
         for vehicle in &mut self.vehicles {
-            vehicle.update_path(&self.config.map);
+            vehicle.init_path(&self.config.map);
         }
 
         while self.current_time < self.config.end_time {
@@ -127,8 +134,9 @@ impl Simulation for SimulationEngine {
                     let current_road_index = vehicle.get_current_road(&self.config.map);
                     let current_road = self.config.map.graph
                         .edge_weight(current_road_index)
-                        .ok_or("Vehicle not in map")
-                        .unwrap();
+                        .expect("Vehicle not in map");
+                    let speed_limit = current_road.speed_limit;
+                    let road_length = current_road.length;
 
                     let vehicle_ahead = Self::get_vehicle_ahead(&self.vehicles_by_road, &proxies, current_road_index, vehicle.id, vehicle.position_on_road);
                     let vehicle_ahead_option = match vehicle_ahead {
@@ -139,33 +147,42 @@ impl Simulation for SimulationEngine {
                         None => None,
                     };
                     let acceleration = vehicle.compute_acceleration(
-                        current_road.speed_limit,
+                        speed_limit,
                         self.config.minimum_gap,
                         vehicle_ahead_option,
                     );
 
                     vehicle.velocity += acceleration * self.config.time_step;
-                    vehicle.velocity = vehicle.velocity.clamp(0.0, current_road.speed_limit);
+                    vehicle.velocity = vehicle.velocity.clamp(0.0, speed_limit);
 
                     vehicle.position_on_road += vehicle.velocity * self.config.time_step;
 
-                    if vehicle.position_on_road >= current_road.length {
-                        vehicle.position_on_road = current_road.length;
+                    if vehicle.position_on_road >= road_length {
+                        vehicle.position_on_road = road_length;
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
                         
-                        let intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
-                        if !intersection_node.occupied {
+                        let next_node_idx = vehicle.get_next_node();
+                        let intersection_occupied = self.config.map.graph.node_weight(next_node_idx).unwrap().occupied;
+                        if !intersection_occupied {
                             if vehicle.path_index + 1 == vehicle.path.len() - 1 {
                                 vehicle.state = VehicleState::Arrived;
                                 vehicle.path_index += 1;
-                                intersection_node.occupied = false;
+                                let node = &mut self.config.map.graph[next_node_idx];
+                                node.occupied = false;
                             } else {
-                                intersection_node.occupied = true;
+                                if random_bool(self.config.path_mistake_rate as f64){
+                                    let current_node = vehicle.get_current_node();
+                                    let next_node = self.config.map.random_neighbor(current_node);
+                                    vehicle.update_path(&self.config.map, next_node.unwrap());
+                                    vehicle.path.insert(0, current_node);
+                                }
+                                let node = &mut self.config.map.graph[next_node_idx];
+                                node.occupied = true;
                                 vehicle.state = VehicleState::AtIntersection;
                                 vehicle.path_index += 1;
                             }
-                            
+
                             let v_id = vehicle.id;
                             if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
                                 road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);

@@ -81,8 +81,12 @@ impl Vehicle {
         }
     }
 
-    pub fn update_path(&mut self, map: &Map) {
-        self.path = fastest_path(map, self.trip.origin, self.trip.destination);
+    pub fn init_path(&mut self, map: &Map){
+        self.update_path(map, self.trip.origin)
+    }
+
+    pub fn update_path(&mut self, map: &Map, origin : NodeIndex) {
+        self.path = fastest_path(map, origin, self.trip.destination);
         self.path_index = 0;
 
         if self.path.len() < 2 {

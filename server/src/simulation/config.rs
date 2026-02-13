@@ -5,7 +5,7 @@ pub struct SimulationConfig {
     pub end_time: f32,
     pub time_step: f32,
     pub minimum_gap: f32, //between vehicles
-
+    pub path_mistake_rate: f32,
     pub map: Map,
 }
 

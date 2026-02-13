@@ -1,4 +1,5 @@
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
+use rand::Rng;
 
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
@@ -41,6 +42,17 @@ impl Map {
 
     pub fn neighboring_intersections(&self, source: NodeIndex) -> Vec<NodeIndex> {
         self.graph.neighbors(source).collect()
+    }
+
+    pub fn random_neighbor(&self, source: NodeIndex) -> Option<NodeIndex> {
+        let neighbors: Vec<NodeIndex> = self.graph.neighbors(source).collect();
+        if neighbors.is_empty() {
+            None
+        } else {
+            let mut rng = rand::thread_rng();
+            let idx = rng.gen_range(0..neighbors.len());
+            Some(neighbors[idx])
+        }
     }
 
     pub fn intersection_neighbor_distance(
