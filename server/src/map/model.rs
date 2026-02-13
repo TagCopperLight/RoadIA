@@ -3,15 +3,14 @@ use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
 }
 
-#[derive(Debug, Clone)]
-pub struct Coordinates {
-    pub x: f32,
-    pub y: f32,
+pub struct Coordinates{
+    pub x : f32,
+    pub y : f32,
 }
 
 impl Map {
@@ -38,5 +37,31 @@ impl Map {
         let e1 = self.add_road(from, to, road.clone());
         let e2 = self.add_road(to, from, road);
         (e1, e2)
+    }
+
+    pub fn neighboring_intersections(&self, source: NodeIndex) -> Vec<NodeIndex> {
+        self.graph.neighbors(source).collect()
+    }
+
+    pub fn intersection_neighbor_distance(
+        &self,
+        source: NodeIndex,
+        destination: NodeIndex,
+    ) -> Option<f32> {
+        self.graph
+            .find_edge(source, destination)
+            .map(|edge| self.graph[edge].length)
+    }
+
+    pub fn intersections_euclidean_distance(
+        &self,
+        source: NodeIndex,
+        destination: NodeIndex,
+    ) -> f32 {
+        let n1 = &self.graph[source];
+        let n2 = &self.graph[destination];
+        let dx = n1.x - n2.x;
+        let dy = n1.y - n2.y;
+        (dx * dx + dy * dy).sqrt()
     }
 }
