@@ -5,6 +5,10 @@ interface VehicleProps {
 }
 
 export function Vehicle({ data }: VehicleProps) {
+    if (data.state === 'Arrived') {
+        return null;
+    }
+
     return (
         <pixiGraphics draw={(graphics) => {
             graphics.clear();
@@ -21,8 +25,11 @@ export function Vehicle({ data }: VehicleProps) {
             }
 
             graphics.position.set(x, y);
+            
+            graphics.rotation = data.heading ?? 0;
+            
             graphics.setFillStyle({ color: 'purple' });
-            graphics.circle(0, 0, 5);
+            graphics.rect(-5, -3, 10, 6);
             graphics.fill();
         }} />
     );
