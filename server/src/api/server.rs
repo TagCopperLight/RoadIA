@@ -21,8 +21,8 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    // let map = create_connected_map(200, 1500.0, 1500.0);
-    let map = create_one_intersection_congestion_map();
+    let map = create_connected_map(200, 1500.0, 1500.0);
+    // let map = create_one_intersection_congestion_map();
     let vehicles = create_random_vehicles(&map, 100);
     
     let config = SimulationConfig {

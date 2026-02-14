@@ -141,7 +141,7 @@ impl Intersection {
     
     fn paths_conflict(entry_angle_1: f32, exit_angle_1: f32, arrival_time_1: f32, entry_angle_2: f32, exit_angle_2: f32, arrival_time_2: f32, roads_count: usize) -> bool {
          // Time overlap check
-         let duration = 2.0; // Assume 2 seconds to traverse the intersection
+         let duration = 2.5; // Increased slightly to be safe
          if (arrival_time_1 - arrival_time_2).abs() >= duration {
              return false;
          }
@@ -150,8 +150,7 @@ impl Intersection {
              return false;
         }
 
-        // Helper to get occupied quadrants bitmask
-        let get_quadrants = |entry: f32, exit: f32, n: usize| -> u64 {
+        let get_path_mask = |entry: f32, exit: f32, n: usize| -> u64 {
             let n_f = n as f32;
             let sector_width = 360.0 / n_f;
             
@@ -159,27 +158,29 @@ impl Intersection {
             let entry_norm = (entry % 360.0 + 360.0) % 360.0;
             let exit_norm = (exit % 360.0 + 360.0) % 360.0;
 
-            let entry_idx = ((entry_norm + sector_width / 2.0) / sector_width).floor() as usize % n;
-            let exit_idx = ((exit_norm + sector_width / 2.0) / sector_width).floor() as usize % n;
+            let in_angle = (entry_norm + 180.0) % 360.0;
+            let out_angle = exit_norm;
+
+            let in_sector = ((in_angle + sector_width / 2.0) / sector_width).floor() as usize % n;
+            let out_sector = ((out_angle + sector_width / 2.0) / sector_width).floor() as usize % n;
             
             let mut mask: u64 = 0;
-            let mut current = (entry_idx + n - 1) % n;
+            mask |= 1 << in_sector;
+            mask |= 1 << out_sector;
+
+            let diff = (out_sector + n - in_sector) % n;
             
-            // Sweep from entry-1 down to exit
-            for _ in 0..n { // Safety bound
-                mask |= 1 << current;
-                if current == exit_idx {
-                    break;
-                }
-                current = (current + n - 1) % n;
+            if diff != 1 {
+                 mask |= 1 << n; // Center bit
             }
+            
             mask
         };
 
-        let q1 = get_quadrants(entry_angle_1, exit_angle_1, roads_count);
-        let q2 = get_quadrants(entry_angle_2, exit_angle_2, roads_count);
+        let mask1 = get_path_mask(entry_angle_1, exit_angle_1, roads_count);
+        let mask2 = get_path_mask(entry_angle_2, exit_angle_2, roads_count);
         
-        (q1 & q2) != 0
+        (mask1 & mask2) != 0
     }
 }
 
