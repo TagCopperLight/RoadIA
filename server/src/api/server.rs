@@ -14,7 +14,7 @@ use petgraph::graph::NodeIndex;
 
 use crate::map::intersection::{IntersectionKind};
 
-use crate::api::map_generator::{create_connected_map, create_one_road_map, create_one_intersection_congestion_map, create_bone_map};
+use crate::api::map_generator::{create_connected_map, create_one_road_map, create_one_intersection_congestion_map, create_bone_map, create_mistakes_map};
 
 pub struct AppState {
     pub map: Map,
@@ -22,7 +22,8 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_connected_map(200, 1500.0, 1500.0);
+    //let map = create_connected_map(200, 1500.0, 1500.0);
+    let map = create_mistakes_map();
     let vehicles = create_random_vehicles(&map, 100);
     
     let config = SimulationConfig {

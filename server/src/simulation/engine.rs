@@ -158,6 +158,7 @@ impl Simulation for SimulationEngine {
                     vehicle.position_on_road += vehicle.velocity * self.config.time_step;
 
                     if vehicle.position_on_road >= road_length {
+                        println!("End of road !");
                         vehicle.position_on_road = road_length;
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
@@ -165,25 +166,33 @@ impl Simulation for SimulationEngine {
                         let next_node_idx = vehicle.get_next_node();
                         let intersection_occupied = self.config.map.graph.node_weight(next_node_idx).unwrap().occupied;
                         if !intersection_occupied {
+                            println!("Intersection not occupied");
                             if vehicle.path_index + 1 == vehicle.path.len() - 1 {
                                 vehicle.state = VehicleState::Arrived;
                                 vehicle.path_index += 1;
                                 let node = &mut self.config.map.graph[next_node_idx];
                                 node.occupied = false;
                             } else {
+                                println!("Change path ?");
                                 if random_bool(self.config.path_mistake_rate as f64){
-                                    let current_node = vehicle.get_current_node();
-                                    let next_node = self.config.map.random_neighbor(current_node);
+                                    println!("yes");
+                                    let current_intersecion_index = vehicle.get_next_node();
+                                    let next_node = self.config.map.random_neighbor(current_intersecion_index);
+                                    self.config.map.graph[current_intersecion_index].occupied = true;
+                                    vehicle.state = VehicleState::AtIntersection;
                                     if let Some(node) = next_node {//if it's false, it means that we are arrived
                                         vehicle.update_path(&self.config.map, node);
-                                        vehicle.path.insert(0, current_node);
+                                        vehicle.path.insert(0, current_intersecion_index);
                                     }
                                     
+                                }else{
+                                    println!("no");
+                                    let node = &mut self.config.map.graph[next_node_idx];
+                                    node.occupied = true;
+                                    vehicle.state = VehicleState::AtIntersection;
+                                    vehicle.path_index += 1;
                                 }
-                                let node = &mut self.config.map.graph[next_node_idx];
-                                node.occupied = true;
-                                vehicle.state = VehicleState::AtIntersection;
-                                vehicle.path_index += 1;
+                                
                             }
 
                             let v_id = vehicle.id;
@@ -202,6 +211,7 @@ impl Simulation for SimulationEngine {
                         Some(ahead) => ahead.previous_position - ahead.length,
                         None => self.config.map.graph.edge_weight(next_road_index).unwrap().length,
                     };
+                    println!("[AtIntersection] distance_ahead : {}", available_distance);
                     if available_distance >= vehicle.spec.length {
                         let intersection_node = &mut self.config.map.graph[vehicle.get_current_node()];
                         intersection_node.occupied = false;

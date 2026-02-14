@@ -329,3 +329,194 @@ pub fn create_bone_map()-> Map{
     );
     map
 }
+
+pub fn create_mistakes_map()-> Map{
+    let mut map = Map::new();
+    let h1 = map.add_intersection(Intersection{
+        id:0,
+        kind:IntersectionKind::Habitation,
+        name:"habitation 1".into(),
+        x:0.0,
+        y:0.0,
+        occupied:false
+    });
+    let w1 = map.add_intersection(Intersection{
+        id:1,
+        kind:IntersectionKind::Workplace,
+        name:"workplace 1".into(),
+        x:1000.0,
+        y:0.0,
+        occupied:false
+    });
+    let i1 = map.add_intersection(
+        Intersection{
+            id:2,
+            kind:IntersectionKind::Intersection,
+            name:"Rond point 1".into(),
+            x:200.0,
+            y:0.0,
+            occupied:false
+        }
+    );
+    let i2 = map.add_intersection(
+        Intersection{
+            id:3,
+            kind:IntersectionKind::Intersection,
+            name:"Rond point 2".into(),
+            x:400.0,
+            y:0.0,
+            occupied:false
+        }
+    );
+    let i3 = map.add_intersection(
+        Intersection{
+            id:4,
+            kind:IntersectionKind::Intersection,
+            name:"Rond point 3".into(),
+            x:600.0,
+            y:0.0,
+            occupied:false
+        }
+    );
+    let i4 = map.add_intersection(
+        Intersection{
+            id:5,
+            kind:IntersectionKind::Intersection,
+            name:"Rond point 4".into(),
+            x:800.0,
+            y:0.0,
+            occupied:false
+        }
+    );
+    let i5 = map.add_intersection(
+        Intersection{
+            id:6,
+            kind:IntersectionKind::Intersection,
+            name:"Rond point 5".into(),
+            x:200.0,
+            y:200.0,
+            occupied:false
+        }
+    );
+    map.add_two_way_road(
+        h1,
+        i1,
+        Road::new(
+            0,
+            1,
+            20.0,
+            200.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i1,
+        i2,
+        Road::new(
+            0,
+            1,
+            20.0,
+            200.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i2,
+        i3,
+        Road::new(
+            0,
+            1,
+            20.0,
+            200.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i3,
+        i4,
+        Road::new(
+            0,
+            1,
+            20.0,
+            200.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i4,
+        w1,
+        Road::new(
+            0,
+            1,
+            20.0,
+            200.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i1,
+        i5,
+        Road::new(
+            0,
+            1,
+            20.0,
+            200.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i2,
+        i5,
+        Road::new(
+            0,
+            1,
+            20.0,
+            280.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i3,
+        i5,
+        Road::new(
+            0,
+            1,
+            20.0,
+            440.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i4,
+        i5,
+        Road::new(
+            0,
+            1,
+            20.0,
+            630.0,
+            false,
+            false
+        )
+    );
+    map.add_two_way_road(
+        i5,
+        w1,
+        Road::new(
+            0,
+            1,
+            20.0,
+            830.0,
+            false,
+            false
+        )
+    );
+    map
+}
