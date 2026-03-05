@@ -64,9 +64,15 @@ async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
                     break;
                 }
             }
-            Ok(packet) = rx.recv() => {
-                if !process_broadcast_msg(packet, &mut socket).await {
-                    break;
+            packet = rx.recv() => {
+                match packet {
+                    Ok(packet) => {
+                        if !process_broadcast_msg(packet, &mut socket).await {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
         }
@@ -194,7 +200,6 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
         "state": match vehicle.state {
             VehicleState::WaitingToDepart => "Waiting",
             VehicleState::OnRoad => "Moving",
-            VehicleState::AtIntersection => "Intersection",
             VehicleState::Arrived => "Arrived",
         }
     })

@@ -91,7 +91,6 @@ impl SimulationEngine {
         road_length: f32,
         road_speed_limit: f32,
         from_coords: (f32, f32),
-        current_time: f32,
     ) {
         if vehicle.path_index + 1 >= vehicle.path.len() - 1 {
             return;
@@ -107,7 +106,7 @@ impl SimulationEngine {
             (node.x, node.y)
         };
 
-        let arrival_time = current_time + road_length / road_speed_limit;
+        let arrival_time = (road_length - vehicle.position_on_road).max(0.0) / road_speed_limit;
         let next_node = vehicle.get_next_node();
         let next_intersection = &mut map.graph[next_node];
         let rule = next_intersection.get_rule(road_id);
@@ -153,7 +152,6 @@ impl SimulationEngine {
         proxies: &mut Vec<VehicleProxy>,
         vehicle: &mut Vehicle,
         vehicle_index: usize,
-        current_time: f32,
     ) {
         let current_road_index = vehicle.get_current_road(&config.map);
         let vehicle_ahead = Self::get_vehicle_ahead(vehicles_by_road, proxies, current_road_index, vehicle.id, vehicle.position_on_road);
@@ -185,7 +183,6 @@ impl SimulationEngine {
             current_road.length,
             current_road.speed_limit,
             from_coords,
-            current_time,
         );
     }
 
@@ -198,7 +195,7 @@ impl SimulationEngine {
         vehicle: &mut Vehicle,
         vehicle_index: usize,
         current_road_index: EdgeIndex,
-        current_time: f32,
+        _current_time: f32,
     ) {
         let v_id = vehicle.id;
 
@@ -265,7 +262,6 @@ impl SimulationEngine {
             new_road.length,
             new_road.speed_limit,
             intersection_coordinates,
-            current_time,
         );
     }
 
@@ -368,7 +364,6 @@ impl Simulation for SimulationEngine {
                     &mut proxies,
                     vehicle,
                     vehicle_index,
-                    self.current_time,
                 ),
                 VehicleState::OnRoad => Self::handle_on_road(
                     &mut self.config,
