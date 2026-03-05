@@ -21,7 +21,8 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_connected_map(200, 1500.0, 1500.0);
+    // let map = create_connected_map(200, 1500.0, 1500.0);
+    let map = create_intersection_test_map();
     // let map = create_one_intersection_congestion_map();
     let vehicles = create_random_vehicles(&map, 100);
     
@@ -170,6 +171,7 @@ fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             format!("node_{}", id),
             rand::random_range(0.0..width),
             rand::random_range(0.0..height),
+            crate::map::intersection::IntersectionType::Priority,
         ));
         nodes.push(node_idx);
     }
@@ -258,6 +260,7 @@ pub fn create_one_intersection_congestion_map() -> Map{
         "habitation 1".into(),
         0.0,
         0.0,
+        crate::map::intersection::IntersectionType::Priority,
     ));
     let h2 = map.add_intersection(Intersection::new(
         1,
@@ -265,6 +268,7 @@ pub fn create_one_intersection_congestion_map() -> Map{
         "habitation 2".into(),
         0.0,
         100.0,
+        crate::map::intersection::IntersectionType::Priority,
     ));
     let i1 = map.add_intersection(Intersection::new(
         2,
@@ -272,6 +276,7 @@ pub fn create_one_intersection_congestion_map() -> Map{
         "intersection 1".into(),
         50.0,
         50.0,
+        crate::map::intersection::IntersectionType::Priority,
     ));
     let w1 = map.add_intersection(Intersection::new(
         3,
@@ -279,6 +284,7 @@ pub fn create_one_intersection_congestion_map() -> Map{
         "workplace 1".into(),
         950.0,
         50.0,
+        crate::map::intersection::IntersectionType::Priority,
     ));
     map.add_two_way_road(
         h1,
@@ -316,5 +322,94 @@ pub fn create_one_intersection_congestion_map() -> Map{
             false
         )
     );
+    map
+}
+
+pub fn create_intersection_test_map() -> Map {
+    let mut map = Map::new();
+    
+    // Central Intersection (Node 0) - Priority Type
+    let center = map.add_intersection(Intersection::new(
+        0,
+        IntersectionKind::Intersection,
+        "Center".into(),
+        500.0,
+        500.0,
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // North (Node 1) - Habitation
+    let north = map.add_intersection(Intersection::new(
+        1,
+        IntersectionKind::Habitation,
+        "North".into(),
+        500.0,
+        0.0, // 500m North
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // South (Node 2) - Workplace
+    let south = map.add_intersection(Intersection::new(
+        2,
+        IntersectionKind::Workplace,
+        "South".into(),
+        500.0,
+        1000.0, // 500m South
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // East (Node 3) - Habitation
+    let east = map.add_intersection(Intersection::new(
+        3,
+        IntersectionKind::Habitation,
+        "East".into(),
+        1000.0,
+        500.0, // 500m East
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // West (Node 4) - Workplace
+    let west = map.add_intersection(Intersection::new(
+        4,
+        IntersectionKind::Workplace,
+        "West".into(),
+        0.0,
+        500.0, // 500m West
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // Roads
+    // N -> C (Priority)
+    map.add_two_way_road(north, center, Road::new(0, 1, 40.0, 500.0, false, false));
+    
+    // S -> C (Priority)
+    map.add_two_way_road(south, center, Road::new(1, 1, 40.0, 500.0, false, false));
+    
+    // E -> C (Yield) - Intended to be yield
+    map.add_two_way_road(east, center, Road::new(2, 1, 40.0, 500.0, false, false));
+    
+    // W -> C (Yield) - Intended to be yield
+    map.add_two_way_road(west, center, Road::new(3, 1, 40.0, 500.0, false, false));
+
+    // Manually set rules on Center intersection for E and W roads to Yield
+    // Note: add_two_way_road adds roads with IDs: road.id (N->C), road.id (C->N)?? 
+    // Wait, add_two_way_road clones the road.
+    // map.add_road(from, to, road.clone()) -> uses road.id
+    // map.add_road(to, from, road) -> uses road.id
+    // So both directions have the SAME road ID?
+    // Let's check map/model.rs lines 43-44:
+    // let e1 = self.add_road(from, to, road.clone());
+    // let e2 = self.add_road(to, from, road);
+    // Yes, same ID.
+    // And `Intersection::set_rule` uses `road_id`.
+    // So if Road 2 (East<->Center) has ID 2.
+    // When adding road 2 (East->Center), the intersection `center` gets rule for ID 2 based on its type (Priority).
+    // Now we update it.
+    
+    if let Some(center_node) = map.graph.node_weight_mut(center) {
+        center_node.set_rule(2, crate::map::intersection::IntersectionRules::Yield);
+        center_node.set_rule(3, crate::map::intersection::IntersectionRules::Yield);
+    }
+
     map
 }

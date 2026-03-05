@@ -8,9 +8,16 @@ pub enum IntersectionKind {
     Workplace,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum IntersectionRules {
     Yield,
+    Priority,
+    Stop,
+    TrafficLight,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum IntersectionType {
     Priority,
     Stop,
     TrafficLight,
@@ -24,6 +31,7 @@ pub struct Intersection {
     pub name: String,
     pub x: f32,
     pub y: f32,
+    pub intersection_type: IntersectionType,
 
     pub rules: HashMap<u32, IntersectionRules>,
     pub requests: Vec<IntersectionRequest>,
@@ -43,13 +51,14 @@ pub struct IntersectionRequest {
 pub struct IntersectionController;
 
 impl Intersection {
-    pub fn new(id: u32, kind: IntersectionKind, name: String, x: f32, y: f32) -> Self {
+    pub fn new(id: u32, kind: IntersectionKind, name: String, x: f32, y: f32, intersection_type: IntersectionType) -> Self {
         Self {
             id,
             kind,
             name,
             x,
             y,
+            intersection_type,
             rules: HashMap::new(),
             requests: Vec::new(),
             traffic_order: Vec::new(),
@@ -77,8 +86,7 @@ impl Intersection {
     pub fn get_rule(&self, road_id: u32) -> IntersectionRules {
         match self.rules.get(&road_id) {
             Some(rule) => rule.clone(),
-            // None => panic!("Road {} not found in intersection {}", road_id, self.id)
-            None => IntersectionRules::Priority,
+            None => panic!("Road {} not found in intersection {}", road_id, self.id)
         }
     }
 
@@ -96,28 +104,31 @@ impl Intersection {
             arrival_time,
         };
 
+        // 1. Check collisions with EXISTING requests (before adding the new one)
+        let collisions = new_request.collisions_with(&self.requests, self.rules.len());
+
+        // 2. Add to requests list exactly once
         self.requests.push(new_request.clone());
 
-        // 1. Check if there are collisions with other requests
-        // 2. If there are collisions, determine the priority order
-        // 3. Else use arrival time to determine the order
-        // 4. Update the traffic order
-
-        let collisions = new_request.collisions_with(&self.requests, self.rules.len());
-        
         if collisions.is_empty() {
-            let mut insert_index = 0;
-            for (i, req) in self.requests.iter().enumerate() {
-                if req.arrival_time > new_request.arrival_time {
-                    insert_index = i;
-                    break;
-                }
-            }
-            self.requests.insert(insert_index, new_request);
+            // 3. No conflicts: insert vehicle into traffic_order sorted by arrival time
+            let insert_index = self.traffic_order
+                .iter()
+                .position(|&id| {
+                    self.requests
+                        .iter()
+                        .find(|r| r.vehicle_id == id)
+                        .map_or(false, |r| r.arrival_time > arrival_time)
+                })
+                .unwrap_or(self.traffic_order.len());
+            self.traffic_order.insert(insert_index, vehicle_id);
         } else {
-            let priority_order = IntersectionController::determine_priority(&collisions);
-            
-            // Find the insertion index: the earliest position of any involved vehicle in the current traffic_order
+            // 4. Conflicts: include the new request in the priority group
+            let mut all_conflicting = collisions;
+            all_conflicting.push(new_request);
+            let priority_order = IntersectionController::determine_priority(&all_conflicting);
+
+            // Find the earliest position of any involved vehicle in traffic_order
             let mut insert_idx = self.traffic_order.len();
             for req in &priority_order {
                 if let Some(pos) = self.traffic_order.iter().position(|&id| id == req.vehicle_id) {
@@ -140,8 +151,7 @@ impl Intersection {
     }
     
     fn paths_conflict(entry_angle_1: f32, exit_angle_1: f32, arrival_time_1: f32, entry_angle_2: f32, exit_angle_2: f32, arrival_time_2: f32, roads_count: usize) -> bool {
-         // Time overlap check
-         let duration = 2.5; // Increased slightly to be safe
+         let duration = 2.5;
          if (arrival_time_1 - arrival_time_2).abs() >= duration {
              return false;
          }
