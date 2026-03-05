@@ -9,11 +9,11 @@ use crate::map::model::Map;
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_connected_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_intersection_test_map, create_random_vehicles};
 
 #[derive(Clone)]
 pub struct SimulationController {
-    pub running: Arc<AtomicBool>,
+    running: Arc<AtomicBool>,
 }
 
 impl SimulationController {
@@ -43,8 +43,9 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_connected_map(200, 1500.0, 1500.0);
-    let vehicles = create_random_vehicles(&map, 200);
+    // let map = create_connected_map(200, 1500.0, 1500.0);
+    let map = create_intersection_test_map();
+    let vehicles = create_random_vehicles(&map, 50);
     
     let config = SimulationConfig {
         start_time: 0.0,
@@ -67,17 +68,18 @@ pub async fn run() -> io::Result<()> {
     // Spawn simulation loop
     let ws_service = websocket_service.clone();
     let sim_map = map.clone();
-    let sim_running = simulation_controller.running.clone();
+    let sim_controller = simulation_controller.clone();
 
     tokio::spawn(async move {
         loop {
-            if !sim_running.load(Ordering::SeqCst) {
+            if !sim_controller.is_running() {
                 sleep(Duration::from_millis(100)).await;
                 continue;
             }
 
             let start = tokio::time::Instant::now();
             simulation.step();
+            simulation.current_time += simulation.config.time_step;
             
             // Broadcast vehicle updates
             let vehicles_data = simulation.vehicles.iter().map(|v| {
@@ -88,8 +90,8 @@ pub async fn run() -> io::Result<()> {
             ws_service.send(packet);
 
             let elapsed = start.elapsed();
-            if elapsed < Duration::from_millis(30) {
-                 sleep(Duration::from_millis(30) - elapsed).await;
+            if elapsed < Duration::from_millis(10) {
+                 sleep(Duration::from_millis(10) - elapsed).await;
             }
         }
     });
