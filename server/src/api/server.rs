@@ -392,21 +392,6 @@ pub fn create_intersection_test_map() -> Map {
     // W -> C (Yield) - Intended to be yield
     map.add_two_way_road(west, center, Road::new(3, 1, 40.0, 500.0, false, false));
 
-    // Manually set rules on Center intersection for E and W roads to Yield
-    // Note: add_two_way_road adds roads with IDs: road.id (N->C), road.id (C->N)?? 
-    // Wait, add_two_way_road clones the road.
-    // map.add_road(from, to, road.clone()) -> uses road.id
-    // map.add_road(to, from, road) -> uses road.id
-    // So both directions have the SAME road ID?
-    // Let's check map/model.rs lines 43-44:
-    // let e1 = self.add_road(from, to, road.clone());
-    // let e2 = self.add_road(to, from, road);
-    // Yes, same ID.
-    // And `Intersection::set_rule` uses `road_id`.
-    // So if Road 2 (East<->Center) has ID 2.
-    // When adding road 2 (East->Center), the intersection `center` gets rule for ID 2 based on its type (Priority).
-    // Now we update it.
-    
     if let Some(center_node) = map.graph.node_weight_mut(center) {
         center_node.set_rule(2, crate::map::intersection::IntersectionRules::Yield);
         center_node.set_rule(3, crate::map::intersection::IntersectionRules::Yield);
