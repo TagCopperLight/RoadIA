@@ -1,4 +1,4 @@
-use crate::map::intersection::{Intersection, IntersectionKind};
+use crate::map::intersection::{Intersection, IntersectionKind, IntersectionType};
 use crate::map::road::Road;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::{
@@ -40,41 +40,41 @@ mod tests {
     fn test_simulation_engine_vehicle_movement() {
         let mut map = Map::new();
 
-        let h1 = map.add_intersection(Intersection {
-            id: 0,
-            kind: IntersectionKind::Habitation,
-            name: "h1".into(),
-            x: 0.0,
-            y: 0.0,
-            occupied: false,
-        });
+        let h1 = map.add_intersection(Intersection::new(
+            0,
+            IntersectionKind::Habitation,
+            "h1".into(),
+            0.0,
+            0.0,
+            IntersectionType::Priority,
+        ));
 
-        let h2 = map.add_intersection(Intersection {
-            id: 1,
-            kind: IntersectionKind::Habitation,
-            name: "h2".into(),
-            x: 0.0,
-            y: 100.0,
-            occupied: false,
-        });
+        let h2 = map.add_intersection(Intersection::new(
+            1,
+            IntersectionKind::Habitation,
+            "h2".into(),
+            0.0,
+            100.0,
+            IntersectionType::Priority,
+        ));
 
-        let i1 = map.add_intersection(Intersection {
-            id: 2,
-            kind: IntersectionKind::Intersection,
-            name: "i1".into(),
-            x: 50.0,
-            y: 50.0,
-            occupied: false,
-        });
+        let i1 = map.add_intersection(Intersection::new(
+            2,
+            IntersectionKind::Intersection,
+            "i1".into(),
+            50.0,
+            50.0,
+            IntersectionType::Priority,
+        ));
 
-        let w1 = map.add_intersection(Intersection {
-            id: 3,
-            kind: IntersectionKind::Workplace,
-            name: "w1".into(),
-            x: 100.0,
-            y: 50.0,
-            occupied: false,
-        });
+        let w1 = map.add_intersection(Intersection::new(
+            3,
+            IntersectionKind::Workplace,
+            "w1".into(),
+            100.0,
+            50.0,
+            IntersectionType::Priority,
+        ));
 
         map.add_two_way_road(h1, i1, Road::new(0, 1, 50.0, 100.0, false, false));
         map.add_two_way_road(h2, i1, Road::new(1, 1, 50.0, 100.0, false, false));
@@ -128,41 +128,42 @@ mod tests {
     fn test_simulation_engine_multiple_vehicles() {
         let mut map = Map::new();
 
-        let h1 = map.add_intersection(Intersection {
-            id: 0,
-            kind: IntersectionKind::Habitation,
-            name: "h1".into(),
-            x: 0.0,
-            y: 0.0,
-            occupied: false,
-        });
 
-        let h2 = map.add_intersection(Intersection {
-            id: 1,
-            kind: IntersectionKind::Habitation,
-            name: "h2".into(),
-            x: 0.0,
-            y: 100.0,
-            occupied: false,
-        });
+        let h1 = map.add_intersection(Intersection::new(
+            0,
+            IntersectionKind::Habitation,
+            "h1".into(),
+            0.0,
+            0.0,
+            IntersectionType::Priority,
+        ));
 
-        let i1 = map.add_intersection(Intersection {
-            id: 2,
-            kind: IntersectionKind::Intersection,
-            name: "i1".into(),
-            x: 50.0,
-            y: 50.0,
-            occupied: false,
-        });
+        let h2 = map.add_intersection(Intersection::new(
+            1,
+            IntersectionKind::Habitation,
+            "h2".into(),
+            0.0,
+            100.0,
+            IntersectionType::Priority,
+        ));
 
-        let w1 = map.add_intersection(Intersection {
-            id: 3,
-            kind: IntersectionKind::Workplace,
-            name: "w1".into(),
-            x: 100.0,
-            y: 50.0,
-            occupied: false,
-        });
+        let i1 = map.add_intersection(Intersection::new(
+            2,
+            IntersectionKind::Intersection,
+            "i1".into(),
+            50.0,
+            50.0,
+            IntersectionType::Priority,
+        ));
+
+        let w1 = map.add_intersection(Intersection::new(
+            3,
+            IntersectionKind::Workplace,
+            "w1".into(),
+            100.0,
+            50.0,
+            IntersectionType::Priority,
+        ));
 
         map.add_two_way_road(h1, i1, Road::new(0, 1, 50.0, 100.0, false, false));
         map.add_two_way_road(h2, i1, Road::new(1, 1, 50.0, 100.0, false, false));
@@ -230,5 +231,75 @@ mod tests {
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
         assert!(all_arrived(&sim));
+    }
+
+    #[test]
+    fn test_auto_rule_initialization() {
+        let mut map = Map::new();
+
+        // 1. Create a Priority intersection
+        let priority_inter = map.add_intersection(Intersection::new(
+            0,
+            IntersectionKind::Intersection,
+            "Priority".into(),
+            0.0,
+            0.0,
+            IntersectionType::Priority,
+        ));
+
+        let h1 = map.add_intersection(Intersection::new(
+            1,
+            IntersectionKind::Habitation,
+            "h1".into(),
+            0.0,
+            100.0,
+            IntersectionType::Priority,
+        ));
+
+        // Add road entering Priority intersection
+        let road_id = 999;
+        map.add_two_way_road(
+            h1,
+            priority_inter,
+            Road::new(road_id, 1, 50.0, 100.0, false, false),
+        );
+
+        // Check rule
+        // add_two_way_road adds road from h1 -> priority_inter AND priority_inter -> h1
+        // The edge h1 -> priority_inter has ID road_id.
+        // We need to check the rule at priority_inter for road_id.
+        let rule = map.graph[priority_inter].get_rule(road_id);
+        assert!(matches!(rule, crate::map::intersection::IntersectionRules::Priority));
+
+
+        // 2. Create a Stop intersection
+        let stop_inter = map.add_intersection(Intersection::new(
+            2,
+            IntersectionKind::Intersection,
+            "Stop".into(),
+            100.0,
+            0.0,
+            IntersectionType::Stop,
+        ));
+
+        let h2 = map.add_intersection(Intersection::new(
+            3,
+            IntersectionKind::Habitation,
+            "h2".into(),
+            100.0,
+            100.0,
+            IntersectionType::Priority,
+        ));
+        
+        let road_id_stop = 888;
+        map.add_two_way_road(
+            h2,
+            stop_inter,
+            Road::new(road_id_stop, 1, 50.0, 100.0, false, false),
+        );
+
+        // Check rule at Stop intersection
+        let rule_stop = map.graph[stop_inter].get_rule(road_id_stop);
+        assert!(matches!(rule_stop, crate::map::intersection::IntersectionRules::Stop));
     }
 }

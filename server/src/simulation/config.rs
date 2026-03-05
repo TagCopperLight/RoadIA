@@ -1,4 +1,4 @@
-use crate::map::model::{Map};
+use crate::map::model::Map;
 
 pub struct SimulationConfig {
     pub start_time: f32,
