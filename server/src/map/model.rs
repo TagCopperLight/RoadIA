@@ -25,6 +25,12 @@ impl Map {
     }
 
     pub fn add_road(&mut self, from: NodeIndex, to: NodeIndex, road: Road) -> EdgeIndex {
+        let rule = match self.graph[to].intersection_type {
+            crate::map::intersection::IntersectionType::Priority => crate::map::intersection::IntersectionRules::Priority,
+            crate::map::intersection::IntersectionType::Stop => crate::map::intersection::IntersectionRules::Stop,
+            crate::map::intersection::IntersectionType::TrafficLight => crate::map::intersection::IntersectionRules::TrafficLight,
+        };
+        self.graph[to].set_rule(road.id, rule);
         self.graph.add_edge(from, to, road)
     }
 

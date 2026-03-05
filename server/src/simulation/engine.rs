@@ -121,6 +121,29 @@ impl Simulation for SimulationEngine {
                             proxy.previous_position = vehicle.position_on_road;
                             proxy.road_index = Some(current_road_index);
                         }
+
+                        // Register intersection request for the first intersection (if not the last road)
+                        if vehicle.path_index + 1 < vehicle.path.len() - 1 {
+                            let current_road = self.config.map.graph.edge_weight(current_road_index).unwrap().clone();
+                            let from_coords = {
+                                let node = &self.config.map.graph[vehicle.get_current_node()];
+                                (node.x, node.y)
+                            };
+                            let to_coords = {
+                                let node_idx = if vehicle.path_index + 2 < vehicle.path.len() {
+                                    vehicle.path[vehicle.path_index + 2]
+                                } else {
+                                    vehicle.trip.destination
+                                };
+                                let node = &self.config.map.graph[node_idx];
+                                (node.x, node.y)
+                            };
+                            let arrival_time = self.current_time + current_road.length / current_road.speed_limit;
+                            let current_road_id = current_road.id;
+                            let next_intersection = &mut self.config.map.graph[vehicle.get_next_node()];
+                            let rule = next_intersection.get_rule(current_road_id);
+                            next_intersection.request_intersection(vehicle.id, rule, arrival_time, from_coords, to_coords);
+                        }
                     }
                 }
 
@@ -133,7 +156,7 @@ impl Simulation for SimulationEngine {
                         .clone();
 
                     let vehicle_ahead = Self::get_vehicle_ahead(&self.vehicles_by_road, &proxies, current_road_index, vehicle.id, vehicle.position_on_road);
-                    
+
                     let acceleration = match vehicle_ahead {
                         Some(vehicle_ahead) => vehicle.compute_acceleration(
                             current_road.speed_limit,
@@ -142,30 +165,42 @@ impl Simulation for SimulationEngine {
                             vehicle_ahead.previous_velocity,
                         ),
                         None => {
-                            let next_intersection = &self.config.map.graph[vehicle.get_next_node()];
-                            let rule = next_intersection.get_rule(current_road.id);
-                            match rule {
-                                IntersectionRules::Stop => vehicle.compute_acceleration(
+                            // On the last road the vehicle is headed to its destination: no intersection to yield to.
+                            if vehicle.path_index + 1 == vehicle.path.len() - 1 {
+                                vehicle.compute_acceleration(
                                     current_road.speed_limit,
                                     self.config.minimum_gap,
-                                    current_road.length,
+                                    f32::INFINITY,
                                     0.0,
-                                ),
-                                
-                                _ => if next_intersection.get_permission_to_enter(vehicle.id) {
-                                    vehicle.compute_acceleration(
+                                )
+                            } else {
+                                let next_intersection = &self.config.map.graph[vehicle.get_next_node()];
+                                let rule = next_intersection.get_rule(current_road.id);
+                                // Distance from vehicle front to the end of the road (clamped > 0)
+                                let gap_to_intersection = (current_road.length - vehicle.position_on_road).max(0.001);
+                                match rule {
+                                    IntersectionRules::Stop => vehicle.compute_acceleration(
                                         current_road.speed_limit,
                                         self.config.minimum_gap,
-                                        f32::INFINITY,
+                                        gap_to_intersection,
                                         0.0,
-                                    )
-                                } else {
-                                    vehicle.compute_acceleration(
-                                        current_road.speed_limit,
-                                        self.config.minimum_gap,
-                                        current_road.length,
-                                        0.0,
-                                    )
+                                    ),
+
+                                    _ => if next_intersection.get_permission_to_enter(vehicle.id) {
+                                        vehicle.compute_acceleration(
+                                            current_road.speed_limit,
+                                            self.config.minimum_gap,
+                                            f32::INFINITY,
+                                            0.0,
+                                        )
+                                    } else {
+                                        vehicle.compute_acceleration(
+                                            current_road.speed_limit,
+                                            self.config.minimum_gap,
+                                            gap_to_intersection,
+                                            0.0,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -180,68 +215,76 @@ impl Simulation for SimulationEngine {
                         vehicle.position_on_road = current_road.length;
                         vehicle.velocity = 0.0;
                         vehicle.previous_velocity = 0.0;
-                        
+
                         let v_id = vehicle.id;
 
-                            if vehicle.path_index + 1 == vehicle.path.len() - 1 {
-                                vehicle.state = VehicleState::Arrived;
-                                vehicle.path_index += 1;
-                                
-                                // Remove from current road
-                                if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
-                                    road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
-                                }
-                            } else {
-                                // Check if we can enter the next road
-                                let next_road_index = {
-                                    let u = vehicle.path[vehicle.path_index + 1];
-                                    let v = vehicle.path[vehicle.path_index + 2];
-                                    self.config.map.graph.find_edge(u, v).unwrap()
-                                };
-                                
-                                let mut can_enter = true;
-                                if let Some(vehicle_indices) = self.vehicles_by_road.get(&next_road_index) {
-                                    for &idx in vehicle_indices {
-                                        let v_proxy = &proxies[idx];
-                                        if v_proxy.road_index == Some(next_road_index) {
-                                            // Calculate the back of the vehicle
-                                            let vehicle_back = v_proxy.previous_position - v_proxy.length;
-                                            
-                                            if vehicle_back < vehicle.spec.length + 1.0 {
-                                                can_enter = false;
-                                                break;
-                                            }
+                        if vehicle.path_index + 1 == vehicle.path.len() - 1 {
+                            vehicle.state = VehicleState::Arrived;
+                            vehicle.path_index += 1;
+
+                            // Remove from current road
+                            if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
+                                road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
+                            }
+                        } else {
+                            // Check physical space on the next road
+                            let next_road_index = {
+                                let u = vehicle.path[vehicle.path_index + 1];
+                                let v = vehicle.path[vehicle.path_index + 2];
+                                self.config.map.graph.find_edge(u, v).unwrap()
+                            };
+                            // Pre-fetch new road data before any mutable borrows
+                            let new_road = self.config.map.graph.edge_weight(next_road_index).unwrap().clone();
+
+                            let mut can_enter = true;
+                            if let Some(vehicle_indices) = self.vehicles_by_road.get(&next_road_index) {
+                                for &idx in vehicle_indices {
+                                    let v_proxy = &proxies[idx];
+                                    if v_proxy.road_index == Some(next_road_index) {
+                                        let vehicle_back = v_proxy.previous_position - v_proxy.length;
+                                        if vehicle_back < vehicle.spec.length + 1.0 {
+                                            can_enter = false;
+                                            break;
                                         }
                                     }
                                 }
+                            }
 
-                                if can_enter {
-                                    let intersection_coordinates = {
-                                        let node = &self.config.map.graph[vehicle.get_next_node()];
-                                        (node.x, node.y)
-                                    };
+                            // Check intersection permission (traffic_order)
+                            let has_permission = {
+                                let next_node = vehicle.path[vehicle.path_index + 1];
+                                self.config.map.graph[next_node].get_permission_to_enter(vehicle.id)
+                            };
 
-                                    // Remove from current road BEFORE updating path_index (so current_road_index is valid)
-                                    if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
-                                        road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
-                                    }
-                                    
-                                    {
-                                        let intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
-                                        intersection_node.remove_request(vehicle.id);
-                                    }
-                                    vehicle.path_index += 1;
-                                    
-                                    vehicle.position_on_road = vehicle.spec.length;
-                                    vehicle.previous_position = 0.0; 
-                                    
-                                    self.vehicles_by_road.entry(next_road_index).or_insert(Vec::new()).push(vehicle_index);
+                            if can_enter && has_permission {
+                                let intersection_coordinates = {
+                                    let node = &self.config.map.graph[vehicle.get_next_node()];
+                                    (node.x, node.y)
+                                };
 
-                                    if let Some(proxy) = proxies.get_mut(vehicle_index) {
-                                        proxy.previous_position = vehicle.position_on_road;
-                                        proxy.road_index = Some(next_road_index);
-                                    }
-                                    
+                                // Remove from current road BEFORE updating path_index
+                                if let Some(road_vehicles) = self.vehicles_by_road.get_mut(&current_road_index) {
+                                    road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
+                                }
+
+                                {
+                                    let intersection_node = &mut self.config.map.graph[vehicle.get_next_node()];
+                                    intersection_node.remove_request(vehicle.id);
+                                }
+                                vehicle.path_index += 1;
+
+                                vehicle.position_on_road = vehicle.spec.length;
+                                vehicle.previous_position = 0.0;
+
+                                self.vehicles_by_road.entry(next_road_index).or_insert(Vec::new()).push(vehicle_index);
+
+                                if let Some(proxy) = proxies.get_mut(vehicle_index) {
+                                    proxy.previous_position = vehicle.position_on_road;
+                                    proxy.road_index = Some(next_road_index);
+                                }
+
+                                // Register request for the next intersection (only if not the last road)
+                                if vehicle.path_index + 1 < vehicle.path.len() - 1 {
                                     let to_intersection_coordinates = if vehicle.path_index + 2 < vehicle.path.len() {
                                         let node = &self.config.map.graph[vehicle.path[vehicle.path_index + 2]];
                                         (node.x, node.y)
@@ -250,22 +293,20 @@ impl Simulation for SimulationEngine {
                                         (node.x, node.y)
                                     };
 
+                                    let arrival_time = self.current_time + new_road.length / new_road.speed_limit;
+                                    let new_road_id = new_road.id;
                                     let next_intersection = &mut self.config.map.graph[vehicle.get_next_node()];
-
-                                    let rule = next_intersection.get_rule(current_road.id);
-                                    
-                                    let estimated_velocity = current_road.speed_limit;
-                                    let arrival_time = self.current_time + current_road.length / estimated_velocity;
-
+                                    let rule = next_intersection.get_rule(new_road_id);
                                     next_intersection.request_intersection(
-                                        vehicle.id, 
-                                        rule, 
-                                        arrival_time, 
+                                        vehicle.id,
+                                        rule,
+                                        arrival_time,
                                         intersection_coordinates,
-                                        to_intersection_coordinates
+                                        to_intersection_coordinates,
                                     );
                                 }
                             }
+                        }
                     }
                 }
 
