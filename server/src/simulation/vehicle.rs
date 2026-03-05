@@ -31,7 +31,6 @@ pub struct TripRequest {
 pub enum VehicleState {
     WaitingToDepart,
     OnRoad,
-    AtIntersection,
     Arrived,
 }
 
@@ -44,7 +43,7 @@ pub struct Vehicle {
 
     pub path: Vec<NodeIndex>,
     pub path_index: usize,
-
+	
     pub position_on_road: f32, // distance entre l'avant du véhicule et le début de la route
     pub previous_position: f32,
     pub velocity: f32,
@@ -94,26 +93,22 @@ impl Vehicle {
         &self,
         desired_velocity: f32,
         minimum_gap: f32,
-        vehicle_ahead: Option<(f32, f32)>, // (distance, velocity)
+        vehicle_ahead_distance: f32,
+        vehicle_ahead_velocity: f32,
     ) -> f32 {
         let free_road_acc = self.spec.max_acceleration
             * (1.0 - (self.previous_velocity / desired_velocity).powf(ACCELERATION_EXPONENT));
 
-        match vehicle_ahead {
-            Some((distance, velocity)) => {
-                if distance <= 0.0 {
-                    panic!("Vehicle ahead is too close");
-                }
-                let s: f32 = minimum_gap
-                    + self.previous_velocity * self.spec.reaction_time
-                    + 0.5 * self.previous_velocity * (self.previous_velocity - velocity)
-                        / (self.spec.max_acceleration * self.spec.comfortable_deceleration)
-                            .powf(0.5);
-
-                free_road_acc - self.spec.max_acceleration * (s / distance).powf(2.0)
-            }
-            None => free_road_acc,
+        if vehicle_ahead_distance <= 0.0 {
+            panic!("Vehicle ahead is too close");
         }
+        let s: f32 = minimum_gap
+            + self.previous_velocity * self.spec.reaction_time
+                + 0.5 * self.previous_velocity * (self.previous_velocity - vehicle_ahead_velocity)
+                    / (self.spec.max_acceleration * self.spec.comfortable_deceleration)
+                        .powf(0.5);
+
+        free_road_acc - self.spec.max_acceleration * (s / vehicle_ahead_distance).powf(2.0)
     }
 
     pub fn get_coordinates(&self, map: &Map) -> Coordinates {
