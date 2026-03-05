@@ -143,6 +143,7 @@ fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     vehicles
 }
 
+#[allow(unused)]
 fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     let mut map = Map::new();
     let mut ids = 0..;
