@@ -7,14 +7,16 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
-use crate::map::model::Map;
-use crate::api::server::AppState;
+use crate::{map::model::Map, simulation::vehicle::{Vehicle, VehicleKind, VehicleState}};
+use crate::api::runner::runner::AppState;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "id", content = "data")]
 #[serde(rename_all = "camelCase")]
 pub enum ClientPacket {
     Connect { token: String },
+    StartSimulation {},
+    StopSimulation {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -58,43 +60,65 @@ async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
     loop {
         tokio::select! {
             msg = socket.recv() => {
-                match msg {
-                    Some(Ok(msg)) => {
-                        match msg {
-                            Message::Text(text) => {
-                                match serde_json::from_str::<ClientPacket>(&text) {
-                                    Ok(packet) => handle_client_packet(packet, &mut socket, &state).await,
-                                    Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
-                                }
-                            }
-                            Message::Close(_) => {
-                                println!("Client disconnected (Close frame)");
-                                break;
-                            }
-                            _ => {}
-                        }
-                    }
-                    Some(Err(e)) => {
-                        println!("WebSocket error: {}", e);
-                        break;
-                    }
-                    None => {
-                        println!("Client disconnected");
-                        break;
-                    }
+                if !process_incoming_msg(msg, &mut socket, &state).await {
+                    break;
                 }
             }
-            Ok(packet) = rx.recv() => {
-                 if let Ok(text) = serde_json::to_string(&packet) {
-                    if let Err(e) = socket.send(Message::Text(text)).await {
-                        println!("Failed to send message: {}", e);
-                        break;
+            packet = rx.recv() => {
+                match packet {
+                    Ok(packet) => {
+                        if !process_broadcast_msg(packet, &mut socket).await {
+                            break;
+                        }
                     }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
                 }
             }
         }
     }
     println!("WebSocket loop ended");
+}
+
+async fn process_incoming_msg(
+    msg: Option<Result<Message, axum::Error>>,
+    socket: &mut WebSocket,
+    state: &Arc<AppState>,
+) -> bool {
+    match msg {
+        Some(Ok(msg)) => match msg {
+            Message::Text(text) => {
+                match serde_json::from_str::<ClientPacket>(&text) {
+                    Ok(packet) => handle_client_packet(packet, socket, state).await,
+                    Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
+                }
+                true
+            }
+            Message::Close(_) => {
+                println!("Client disconnected (Close frame)");
+                false
+            }
+            _ => true,
+        },
+        Some(Err(e)) => {
+            println!("WebSocket error: {}", e);
+            false
+        }
+        None => {
+            println!("Client disconnected");
+            false
+        }
+    }
+}
+
+async fn process_broadcast_msg(packet: ServerPacket, socket: &mut WebSocket) -> bool {
+    if let Ok(text) = serde_json::to_string(&packet) {
+        if let Err(e) = socket.send(Message::Text(text)).await {
+            println!("Failed to send message: {}", e);
+            return false;
+        }
+    }
+    true
 }
 
 async fn handle_client_packet(
@@ -114,10 +138,18 @@ async fn handle_client_packet(
                 }
             }
         }
+        ClientPacket::StartSimulation {} => {
+            println!("Client started simulation");
+            state.simulation.start();
+        }
+        ClientPacket::StopSimulation {} => {
+            println!("Client stopped simulation");
+            state.simulation.stop();
+        }
     }
 }
 
-fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
+pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
     let nodes: Vec<Value> = map
         .graph
         .node_indices()
@@ -154,3 +186,22 @@ fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 
     (nodes, edges)
 }
+
+pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
+    let coords = vehicle.get_coordinates(&sim_map);
+    json!({
+        "id": vehicle.id,
+        "x": coords.x,
+        "y": coords.y,
+        "kind": match vehicle.spec.kind {
+                VehicleKind::Car => "Car",
+                VehicleKind::Bus => "Bus",
+        },
+        "state": match vehicle.state {
+            VehicleState::WaitingToDepart => "Waiting",
+            VehicleState::OnRoad => "Moving",
+            VehicleState::Arrived => "Arrived",
+        }
+    })
+}
+    
