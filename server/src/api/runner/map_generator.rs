@@ -1,99 +1,12 @@
-use std::sync::Arc;
-use tokio::io;
-use tokio::net::TcpListener;
-use tokio::time::{sleep, Duration};
-use axum::{Router, routing::get};
-use serde_json::json;
-
-use crate::map::model::Map;
-use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService};
-use crate::simulation::config::SimulationConfig;
-use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest, VehicleState};
 use petgraph::graph::NodeIndex;
 
 use crate::map::intersection::{Intersection, IntersectionKind};
 use crate::map::road::Road;
+use crate::map::model::Map;
+use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest};
 
-pub struct AppState {
-    pub map: Map,
-    pub websocket_service: Arc<WebSocketService>,
-}
 
-pub async fn run() -> io::Result<()> {
-    // let map = create_connected_map(200, 1500.0, 1500.0);
-    let map = create_intersection_test_map();
-    // let map = create_one_intersection_congestion_map();
-    let vehicles = create_random_vehicles(&map, 100);
-    
-    let config = SimulationConfig {
-        start_time: 0.0,
-        end_time: f32::MAX,
-        time_step: 0.1,
-        minimum_gap: 2.0,
-        map: map.clone(),
-    };
-
-    let mut simulation = SimulationEngine::new(config, vehicles);
-    
-    // Initialize vehicle paths
-    for vehicle in &mut simulation.vehicles {
-        vehicle.update_path(&simulation.config.map);
-    }
-    
-    let websocket_service = Arc::new(WebSocketService::new());
-    
-    // Spawn simulation loop
-    let ws_service = websocket_service.clone();
-    let sim_map = map.clone();
-    tokio::spawn(async move {
-        loop {
-            let start = tokio::time::Instant::now();
-            simulation.step();
-            
-            // Broadcast vehicle updates
-            let vehicles_data: Vec<_> = simulation.vehicles.iter().map(|v| {
-                let coords = v.get_coordinates(&sim_map);
-                json!({
-                    "id": v.id,
-                    "x": coords.x,
-                    "y": coords.y,
-                    "kind": match v.spec.kind {
-                         VehicleKind::Car => "Car",
-                         VehicleKind::Bus => "Bus",
-                    },
-                    "state": match v.state {
-                        VehicleState::WaitingToDepart => "Waiting",
-                        VehicleState::OnRoad => "Moving",
-                        VehicleState::Arrived => "Arrived",
-                    }
-                })
-            }).collect();
-            
-            let packet = ServerPacket::VehicleUpdate { vehicles: vehicles_data };
-            ws_service.send(packet);
-
-            let elapsed = start.elapsed();
-            if elapsed < Duration::from_millis(30) {
-                 sleep(Duration::from_millis(30) - elapsed).await;
-            }
-        }
-    });
-
-    let shared_state = Arc::new(AppState { map, websocket_service });
-
-    let app = Router::new()
-        .route("/ws", get(ws_handler))
-        .with_state(shared_state);
-
-    let listener = TcpListener::bind("0.0.0.0:8080").await?;
-    println!("Listening on {}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
-    
-    Ok(())
-}
-
-fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
+pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     let mut vehicles = Vec::new();
     let mut ids = 0..;
     
@@ -127,7 +40,7 @@ fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
             max_acceleration: 4.0,
             comfortable_deceleration: 3.0,
             reaction_time: 1.0,
-            length: 4.5,
+            length: 10.0,
         };
 
         let trip = TripRequest {
@@ -143,8 +56,7 @@ fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     vehicles
 }
 
-#[allow(unused)]
-fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
+pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     let mut map = Map::new();
     let mut ids = 0..;
 

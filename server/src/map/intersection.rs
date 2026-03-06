@@ -177,6 +177,8 @@ impl Intersection {
                     .map_or(false, |r| r.arrival_time > arrival_time)
             })
             .unwrap_or(self.traffic_order.len());
+        
+        let insert_index = if self.traffic_order.is_empty() { insert_index } else { insert_index.max(1) };
         self.traffic_order.insert(insert_index, vehicle_id);
     }
 
@@ -185,22 +187,38 @@ impl Intersection {
         collisions: Vec<IntersectionRequest>,
         new_request: IntersectionRequest,
     ) {
-        let mut all_conflicting = collisions;
-        all_conflicting.push(new_request);
+        let all_conflicting: Vec<IntersectionRequest> = collisions.iter().cloned()
+            .chain(std::iter::once(new_request.clone()))
+            .collect();
         let priority_order = IntersectionController::determine_priority(&all_conflicting);
 
-        let mut insert_idx = self.traffic_order.len();
-        for req in &priority_order {
-            if let Some(pos) = self.traffic_order.iter().position(|&id| id == req.vehicle_id) {
-                if pos < insert_idx {
-                    insert_idx = pos;
-                }
-            }
-        }
+        let new_rank = priority_order
+            .iter()
+            .position(|r| r.vehicle_id == new_request.vehicle_id)
+            .unwrap_or(priority_order.len());
 
-        self.traffic_order.retain(|id| !priority_order.iter().any(|req| req.vehicle_id == *id));
-        let new_ids: Vec<u64> = priority_order.iter().map(|req| req.vehicle_id).collect();
-        self.traffic_order.splice(insert_idx..insert_idx, new_ids);
+        let insert_idx = self.traffic_order
+            .iter()
+            .enumerate()
+            .filter_map(|(pos, &tid)| {
+                let rank = priority_order.iter().position(|r| r.vehicle_id == tid)?;
+                if rank < new_rank { Some(pos + 1) } else { None }
+            })
+            .max()
+            .unwrap_or_else(|| {
+                self.traffic_order
+                    .iter()
+                    .enumerate()
+                    .find_map(|(pos, &tid)| {
+                        let rank = priority_order.iter().position(|r| r.vehicle_id == tid)?;
+                        if rank > new_rank { Some(pos) } else { None }
+                    })
+                    .unwrap_or(self.traffic_order.len())
+            });
+
+        let insert_idx = if self.traffic_order.is_empty() { insert_idx } else { insert_idx.max(1) };
+
+        self.traffic_order.insert(insert_idx, new_request.vehicle_id);
     }
 }
 
