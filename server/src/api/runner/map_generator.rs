@@ -41,6 +41,13 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
             comfortable_deceleration: 3.0,
             reaction_time: 1.0,
             length: 10.0,
+            mass: 1680.0,
+            engine_thermal_efficiency: 0.35,
+            lower_heating_value_for_fuel: 43200.0,
+            aerodynamic_drag_coefficient: 0.3,
+            front_area: 2.0,
+            rolling_resistance_coefficient: 0.01,
+            stoichiometric_co2_factor: 3.16
         };
 
         let trip = TripRequest {

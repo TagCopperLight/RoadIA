@@ -17,6 +17,14 @@ pub struct VehicleSpec {
     pub comfortable_deceleration: f32,
     pub reaction_time: f32,
     pub length: f32,
+    //Les attributs suivant permettent de calculer les émissions co2
+    pub mass : f32,//en kg
+    pub engine_thermal_efficiency: f32,
+    pub lower_heating_value_for_fuel: f32,//en Kj/Kg
+    pub aerodynamic_drag_coefficient: f32,
+    pub front_area: f32,
+    pub rolling_resistance_coefficient: f32,
+    pub stoichiometric_co2_factor: f32
 }
 
 #[derive(Clone)]
@@ -48,6 +56,7 @@ pub struct Vehicle {
     pub previous_position: f32,
     pub velocity: f32,
     pub previous_velocity: f32,
+    pub emitted_co2 : f32, //en kg de Co2
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
@@ -77,6 +86,7 @@ impl Vehicle {
             velocity: 0.0,
             position_on_road: 0.0,
             previous_position: 0.0,
+            emitted_co2: 0.0
         }
     }
 
@@ -164,5 +174,12 @@ impl Vehicle {
             .find_edge(self.get_current_node(), self.get_next_node())
             .ok_or("Edge not in map")
             .unwrap()
+    }
+
+    pub fn update_co2_emissions(&mut self, time_step: f32, air_dnesity:f32, gravity_coefficient:f32) {
+        let acceleration = (self.velocity - self.previous_velocity)/time_step;
+        let tractive_force = 0.5*air_dnesity*self.spec.aerodynamic_drag_coefficient*self.spec.front_area*self.velocity*self.velocity + self.spec.mass * gravity_coefficient * self.spec.rolling_resistance_coefficient + self.spec.mass * acceleration;
+        let current_emissions = tractive_force * self.velocity * self.spec.stoichiometric_co2_factor / (self.spec.engine_thermal_efficiency * self.spec.lower_heating_value_for_fuel);
+        self.emitted_co2 += current_emissions * time_step;
     }
 }

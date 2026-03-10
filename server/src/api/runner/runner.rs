@@ -53,6 +53,8 @@ pub async fn run() -> io::Result<()> {
         time_step: 0.1,
         minimum_gap: 2.0,
         map: map.clone(),
+        air_density: 1.225, // en Mg/m^3
+        gravity_coefficient: 9.81
     };
 
     let mut simulation = SimulationEngine::new(config, vehicles);

@@ -5,7 +5,8 @@ pub struct SimulationConfig {
     pub end_time: f32,
     pub time_step: f32,
     pub minimum_gap: f32, //between vehicles
-
+    pub air_density: f32, //en Kg/m3
+    pub gravity_coefficient: f32, //en m/s²
     pub map: Map,
 }
 
