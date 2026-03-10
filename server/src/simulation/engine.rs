@@ -365,14 +365,17 @@ impl Simulation for SimulationEngine {
                     vehicle,
                     vehicle_index,
                 ),
-                VehicleState::OnRoad => Self::handle_on_road(
-                    &mut self.config,
-                    &mut self.vehicles_by_road,
-                    &mut proxies,
-                    vehicle,
-                    vehicle_index,
-                    self.current_time,
-                ),
+                VehicleState::OnRoad => {
+                    Self::handle_on_road(
+                        &mut self.config,
+                        &mut self.vehicles_by_road,
+                        &mut proxies,
+                        vehicle,
+                        vehicle_index,
+                        self.current_time,
+                    );
+                    vehicle.update_co2_emissions(self.config.time_step, self.config.air_density, self.config.gravity_coefficient);
+                },
                 VehicleState::Arrived => {}
             }
         }
