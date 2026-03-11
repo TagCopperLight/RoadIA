@@ -1,4 +1,4 @@
-use crate::simulation::config::{ACCELERATION_EXPONENT, MAX_SPEED};
+use crate::simulation::config::{ACCELERATION_EXPONENT, MAX_SPEED, SimulationConfig};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::map::{model::Coordinates, model::Map};
@@ -56,7 +56,8 @@ pub struct Vehicle {
     pub previous_position: f32,
     pub velocity: f32,
     pub previous_velocity: f32,
-    pub emitted_co2 : f32, //en kg de Co2
+    pub emitted_co2 : f32, //en g de Co2
+    pub arrived_at : Option<f32>
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
@@ -86,7 +87,8 @@ impl Vehicle {
             velocity: 0.0,
             position_on_road: 0.0,
             previous_position: 0.0,
-            emitted_co2: 0.0
+            emitted_co2: 0.0,
+            arrived_at: None
         }
     }
 
@@ -181,5 +183,51 @@ impl Vehicle {
         let tractive_force = 0.5*air_dnesity*self.spec.aerodynamic_drag_coefficient*self.spec.front_area*self.velocity*self.velocity + self.spec.mass * gravity_coefficient * self.spec.rolling_resistance_coefficient + self.spec.mass * acceleration;
         let current_emissions = tractive_force * self.velocity * self.spec.stoichiometric_co2_factor / (self.spec.engine_thermal_efficiency * self.spec.lower_heating_value_for_fuel);
         self.emitted_co2 += current_emissions * time_step;
+    }
+
+    pub fn get_min_time(&self, map: &Map) -> f32 {
+        let mut total_time: f32 = 0.0;
+
+        if self.path.len() < 2 {
+            return total_time;
+        }
+
+        for i in 0..(self.path.len() - 1) {
+            let from = self.path[i];
+            let to = self.path[i + 1];
+            let edge = map
+                .graph
+                .find_edge(from, to)
+                .ok_or("Edge not in map")
+                .unwrap();
+
+            let t = map.get_minimal_time_travel_by_road(edge, self.spec.max_acceleration, self.spec.max_speed);
+            total_time += t;
+        }
+
+        total_time
+    }
+
+    pub fn get_min_co2(&self, sim_config : &SimulationConfig) -> f32 {
+        let mut total_co2: f32 = 0.0;
+
+        if self.path.len() < 2 {
+            return total_co2;
+        }
+
+        for i in 0..(self.path.len() - 1) {
+            let from = self.path[i];
+            let to = self.path[i + 1];
+            let edge = sim_config
+                .map
+                .graph
+                .find_edge(from, to)
+                .ok_or("Edge not in map")
+                .unwrap();
+
+            let e = sim_config.map.get_minimal_co2_by_road(edge, self.spec, sim_config);
+            total_co2 += e;
+        }
+        total_co2
     }
 }

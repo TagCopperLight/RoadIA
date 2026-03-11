@@ -7,6 +7,10 @@ pub struct SimulationConfig {
     pub minimum_gap: f32, //between vehicles
     pub air_density: f32, //en Kg/m3
     pub gravity_coefficient: f32, //en m/s²
+    //Les paramètres suivants pondèrent les facteurs du score
+    pub time_weight : f32,
+    pub succes_weight: f32,
+    pub pollution_weight: f32,
     pub map: Map,
 }
 
