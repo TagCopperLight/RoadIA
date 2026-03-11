@@ -9,6 +9,7 @@ pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
     fn run(&mut self);
     fn step(&mut self);
+    fn get_score(&self) -> f32;
 }
 
 #[derive(Clone)]
@@ -202,6 +203,7 @@ impl SimulationEngine {
         if vehicle.path_index + 1 == vehicle.path.len() - 1 {
             vehicle.state = VehicleState::Arrived;
             vehicle.path_index += 1;
+            vehicle.arrived_at = Some(_current_time);
             if let Some(road_vehicles) = vehicles_by_road.get_mut(&current_road_index) {
                 road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
             }
@@ -337,6 +339,37 @@ impl Simulation for SimulationEngine {
         }
     }
 
+    fn get_score(&self) -> f32{
+        let nb_arrived = self.vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
+        let success_rate = if self.vehicles.len() == 0 { 0.0 } else { nb_arrived as f32 / self.vehicles.len() as f32};
+        
+        let total_trip_time: f32 = self.vehicles
+            .iter()
+            .filter(|v| matches!(v.state, VehicleState::Arrived))
+            .filter_map(|v| v.arrived_at.map(|a| a - v.trip.departure_time as f32))
+            .sum();
+        let total_ref_trip_time: f32 = self.vehicles
+            .iter()
+            .filter(|v| matches!(v.state, VehicleState::Arrived))
+            .map(|v| v.get_min_time(&self.config.map))
+            .sum();
+        
+        let total_emitted_co2: f32 = self.vehicles
+            .iter()
+            .filter(|v| matches!(v.state, VehicleState::Arrived))
+            .map(|v| v.emitted_co2)
+            .sum();
+        let total_ref_emitted_co2: f32 = self.vehicles
+            .iter()
+            .filter(|v| matches!(v.state, VehicleState::Arrived))
+            .map(|v| v.get_min_co2(&self.config))
+            .sum();
+        
+        //println!("Empirical / Theoretical Co2 {} / {}", total_emitted_co2, total_ref_emitted_co2);
+
+        return self.config.time_weight * total_ref_trip_time / total_trip_time + self.config.succes_weight * success_rate + self.config.pollution_weight * total_ref_emitted_co2 / total_emitted_co2;
+    }
+
     fn run(&mut self) {
         for vehicle in &mut self.vehicles {
             vehicle.update_path(&self.config.map);
@@ -355,16 +388,20 @@ impl Simulation for SimulationEngine {
         }
 
         let mut proxies = self.build_proxies();
+        let mut need_print_score = true;
 
         for (vehicle_index, vehicle) in self.vehicles.iter_mut().enumerate() {
             match vehicle.state {
-                VehicleState::WaitingToDepart => Self::handle_waiting_to_depart(
-                    &mut self.config,
-                    &mut self.vehicles_by_road,
-                    &mut proxies,
-                    vehicle,
-                    vehicle_index,
-                ),
+                VehicleState::WaitingToDepart => {
+                    Self::handle_waiting_to_depart(
+                        &mut self.config,
+                        &mut self.vehicles_by_road,
+                        &mut proxies,
+                        vehicle,
+                        vehicle_index,
+                    );
+                    need_print_score = false;
+                },
                 VehicleState::OnRoad => {
                     Self::handle_on_road(
                         &mut self.config,
@@ -374,10 +411,16 @@ impl Simulation for SimulationEngine {
                         vehicle_index,
                         self.current_time,
                     );
+                    need_print_score = false;
                     vehicle.update_co2_emissions(self.config.time_step, self.config.air_density, self.config.gravity_coefficient);
                 },
-                VehicleState::Arrived => {}
+                VehicleState::Arrived => {
+                }
             }
+        }
+
+        if need_print_score {
+            println!("Score : {}", self.get_score());
         }
     }
 }

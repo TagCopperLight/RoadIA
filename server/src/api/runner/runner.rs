@@ -45,16 +45,19 @@ pub struct AppState {
 pub async fn run() -> io::Result<()> {
     // let map = create_connected_map(200, 1500.0, 1500.0);
     let map = create_intersection_test_map();
-    let vehicles = create_random_vehicles(&map, 50);
+    let vehicles = create_random_vehicles(&map, 500);
     
     let config = SimulationConfig {
         start_time: 0.0,
         end_time: f32::MAX,
         time_step: 0.1,
         minimum_gap: 2.0,
-        map: map.clone(),
         air_density: 1.225, // en Mg/m^3
-        gravity_coefficient: 9.81
+        gravity_coefficient: 9.81,
+        time_weight : 0.5,
+        succes_weight: 0.3,
+        pollution_weight: 0.2,
+        map: map.clone(),
     };
 
     let mut simulation = SimulationEngine::new(config, vehicles);
