@@ -117,6 +117,7 @@ mod tests {
             previous_position: 0.0,
             velocity: 0.0,
             previous_velocity: 0.0,
+            lane: 0,
         });
 
         let mut sim = SimulationEngine::new(config, vehicles);
@@ -206,6 +207,7 @@ mod tests {
             previous_position: 0.0,
             velocity: 0.0,
             previous_velocity: 0.0,
+            lane: 0,
         });
 
         let path1 = fastest_path(&map, h2, w1);
@@ -226,6 +228,7 @@ mod tests {
             previous_position: 0.0,
             velocity: 0.0,
             previous_velocity: 0.0,
+            lane: 0,
         });
 
         let mut sim = SimulationEngine::new(config, vehicles);

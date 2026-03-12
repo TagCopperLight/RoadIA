@@ -17,7 +17,7 @@ export function Vehicle({ data }: VehicleProps) {
             let y = data.y;
 
             if (data.heading !== undefined) {
-                const offsetDistance = 4;
+                const offsetDistance = 4 + 8*data.lane;
                 const offsetX = offsetDistance * Math.cos(data.heading + Math.PI / 2);
                 const offsetY = offsetDistance * Math.sin(data.heading + Math.PI / 2);
                 x += offsetX;

@@ -193,6 +193,7 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
         "id": vehicle.id,
         "x": coords.x,
         "y": coords.y,
+        "lane": vehicle.lane,
         "kind": match vehicle.spec.kind {
                 VehicleKind::Car => "Car",
                 VehicleKind::Bus => "Bus",

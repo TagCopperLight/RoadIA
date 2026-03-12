@@ -24,6 +24,8 @@ pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,
     pub current_time: f32,
+    // EdgeIndex : road index
+    // Vec<usize> : vehicle indexes
     pub vehicles_by_road: HashMap<EdgeIndex, Vec<usize>>,
 }
 

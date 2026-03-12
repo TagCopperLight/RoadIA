@@ -23,6 +23,7 @@ export interface VehicleData {
     id: number;
     x: number;
     y: number;
+	lane: number;
     kind: string;
     state: string;
     heading?: number;

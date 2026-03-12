@@ -311,3 +311,33 @@ pub fn create_intersection_test_map() -> Map {
 
     map
 }
+
+pub fn create_multilane_test_map() -> Map {
+    let mut map = Map::new();
+
+    // North (Node 1) - Habitation
+    let north = map.add_intersection(Intersection::new(
+        0,
+        IntersectionKind::Habitation,
+        "North".into(),
+        500.0,
+        0.0, // 500m North
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // South (Node 2) - Workplace
+    let south = map.add_intersection(Intersection::new(
+        1,
+        IntersectionKind::Workplace,
+        "South".into(),
+        500.0,
+        1000.0, // 500m South
+        crate::map::intersection::IntersectionType::Priority,
+    ));
+
+    // Roads
+    // N -> S (Priority)
+    map.add_two_way_road(north, south, Road::new(0, 2, 40.0, 1000.0, false, false));
+
+    map
+}

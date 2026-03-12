@@ -48,6 +48,7 @@ pub struct Vehicle {
     pub previous_position: f32,
     pub velocity: f32,
     pub previous_velocity: f32,
+    pub lane: u8,
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
@@ -77,6 +78,7 @@ impl Vehicle {
             velocity: 0.0,
             position_on_road: 0.0,
             previous_position: 0.0,
+            lane: 1,
         }
     }
 

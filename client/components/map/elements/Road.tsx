@@ -1,7 +1,9 @@
 import { MapNode } from '../types';
 
-export function Road({ start, end }: { start: MapNode, end: MapNode }) {
-	const width = 15;
+export function Road({ start, end, laneCount }: { start: MapNode, end: MapNode, laneCount: number }) {
+	const laneWidth = 7;
+	const lineWidth = 1;
+	const width = (laneWidth + lineWidth) * 2 * laneCount - lineWidth;
 	return (
 		<pixiGraphics draw={(graphics) => {
 			graphics.clear();
@@ -18,10 +20,13 @@ export function Road({ start, end }: { start: MapNode, end: MapNode }) {
 			graphics.rect(0, -width / 2, length, width);
 			graphics.fill();
 
-			graphics.setStrokeStyle({ color: 'white' });
-			graphics.moveTo(0, 0);
-			graphics.lineTo(length, 0);
-			graphics.stroke();
+			for (let line = -laneCount+1; line < laneCount; line++){
+				const linePosition = line*(laneWidth+lineWidth);
+				graphics.setStrokeStyle({ color: 'white' });
+				graphics.moveTo(0, linePosition);
+				graphics.lineTo(length, linePosition);
+				graphics.stroke({width: lineWidth});
+			}
 		}} />
 	);
 }

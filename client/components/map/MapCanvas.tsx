@@ -19,8 +19,9 @@ export function MapCanvas({ data, vehicles }: { data: MapData, vehicles: Vehicle
 				{data.edges.map((edge, index) => {
 					const startNode = data.nodes.find(n => n.id === edge.from);
 					const endNode = data.nodes.find(n => n.id === edge.to);
+					const laneCount = edge.lane_count;
 					if (!startNode || !endNode) return null;
-					return <Road key={`road-${edge.id}-${index}`} start={startNode} end={endNode} />;
+					return <Road key={`road-${edge.id}-${index}`} start={startNode} end={endNode} laneCount={laneCount} />;
 				})}
 				{data.nodes.map((node) => (
 					<Intersection key={`node-${node.id}`} node={node} />
