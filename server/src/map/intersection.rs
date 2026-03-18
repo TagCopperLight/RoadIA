@@ -263,9 +263,9 @@ impl IntersectionController {
         let sort_by_right_priority = |a: &&IntersectionRequest, b: &&IntersectionRequest| {
             let delta = (b.entry_angle - a.entry_angle + 360.0) % 360.0;
             if delta > 180.0 {
-                Less
-            } else if delta < 180.0 && delta > 0.0 {
                 Greater
+            } else if delta < 180.0 && delta > 0.0 {
+                Less
             } else {
                 a.arrival_time.partial_cmp(&b.arrival_time).unwrap_or(Equal)
             }
