@@ -59,10 +59,19 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     let mut map = Map::new();
 
     let mut nodes = Vec::with_capacity(num_nodes);
+    const MIN_NODE_SPACING: f32 = 30.0;
+    let mut positions: Vec<(f32, f32)> = Vec::with_capacity(num_nodes);
 
     // 1. Create random nodes
-    for i in 0..num_nodes {
-        // Ensure at least one Habitation and one Workplace
+    let mut i = 0;
+    while i < num_nodes {
+        let x = rand::random_range(0.0..width);
+        let y = rand::random_range(0.0..height);
+
+        if positions.iter().any(|&(px, py)| (x - px).hypot(y - py) < MIN_NODE_SPACING) {
+            continue;
+        }
+
         let kind = if i == 0 {
             IntersectionKind::Habitation
         } else if i == 1 {
@@ -78,11 +87,12 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
         let node_idx = map.add_intersection(
             kind,
             format!("node_{}", i),
-            rand::random_range(0.0..width),
-            rand::random_range(0.0..height),
+            x, y,
             IntersectionType::Priority,
         );
         nodes.push(node_idx);
+        positions.push((x, y));
+        i += 1;
     }
 
     // 2. Build MST to ensure connectivity
