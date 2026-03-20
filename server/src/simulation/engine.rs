@@ -123,9 +123,10 @@ impl SimulationEngine {
         minimum_gap: f32,
         map: &Map,
     ) -> f32 {
-        // On the last road: head straight to destination, no intersection to yield to.
+        // On the last road: decelerate to stop at the destination (workplace/habitation).
         if vehicle.path_index + 1 == vehicle.path.len() - 1 {
-            return vehicle.compute_acceleration(speed_limit, minimum_gap, f32::INFINITY, 0.0);
+            let gap_to_destination = (road_length - vehicle.position_on_road).max(0.001) + minimum_gap + 1.0;
+            return vehicle.compute_acceleration(speed_limit, minimum_gap, gap_to_destination, 0.0);
         }
 
         let next_intersection = &map.graph[vehicle.get_next_node()];
