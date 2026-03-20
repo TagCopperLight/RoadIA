@@ -1,27 +1,45 @@
-import { MapNode } from '../types';
+import { FederatedPointerEvent } from 'pixi.js';
+import { MapNode, EditTool } from '../types';
 
-export function Road({ start, end }: { start: MapNode, end: MapNode }) {
+interface RoadProps {
+	start: MapNode;
+	end: MapNode;
+	selected?: boolean;
+	editMode?: boolean;
+	activeTool?: EditTool;
+	onSelect?: (e: FederatedPointerEvent) => void;
+}
+
+export function Road({ start, end, selected = false, editMode = false, activeTool, onSelect }: RoadProps) {
 	const width = 15;
+	const isInteractive = editMode && activeTool === 'select';
+
 	return (
-		<pixiGraphics draw={(graphics) => {
-			graphics.clear();
+		<pixiGraphics
+			eventMode={isInteractive ? 'static' : 'none'}
+			cursor={isInteractive ? 'pointer' : 'default'}
+			onClick={onSelect}
+			draw={(graphics) => {
+				graphics.clear();
 
-			const dx = end.x - start.x;
-			const dy = end.y - start.y;
-			const length = Math.sqrt(dx * dx + dy * dy);
-			const angle = Math.atan2(dy, dx);
+				const dx = end.x - start.x;
+				const dy = end.y - start.y;
+				const length = Math.sqrt(dx * dx + dy * dy);
+				const angle = Math.atan2(dy, dx);
 
-			graphics.position.set(start.x, start.y);
-			graphics.rotation = angle;
+				graphics.position.set(start.x, start.y);
+				graphics.rotation = angle;
 
-			graphics.setFillStyle({ color: 'gray' });
-			graphics.rect(0, -width / 2, length, width);
-			graphics.fill();
+				const fillColor = selected ? 0xddcc00 : 0x888888;
+				graphics.setFillStyle({ color: fillColor });
+				graphics.rect(0, -width / 2, length, width);
+				graphics.fill();
 
-			graphics.setStrokeStyle({ color: 'white' });
-			graphics.moveTo(0, 0);
-			graphics.lineTo(length, 0);
-			graphics.stroke();
-		}} />
+				graphics.setStrokeStyle({ color: 'white' });
+				graphics.moveTo(0, 0);
+				graphics.lineTo(length, 0);
+				graphics.stroke();
+			}}
+		/>
 	);
 }

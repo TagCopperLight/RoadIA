@@ -2,15 +2,30 @@
 
 import Image from "next/image";
 import { useCallback, useState, useEffect, useRef } from 'react';
-import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
+import { sendConnectionToken, useWebSocket, wsClient } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData } from './map/types';
+import { MapData, VehicleData, EditTool } from './map/types';
+import PropertiesPanel from './PropertiesPanel';
 
 interface MapComponentProps {
 	uuid: string;
+	editMode: boolean;
+	activeTool: EditTool;
+	selectedNodeId: number | null;
+	setSelectedNodeId: (id: number | null) => void;
+	selectedEdgeId: number | null;
+	setSelectedEdgeId: (id: number | null) => void;
 }
 
-export default function MapComponent({ uuid }: MapComponentProps) {
+export default function MapComponent({
+	uuid,
+	editMode,
+	activeTool,
+	selectedNodeId,
+	setSelectedNodeId,
+	selectedEdgeId,
+	setSelectedEdgeId,
+}: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
@@ -25,22 +40,26 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	}, []);
 
 	useWebSocket("map", (data) => {
-		console.log("Received map data:", data);
 		setMapData(data as MapData);
 	});
 
+	useWebSocket("mapEdit", useCallback((data: any) => {
+		if (data.success) {
+			setMapData({ nodes: data.nodes, edges: data.edges });
+		} else {
+			console.error("[MapEdit] Error:", data.error);
+		}
+	}, []));
 
 	useWebSocket("vehicleUpdate", (data: any) => {
         if (data && Array.isArray(data.vehicles)) {
 			const newVehicles = data.vehicles as VehicleData[];
 			const processedVehicles = newVehicles.map(vehicle => {
 				const prevVehicle = prevVehiclesRef.current[vehicle.id];
-				
 				if (prevVehicle) {
 					const dx = vehicle.x - prevVehicle.x;
 					const dy = vehicle.y - prevVehicle.y;
 					const dist = Math.sqrt(dx * dx + dy * dy);
-					
 					if (dist > 0.01) {
 						vehicle.heading = Math.atan2(dy, dx);
 						vehicle.speed = dist;
@@ -49,27 +68,64 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 						vehicle.speed = 0;
 					}
 				} else {
-                    // Initial heading if unknown, maybe 0 or undefined
                     vehicle.heading = undefined;
                     vehicle.speed = 0;
                 }
 				return vehicle;
 			});
 
-			// Update ref for next frame
 			const newPrevVehicles: Record<number, VehicleData> = {};
 			processedVehicles.forEach(v => {
 				newPrevVehicles[v.id] = v;
 			});
 			prevVehiclesRef.current = newPrevVehicles;
-
 		    setVehicles(processedVehicles);
         }
 	});
 
+	const sendPacket = useCallback((packetId: string, data: object) => {
+		wsClient.send(packetId, data);
+	}, []);
+
+	const selectedNode = mapData?.nodes.find(n => n.id === selectedNodeId) ?? null;
+	const selectedEdge = mapData?.edges.find(e => e.id === selectedEdgeId) ?? null;
+
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
-			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} />}
+			{container && (
+				<PixiApp
+					resizeTo={container}
+					mapData={mapData}
+					vehicles={vehicles}
+					editMode={editMode}
+					activeTool={activeTool}
+					selectedNodeId={selectedNodeId}
+					setSelectedNodeId={setSelectedNodeId}
+					selectedEdgeId={selectedEdgeId}
+					setSelectedEdgeId={setSelectedEdgeId}
+					sendPacket={sendPacket}
+				/>
+			)}
+
+			{editMode && (selectedNode || selectedEdge) && (
+				<PropertiesPanel
+					selectedNode={selectedNode}
+					selectedEdge={selectedEdge}
+					onUpdateNode={(id, kind, name) => sendPacket('updateNode', { id, kind, name })}
+					onDeleteNode={(id) => {
+						sendPacket('deleteNode', { id });
+						setSelectedNodeId(null);
+					}}
+					onUpdateEdge={(id, lane_count, speed_limit, is_blocked, can_overtake) =>
+						sendPacket('updateRoad', { id, lane_count, speed_limit, is_blocked, can_overtake })
+					}
+					onDeleteEdge={(id) => {
+						sendPacket('deleteRoad', { id });
+						setSelectedEdgeId(null);
+					}}
+				/>
+			)}
+
 			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>

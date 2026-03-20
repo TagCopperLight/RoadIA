@@ -12,6 +12,9 @@ export interface MapEdge {
 	lane_count: number;
 	length: number;
 	to: number;
+	speed_limit: number;
+	is_blocked: boolean;
+	can_overtake: boolean;
 }
 
 export interface MapData {
@@ -28,3 +31,5 @@ export interface VehicleData {
     heading?: number;
     speed?: number;
 }
+
+export type EditTool = "select" | "addNode" | "addRoad";
