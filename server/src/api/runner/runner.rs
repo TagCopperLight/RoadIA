@@ -45,7 +45,7 @@ pub struct AppState {
 pub async fn run() -> io::Result<()> {
     // let map = create_connected_map(200, 1500.0, 1500.0);
     let map = create_intersection_test_map();
-    let vehicles = create_random_vehicles(&map, 500);
+    let vehicles = create_random_vehicles(&map, 50);
     
     let config = SimulationConfig {
         start_time: 0.0,
@@ -55,7 +55,7 @@ pub async fn run() -> io::Result<()> {
         air_density: 1.225, // in kg/m^3
         gravity_coefficient: 9.81,
         time_weight : 0.5,
-        succes_weight: 0.3,
+        success_weight: 0.3,
         pollution_weight: 0.2,
         map: map.clone(),
     };

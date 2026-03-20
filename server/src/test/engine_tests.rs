@@ -2,7 +2,7 @@ use crate::map::intersection::{Intersection, IntersectionKind, IntersectionType}
 use crate::map::road::Road;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::{
-    fastest_path, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState,
+    TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState,
 };
 
 fn all_arrived(sim: &SimulationEngine) -> bool {
@@ -18,13 +18,7 @@ mod tests {
     fn test_simulation_engine_creation_and_step() {
         let map = Map::default();
         let vehicles = vec![];
-        let config = SimulationConfig {
-            start_time: 0.0,
-            end_time: 10.0,
-            time_step: 1.0,
-            minimum_gap: 1.0,
-            map,
-        };
+        let config = SimulationConfig::new(10.0, 1.0, map);
         let mut sim = SimulationEngine::new(config, vehicles);
 
         assert_eq!(sim.current_time, 0.0);
@@ -80,44 +74,11 @@ mod tests {
         map.add_two_way_road(h2, i1, Road::new(1, 1, 50.0, 100.0, false, false));
         map.add_two_way_road(i1, w1, Road::new(2, 1, 100.0, 100.0, false, false));
 
-        let config = SimulationConfig {
-            start_time: 0.0,
-            end_time: 10.0,
-            time_step: 0.1,
-            minimum_gap: 1.0,
-            map: map.clone(),
-        };
+        let config = SimulationConfig::new(10.0, 0.1, map.clone());
 
-        let mut vehicles: Vec<Vehicle> = Vec::new();
-
-        let spec = VehicleSpec {
-            kind: VehicleKind::Car,
-            max_speed: 100.0,
-            max_acceleration: 20.0,
-            comfortable_deceleration: 1.67,
-            reaction_time: 1.0,
-            length: 5.0,
-        };
-
-        let path = fastest_path(&map, h1, w1);
-
-        vehicles.push(Vehicle {
-            id: 0,
-            spec,
-            trip: TripRequest {
-                origin: h1,
-                destination: w1,
-                departure_time: 0,
-                return_time: None,
-            },
-            state: VehicleState::WaitingToDepart,
-            path,
-            path_index: 0,
-            position_on_road: 0.0,
-            previous_position: 0.0,
-            velocity: 0.0,
-            previous_velocity: 0.0,
-        });
+        let spec = VehicleSpec::new(VehicleKind::Car, 100.0, 20.0, 1.67, 1.0, 5.0);
+        let trip = TripRequest { origin: h1, destination: w1, departure_time: 0, return_time: None };
+        let vehicles = vec![Vehicle::new(0, spec, trip)];
 
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
@@ -127,7 +88,6 @@ mod tests {
     #[test]
     fn test_simulation_engine_multiple_vehicles() {
         let mut map = Map::new();
-
 
         let h1 = map.add_intersection(Intersection::new(
             0,
@@ -169,64 +129,13 @@ mod tests {
         map.add_two_way_road(h2, i1, Road::new(1, 1, 50.0, 100.0, false, false));
         map.add_two_way_road(i1, w1, Road::new(2, 1, 100.0, 100.0, false, false));
 
-        let config = SimulationConfig {
-            start_time: 0.0,
-            end_time: 10.0,
-            time_step: 0.1,
-            minimum_gap: 1.0,
-            map: map.clone(),
-        };
+        let config = SimulationConfig::new(10.0, 0.1, map.clone());
 
-        let mut vehicles: Vec<Vehicle> = Vec::new();
-
-        let spec = VehicleSpec {
-            kind: VehicleKind::Car,
-            max_speed: 100.0,
-            max_acceleration: 20.0,
-            comfortable_deceleration: 1.67,
-            reaction_time: 1.0,
-            length: 5.0,
-        };
-
-        let path0 = fastest_path(&map, h1, w1);
-
-        vehicles.push(Vehicle {
-            id: 0,
-            spec,
-            trip: TripRequest {
-                origin: h1,
-                destination: w1,
-                departure_time: 0,
-                return_time: None,
-            },
-            state: VehicleState::WaitingToDepart,
-            path: path0,
-            path_index: 0,
-            position_on_road: 0.0,
-            previous_position: 0.0,
-            velocity: 0.0,
-            previous_velocity: 0.0,
-        });
-
-        let path1 = fastest_path(&map, h2, w1);
-
-        vehicles.push(Vehicle {
-            id: 1,
-            spec,
-            trip: TripRequest {
-                origin: h2,
-                destination: w1,
-                departure_time: 0,
-                return_time: None,
-            },
-            state: VehicleState::WaitingToDepart,
-            path: path1,
-            path_index: 0,
-            position_on_road: 0.0,
-            previous_position: 0.0,
-            velocity: 0.0,
-            previous_velocity: 0.0,
-        });
+        let spec = VehicleSpec::new(VehicleKind::Car, 100.0, 20.0, 1.67, 1.0, 5.0);
+        let vehicles = vec![
+            Vehicle::new(0, spec, TripRequest { origin: h1, destination: w1, departure_time: 0, return_time: None }),
+            Vehicle::new(1, spec, TripRequest { origin: h2, destination: w1, departure_time: 0, return_time: None }),
+        ];
 
         let mut sim = SimulationEngine::new(config, vehicles);
         sim.run();
@@ -290,7 +199,7 @@ mod tests {
             100.0,
             IntersectionType::Priority,
         ));
-        
+
         let road_id_stop = 888;
         map.add_two_way_road(
             h2,
