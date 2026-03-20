@@ -9,7 +9,7 @@ pub struct SimulationConfig {
     pub gravity_coefficient: f32, //en m/s²
     //Les paramètres suivants pondèrent les facteurs du score
     pub time_weight : f32,
-    pub succes_weight: f32,
+    pub success_weight: f32,
     pub pollution_weight: f32,
     pub map: Map,
 }
