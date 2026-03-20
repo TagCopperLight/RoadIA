@@ -2,6 +2,7 @@ use crate::map::intersection::IntersectionRules;
 use crate::map::model::Map;
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
+use crate::scoring;
 use petgraph::graph::EdgeIndex;
 use std::collections::HashMap;
 
@@ -339,47 +340,8 @@ impl Simulation for SimulationEngine {
         }
     }
 
-    fn get_score(&self) -> f32{
-        let nb_arrived = self.vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
-        let success_rate = if self.vehicles.len() == 0 { 0.0 } else { nb_arrived as f32 / self.vehicles.len() as f32};
-        
-        let total_trip_time: f32 = self.vehicles
-            .iter()
-            .filter(|v| matches!(v.state, VehicleState::Arrived))
-            .filter_map(|v| v.arrived_at.map(|a| a - v.trip.departure_time as f32))
-            .sum();
-        let total_ref_trip_time: f32 = self.vehicles
-            .iter()
-            .filter(|v| matches!(v.state, VehicleState::Arrived))
-            .map(|v| v.get_min_time(&self.config.map))
-            .sum();
-        
-        let total_emitted_co2: f32 = self.vehicles
-            .iter()
-            .filter(|v| matches!(v.state, VehicleState::Arrived))
-            .map(|v| v.emitted_co2)
-            .sum();
-        let total_ref_emitted_co2: f32 = self.vehicles
-            .iter()
-            .filter(|v| matches!(v.state, VehicleState::Arrived))
-            .map(|v| v.get_min_co2(&self.config))
-            .sum();
-        
-        //println!("Empirical / Theoretical Co2 {} / {}", total_emitted_co2, total_ref_emitted_co2);
-
-        let time_term = if total_trip_time > 0.0 {
-            self.config.time_weight * total_ref_trip_time / total_trip_time
-        } else {
-            0.0
-        };
-
-        let pollution_term = if total_emitted_co2 > 0.0 {
-            self.config.pollution_weight * total_ref_emitted_co2 / total_emitted_co2
-        } else {
-            0.0
-        };
-
-        return time_term + self.config.succes_weight * success_rate + pollution_term;
+    fn get_score(&self) -> f32 {
+        scoring::compute_score(&self.vehicles, &self.config)
     }
 
     fn run(&mut self) {
@@ -415,6 +377,7 @@ impl Simulation for SimulationEngine {
                     need_print_score = false;
                 },
                 VehicleState::OnRoad => {
+                    scoring::update_co2_emissions(vehicle, self.config.time_step, self.config.air_density, self.config.gravity_coefficient);
                     Self::handle_on_road(
                         &mut self.config,
                         &mut self.vehicles_by_road,
@@ -424,7 +387,6 @@ impl Simulation for SimulationEngine {
                         self.current_time,
                     );
                     need_print_score = false;
-                    vehicle.update_co2_emissions(self.config.time_step, self.config.air_density, self.config.gravity_coefficient);
                 },
                 VehicleState::Arrived => {
                 }

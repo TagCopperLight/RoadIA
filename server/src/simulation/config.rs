@@ -14,5 +14,22 @@ pub struct SimulationConfig {
     pub map: Map,
 }
 
+impl SimulationConfig {
+    pub fn new(end_time: f32, time_step: f32, map: Map) -> Self {
+        Self {
+            start_time: 0.0,
+            end_time,
+            time_step,
+            minimum_gap: 1.0,
+            air_density: 1.225,
+            gravity_coefficient: 9.81,
+            time_weight: 0.5,
+            success_weight: 0.3,
+            pollution_weight: 0.2,
+            map,
+        }
+    }
+}
+
 pub const MAX_SPEED: f32 = 42.0;
 pub const ACCELERATION_EXPONENT: f32 = 4.0;

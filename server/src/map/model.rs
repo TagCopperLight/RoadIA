@@ -3,9 +3,6 @@ use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use crate::map::intersection::Intersection;
 use crate::map::road::Road;
 
-use crate::simulation::config::{SimulationConfig};
-use crate::simulation::vehicle::{VehicleSpec};
-
 #[derive(Default, Clone)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
@@ -74,41 +71,4 @@ impl Map {
         (dx * dx + dy * dy).sqrt()
     }
 
-    pub fn get_minimal_time_travel_by_road(&self, road_index : EdgeIndex, acceleration : f32, vehicle_max_speed : f32) -> f32{
-        let road = self
-            .graph
-            .edge_weight(road_index)
-            .expect("get_minimal_time_travel_by_road called with invalid EdgeIndex (no corresponding road)");
-
-        let max_speed = vehicle_max_speed.min(road.speed_limit);
-        let acceleration_phase_length = 0.5 * max_speed * max_speed / acceleration;
-        if road.length <= acceleration_phase_length {
-            (2.0 * road.length / acceleration).sqrt()
-        } else {
-            max_speed / acceleration + (road.length - acceleration_phase_length) / max_speed
-        }
-    }
-
-    pub fn get_minimal_co2_by_road(&self, road_index : EdgeIndex, vehicle_spec : VehicleSpec, simulation_config : &SimulationConfig) -> f32 {
-        let road = self
-            .graph
-            .edge_weight(road_index)
-            .expect("get_minimal_co2_by_road called with an invalid EdgeIndex (no associated road)");
-
-        let max_speed = vehicle_spec.max_speed.min(road.speed_limit);
-        let acceleration_phase_length = 0.5 * max_speed * max_speed / vehicle_spec.max_acceleration;
-        //Les 3 coefficients suivants sont des constantes posées dans la doc
-        let c1 = vehicle_spec.stoichiometric_co2_factor / (vehicle_spec.engine_thermal_efficiency * vehicle_spec.lower_heating_value_for_fuel);
-        let c2 = 0.5 * simulation_config.air_density * vehicle_spec.aerodynamic_drag_coefficient * vehicle_spec.front_area;
-        let c3 = vehicle_spec.mass * simulation_config.gravity_coefficient * vehicle_spec.rolling_resistance_coefficient;
-        let t1p1 = (2.0 * road.length / vehicle_spec.max_acceleration).powf(0.5);
-        let t1 = max_speed / vehicle_spec.max_acceleration;
-        let t2 = (road.length - acceleration_phase_length) / max_speed;
-        //println!("max_speed : {}; a: {}, l : {}, l1 : {}; c1: {}, c2: {}, c3: {}, t1: {}, t2: {}", max_speed, vehicle_spec.max_acceleration, road.length, acceleration_phase_length, c1, c2, c3, t1, t2);
-        if acceleration_phase_length >= road.length{
-            0.5 * c1 * (c2 * vehicle_spec.max_acceleration.powi(3) * 0.5 * t1p1.powi(4) + c3 * vehicle_spec.max_acceleration * t1p1.powi(2) + vehicle_spec.mass * vehicle_spec.max_acceleration.powi(2) * t1p1.powi(2))
-        }else{
-            t2 * c1 * (c2 * max_speed.powi(3) + c3 * max_speed) + 0.5 * c1 * (c2 * vehicle_spec.max_acceleration.powi(3) * 0.5 * t1.powi(4) + c3 * vehicle_spec.max_acceleration * t1.powi(2) + vehicle_spec.mass * vehicle_spec.max_acceleration.powi(2) * t1.powi(2))
-        }
-    }
 }
