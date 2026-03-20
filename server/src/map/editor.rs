@@ -18,12 +18,25 @@ pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {
         .copied()
         .ok_or_else(|| format!("Node {} not found", id))?;
 
+    let outgoing: Vec<(u32, u32)> = map
+        .graph
+        .edges_directed(idx, Direction::Outgoing)
+        .map(|e| (e.weight().id, map.graph[e.target()].id))
+        .collect();
+
     map.node_index_map.remove(&id);
     map.graph.remove_node(idx);
 
     if let Some(swapped) = map.graph.node_weight(idx) {
         let swapped_id = swapped.id;
         map.node_index_map.insert(swapped_id, idx);
+    }
+
+    for (edge_id, dest_id) in outgoing {
+        if let Some(&dest_idx) = map.node_index_map.get(&dest_id) {
+            map.graph[dest_idx].rules.remove(&edge_id);
+            recalculate_intersection_rules(map, dest_idx);
+        }
     }
 
     Ok(())
@@ -163,31 +176,31 @@ fn recalculate_intersection_rules(map: &mut Map, node_idx: NodeIndex) {
         .edges_directed(node_idx, Direction::Incoming)
         .count();
 
+    let edge_ids: Vec<u32> = map
+        .graph
+        .edges_directed(node_idx, Direction::Incoming)
+        .map(|e| e.weight().id)
+        .collect();
+
     if incoming_count <= 1 {
         map.graph[node_idx].intersection_type = IntersectionType::Priority;
         map.graph[node_idx].rules.clear();
-
-        // Re-add rules for remaining incoming edges.
-        let edge_ids: Vec<u32> = map
-            .graph
-            .edges_directed(node_idx, Direction::Incoming)
-            .map(|e| e.weight().id)
-            .collect();
         for road_id in edge_ids {
             map.graph[node_idx].rules.insert(road_id, IntersectionRules::Priority);
         }
     } else {
-        // Keep existing intersection_type; rebuild rules for all incoming edges.
-        let edge_ids: Vec<u32> = map
-            .graph
-            .edges_directed(node_idx, Direction::Incoming)
-            .map(|e| e.weight().id)
-            .collect();
+        map.graph[node_idx].rules.retain(|road_id, _| edge_ids.contains(road_id));
+
+        let default_rule = match map.graph[node_idx].intersection_type {
+            IntersectionType::Priority => IntersectionRules::Priority,
+            IntersectionType::Stop => IntersectionRules::Stop,
+            IntersectionType::TrafficLight => IntersectionRules::TrafficLight,
+        };
         for road_id in edge_ids {
             map.graph[node_idx]
                 .rules
                 .entry(road_id)
-                .or_insert(IntersectionRules::Priority);
+                .or_insert(default_rule.clone());
         }
     }
 }
