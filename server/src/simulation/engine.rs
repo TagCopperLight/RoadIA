@@ -367,7 +367,19 @@ impl Simulation for SimulationEngine {
         
         //println!("Empirical / Theoretical Co2 {} / {}", total_emitted_co2, total_ref_emitted_co2);
 
-        return self.config.time_weight * total_ref_trip_time / total_trip_time + self.config.succes_weight * success_rate + self.config.pollution_weight * total_ref_emitted_co2 / total_emitted_co2;
+        let time_term = if total_trip_time > 0.0 {
+            self.config.time_weight * total_ref_trip_time / total_trip_time
+        } else {
+            0.0
+        };
+
+        let pollution_term = if total_emitted_co2 > 0.0 {
+            self.config.pollution_weight * total_ref_emitted_co2 / total_emitted_co2
+        } else {
+            0.0
+        };
+
+        return time_term + self.config.succes_weight * success_rate + pollution_term;
     }
 
     fn run(&mut self) {
