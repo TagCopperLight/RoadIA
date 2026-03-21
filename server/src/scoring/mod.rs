@@ -18,28 +18,18 @@ pub fn get_minimal_time_travel_by_road(map: &Map, road_index: EdgeIndex, acceler
     }
 }
 
-pub fn get_minimal_co2_by_road(map: &Map, road_index: EdgeIndex, vehicle_spec: VehicleSpec, simulation_config: &SimulationConfig) -> f32 {
-    let road = map
-        .graph
-        .edge_weight(road_index)
-        .expect("get_minimal_co2_by_road called with an invalid EdgeIndex (no associated road)");
-
-    let max_speed = vehicle_spec.max_speed.min(road.speed_limit);
-    let acceleration_phase_length = 0.5 * max_speed * max_speed / vehicle_spec.max_acceleration;
-    //Les 3 coefficients suivants sont des constantes posées dans la doc
-    let c1 = vehicle_spec.stoichiometric_co2_factor / (vehicle_spec.engine_thermal_efficiency * vehicle_spec.lower_heating_value_for_fuel);
-    let c2 = 0.5 * simulation_config.air_density * vehicle_spec.aerodynamic_drag_coefficient * vehicle_spec.front_area;
-    let c3 = vehicle_spec.mass * simulation_config.gravity_coefficient * vehicle_spec.rolling_resistance_coefficient;
-    let t1p1 = (2.0 * road.length / vehicle_spec.max_acceleration).powf(0.5);
-    let t1 = max_speed / vehicle_spec.max_acceleration;
-    let t2 = (road.length - acceleration_phase_length) / max_speed;
-    //println!("max_speed : {}; a: {}, l : {}, l1 : {}; c1: {}, c2: {}, c3: {}, t1: {}, t2: {}", max_speed, vehicle_spec.max_acceleration, road.length, acceleration_phase_length, c1, c2, c3, t1, t2);
-    if acceleration_phase_length >= road.length {
-        0.5 * c1 * (c2 * vehicle_spec.max_acceleration.powi(3) * 0.5 * t1p1.powi(4) + c3 * vehicle_spec.max_acceleration * t1p1.powi(2) + vehicle_spec.mass * vehicle_spec.max_acceleration.powi(2) * t1p1.powi(2))
-    } else {
-        t2 * c1 * (c2 * max_speed.powi(3) + c3 * max_speed) + 0.5 * c1 * (c2 * vehicle_spec.max_acceleration.powi(3) * 0.5 * t1.powi(4) + c3 * vehicle_spec.max_acceleration * t1.powi(2) + vehicle_spec.mass * vehicle_spec.max_acceleration.powi(2) * t1.powi(2))
+pub fn get_minimal_co2_by_road(map: &Map, road_index : EdgeIndex, vehicle_spec : VehicleSpec, simulation_config : &SimulationConfig) -> f32 {
+        match map.graph.edge_weight(road_index){
+            Some(road) => {
+                let cruise_speed = ((vehicle_spec.idle_power * vehicle_spec.drive_train_efficiency) / (simulation_config.air_density * vehicle_spec.aerodynamic_drag_coefficient * vehicle_spec.front_area)).powf(1.0/3.0);
+                let fuel_conversion_factor = vehicle_spec.stoichiometric_co2_factor / (vehicle_spec.engine_thermal_efficiency * vehicle_spec.lower_heating_value_for_fuel);
+                let aerodynamic_drag_force = 0.5*simulation_config.air_density * vehicle_spec.aerodynamic_drag_coefficient * vehicle_spec.front_area * cruise_speed * cruise_speed;
+                let rolling_resistance_force = vehicle_spec.mass * simulation_config.gravity_coefficient * vehicle_spec.rolling_resistance_coefficient;
+                road.length * fuel_conversion_factor * (vehicle_spec.idle_power / cruise_speed + (aerodynamic_drag_force + rolling_resistance_force) / vehicle_spec.drive_train_efficiency)
+            },
+            None => 0.0,
+        }
     }
-}
 
 pub fn get_vehicle_min_time(vehicle: &Vehicle, map: &Map) -> f32 {
     let mut total_time: f32 = 0.0;
@@ -86,15 +76,12 @@ pub fn get_vehicle_min_co2(vehicle: &Vehicle, sim_config: &SimulationConfig) -> 
     total_co2
 }
 
-pub fn update_co2_emissions(vehicle: &mut Vehicle, time_step: f32, air_density: f32, gravity_coefficient: f32) {
-    let acceleration = (vehicle.velocity - vehicle.previous_velocity).abs() / time_step;
-    let tractive_force = 0.5 * air_density * vehicle.spec.aerodynamic_drag_coefficient * vehicle.spec.front_area * vehicle.velocity * vehicle.velocity
-        + vehicle.spec.mass * gravity_coefficient * vehicle.spec.rolling_resistance_coefficient
-        + vehicle.spec.mass * acceleration;
-    let current_emissions = tractive_force * vehicle.velocity * vehicle.spec.stoichiometric_co2_factor
-        / (vehicle.spec.engine_thermal_efficiency * vehicle.spec.lower_heating_value_for_fuel);
-    vehicle.emitted_co2 += current_emissions * time_step;
-}
+pub fn update_co2_emissions(vehicle : &mut Vehicle, config: &SimulationConfig) {
+        let acceleration = (vehicle.velocity - vehicle.previous_velocity)/config.time_step;
+        let tractive_force = (0.5*config.air_density*vehicle.spec.aerodynamic_drag_coefficient*vehicle.spec.front_area*vehicle.velocity*vehicle.velocity + vehicle.spec.mass * config.gravity_coefficient * vehicle.spec.rolling_resistance_coefficient + vehicle.spec.mass * acceleration) / vehicle.spec.drive_train_efficiency;
+        let current_emissions = (tractive_force * vehicle.velocity + vehicle.spec.idle_power) * vehicle.spec.stoichiometric_co2_factor / (vehicle.spec.engine_thermal_efficiency * vehicle.spec.lower_heating_value_for_fuel);
+        vehicle.emitted_co2 += current_emissions * config.time_step;
+    }
 
 pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> f32 {
     let nb_arrived = vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();

@@ -20,6 +20,8 @@ pub struct VehicleSpec {
     //Les attributs suivant permettent de calculer les émissions co2
     pub mass : f32,//en kg
     pub engine_thermal_efficiency: f32,
+    pub drive_train_efficiency: f32,
+    pub idle_power: f32, // en W
     pub lower_heating_value_for_fuel: f32,//en Kj/Kg
     pub aerodynamic_drag_coefficient: f32,
     pub front_area: f32,
@@ -38,6 +40,8 @@ impl VehicleSpec {
             length,
             mass: 1680.0,
             engine_thermal_efficiency: 0.35,
+            drive_train_efficiency: 0.9,
+            idle_power: 2500.0,
             lower_heating_value_for_fuel: 43200.0,
             aerodynamic_drag_coefficient: 0.3,
             front_area: 2.0,
