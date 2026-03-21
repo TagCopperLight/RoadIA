@@ -11,6 +11,7 @@ pub struct SimulationConfig {
     pub time_weight : f32,
     pub success_weight: f32,
     pub pollution_weight: f32,
+    pub infrastructure_weight: f32,
     pub map: Map,
 }
 
@@ -23,9 +24,10 @@ impl SimulationConfig {
             minimum_gap: 1.0,
             air_density: 1.225,
             gravity_coefficient: 9.81,
-            time_weight: 0.5,
-            success_weight: 0.3,
+            time_weight: 0.4,
+            success_weight: 0.2,
             pollution_weight: 0.2,
+            infrastructure_weight: 0.2,
             map,
         }
     }
