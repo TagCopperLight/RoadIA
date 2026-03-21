@@ -377,7 +377,7 @@ impl Simulation for SimulationEngine {
                     need_print_score = false;
                 },
                 VehicleState::OnRoad => {
-                    scoring::update_co2_emissions(vehicle, self.config.time_step, self.config.air_density, self.config.gravity_coefficient);
+                    scoring::update_co2_emissions(vehicle, &self.config);
                     Self::handle_on_road(
                         &mut self.config,
                         &mut self.vehicles_by_road,
