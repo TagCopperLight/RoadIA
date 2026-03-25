@@ -23,8 +23,6 @@ pub struct VehicleSpec {
 pub struct TripRequest {
     pub origin: NodeIndex,
     pub destination: NodeIndex,
-    pub departure_time: u64,
-    pub return_time: Option<u64>,
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -43,11 +41,11 @@ pub struct Vehicle {
 
     pub path: Vec<NodeIndex>,
     pub path_index: usize,
-	
-    pub position_on_road: f32, // distance entre l'avant du véhicule et le début de la route
-    pub previous_position: f32,
+
+    pub position_on_lane: f32, // distance entre l'avant du véhicule et le début de la route
     pub velocity: f32,
     pub previous_velocity: f32,
+
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
@@ -60,7 +58,7 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
     );
     match result {
         Some((_cost, path)) => path,
-        None => Vec::new(),
+        None => panic!("No path found between {:?} and {:?}", source, destination),
     }
 }
 
@@ -75,29 +73,31 @@ impl Vehicle {
             path_index: 0,
             previous_velocity: 0.0,
             velocity: 0.0,
-            position_on_road: 0.0,
-            previous_position: 0.0,
+            position_on_lane: 0.0,
         }
     }
 
     pub fn update_path(&mut self, map: &Map) {
         self.path = fastest_path(map, self.trip.origin, self.trip.destination);
         self.path_index = 0;
-
-        if self.path.len() < 2 {
-            self.state = VehicleState::Arrived;
-        }
     }
 
     pub fn compute_acceleration(
         &self,
         desired_velocity: f32,
-        minimum_gap: f32,
+        mut minimum_gap: f32,
         vehicle_ahead_distance: f32,
         vehicle_ahead_velocity: f32,
     ) -> f32 {
+        // When the gap is 0, the function returns the maximum acceleration
+        if minimum_gap == 0.0 {
+            minimum_gap = 0.1;
+        }
+
         let free_road_acc = self.spec.max_acceleration
             * (1.0 - (self.previous_velocity / desired_velocity).powf(ACCELERATION_EXPONENT));
+
+        println!("Vehicle {} is {} close to vehicle ahead", self.id, vehicle_ahead_distance);
 
         if vehicle_ahead_distance <= 0.0 {
             panic!("Vehicle ahead is too close");
@@ -135,15 +135,15 @@ impl Vehicle {
                     .ok_or("Edge not in map")
                     .unwrap();
 
-                let pos_rate: f32 = self.position_on_road / current_road.length;
+                let pos_rate: f32 = self.position_on_lane / current_road.length;
                 Coordinates {
-                    x: current_node.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
-                    y: current_node.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
+                    x: current_node.center_coordinates.x * (1.0 - pos_rate) + next_node_o.center_coordinates.x * pos_rate,
+                    y: current_node.center_coordinates.y * (1.0 - pos_rate) + next_node_o.center_coordinates.y * pos_rate,
                 }
             }
             _ => Coordinates {
-                x: current_node.x,
-                y: current_node.y,
+                x: current_node.center_coordinates.x,
+                y: current_node.center_coordinates.y,
             },
         }
     }
