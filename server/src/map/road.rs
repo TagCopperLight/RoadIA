@@ -1,13 +1,39 @@
 use crate::simulation::config::MAX_SPEED;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum LinkType {
+    Yield,
+    Priority,
+    Stop,
+    TrafficLight,
+}
+
 #[derive(Clone)]
 pub struct Road {
     pub id: u32,
-    pub lane_count: u8,
-    pub speed_limit: f32,
     pub length: f32,
-    pub is_blocked: bool,
-    pub can_overtake: bool,
+    pub speed_limit: f32,
+
+    pub lanes: Vec<Lane>,
+}
+
+#[derive(Clone)]
+pub struct Lane {
+    pub id: u32,
+    pub road_id: u32,
+    pub length: f32,
+    pub speed_limit: f32,
+
+    pub links: Vec<Link>,
+}
+
+#[derive(Clone)]
+pub struct Link {
+    pub id: u32,
+    pub lane_origin_id: u32,
+    pub lane_destination_id: u32,
+    pub link_type: LinkType,
+    pub foe_links: Vec<Link>,
 }
 
 impl Road {
@@ -16,16 +42,22 @@ impl Road {
         lane_count: u8,
         speed_limit: f32,
         length: f32,
-        is_blocked: bool,
-        can_overtake: bool,
     ) -> Self {
+        let mut lanes = Vec::new();
+        for i in 0..lane_count {
+            lanes.push(Lane {
+                id: i as u32,
+                road_id: id,
+                length,
+                speed_limit: speed_limit.clamp(1.0, MAX_SPEED),
+                links: Vec::new(),
+            });
+        }
         Self {
             id,
-            lane_count,
-            speed_limit: speed_limit.clamp(1.0, MAX_SPEED),
             length,
-            is_blocked,
-            can_overtake,
+            speed_limit,
+            lanes,
         }
     }
 }
