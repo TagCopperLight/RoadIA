@@ -9,7 +9,7 @@ use axum::{Router, routing::get};
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_intersection_test_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_connected_map, create_random_vehicles};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -43,14 +43,14 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    // let map = create_connected_map(200, 1500.0, 1500.0);
-    let map = create_intersection_test_map();
-    let vehicles = create_random_vehicles(&map, 2);
+    let map = create_connected_map(200, 1500.0, 1500.0);
+    // let map = create_intersection_test_map();
+    let vehicles = create_random_vehicles(&map, 50);
 
     let config = SimulationConfig {
         start_time: 0.0,
         end_time: f32::MAX,
-        time_step: 0.1,
+        time_step: 0.05,
         minimum_gap: 2.0,
         map: map.clone(),
     };

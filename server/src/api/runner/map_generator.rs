@@ -1,8 +1,8 @@
 use petgraph::graph::NodeIndex;
 
-use crate::map::intersection::{IntersectionKind};
+use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
-use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
 
 
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
@@ -156,6 +156,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
         }
     }
 
+    intersection::build_intersections(&mut map);
     map
 }
 
@@ -171,6 +172,7 @@ pub fn create_one_intersection_congestion_map() -> Map {
     map.add_two_way_road(h2, i1, 1, 40.0, 70.0);
     map.add_two_way_road(i1, w1, 1, 40.0, 950.0);
 
+    intersection::build_intersections(&mut map);
     map
 }
 
@@ -188,5 +190,6 @@ pub fn create_intersection_test_map() -> Map {
     map.add_two_way_road(east, center, 1, 40.0, 500.0);
     map.add_two_way_road(west, center, 1, 40.0, 500.0);
 
+    intersection::build_intersections(&mut map);
     map
 }

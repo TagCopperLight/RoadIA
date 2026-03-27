@@ -168,7 +168,8 @@ async fn handle_client_packet(
             state.simulation.stop();
             let mut eng = state.engine.lock().await;
             eng.current_time = 0.0;
-            eng.vehicles_by_road.clear();
+            eng.vehicles_by_lane.clear();
+            eng.link_states.clear();
 
             // Reset each vehicle to its initial state.
             for vehicle in &mut eng.vehicles {
@@ -178,6 +179,11 @@ async fn handle_client_packet(
                 vehicle.previous_velocity = 0.0;
                 vehicle.path = Vec::new();
                 vehicle.path_index = 0;
+                vehicle.current_lane = None;
+                vehicle.drive_plan = Vec::new();
+                vehicle.registered_link_ids = Vec::new();
+                vehicle.waiting_time = 0.0;
+                vehicle.impatience = 0.0;
             }
 
             // Re-initialize paths with current map.
