@@ -205,8 +205,6 @@ fn build_intersection(map: &mut Map, junction: NodeIndex) {
         });
     }
 
-    let junction_id = map.graph[junction].id;
-    let _ = junction_id;
     for (i, r) in raw.iter().enumerate() {
         let foe_links: Vec<FoeLink> = foes[i]
             .iter()
@@ -312,10 +310,6 @@ pub fn is_link_open(
     look_ahead: f32,
     stop_dwell_time: f32,
 ) -> bool {
-    if link.link_type == LinkType::TrafficLight {
-        // TODO: check signal phase
-    }
-
     if matches!(vehicle.current_lane, Some(LaneId::Internal(_, _))) {
         return true;
     }
@@ -366,7 +360,7 @@ pub fn is_link_open(
 
     for &foe_int_lane_id in &link.foe_internal_lane_ids {
         let key = LaneId::Internal(junction_id, foe_int_lane_id);
-        if vehicles_by_lane.get(&key).map_or(false, |v| !v.is_empty()) {
+        if vehicles_by_lane.get(&key).is_some_and(|v| !v.is_empty()) {
             return false;
         }
     }

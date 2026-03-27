@@ -1,13 +1,13 @@
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 
-use crate::map::intersection::{IntersectionKind};
+use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::simulation::config::MAX_SPEED;
 
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind) -> u32 {
-    let id = map.add_intersection(kind, x, y);
-    id
+    
+    map.add_intersection(kind, x, y)
 }
 
 pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {

@@ -43,6 +43,12 @@ pub struct WebSocketService {
     sender: broadcast::Sender<ServerPacket>,
 }
 
+impl Default for WebSocketService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WebSocketService {
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(100);
