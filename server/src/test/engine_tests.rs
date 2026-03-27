@@ -1,10 +1,4 @@
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::simulation::vehicle::VehicleState;
-
-#[allow(dead_code)]
-fn all_arrived(sim: &SimulationEngine) -> bool {
-    sim.vehicles.iter().all(|v| v.state == VehicleState::Arrived)
-}
 
 #[cfg(test)]
 mod tests {

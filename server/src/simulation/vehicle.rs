@@ -80,8 +80,8 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
         &map.graph,
         source,
         |finish| finish == destination,
-        |e| e.weight().length / f32::from(e.weight().speed_limit),
-        |n| map.intersections_euclidean_distance(n, destination) / f32::from(MAX_SPEED),
+        |e| e.weight().length / e.weight().speed_limit,
+        |n| map.intersections_euclidean_distance(n, destination) / MAX_SPEED,
     );
     match result {
         Some((_cost, path)) => path,

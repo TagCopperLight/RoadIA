@@ -89,7 +89,7 @@ impl SimulationEngine {
                 .vehicles_by_lane
                 .get(&lane_id)
                 .and_then(|lst| lst.first().copied())
-                .map_or(true, |rear_idx| {
+                .is_none_or(|rear_idx| {
                     self.vehicles[rear_idx].position_on_lane - self.vehicles[rear_idx].spec.length
                         >= vlen
                 });
@@ -102,8 +102,7 @@ impl SimulationEngine {
             self.vehicles[vidx].state = VehicleState::OnRoad;
             self.vehicles[vidx].current_lane = Some(lane_id);
             
-            let pos = vlen;
-            lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, lane_id, vidx, pos);
+            lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, lane_id, vidx);
         }
     }
 }
@@ -272,7 +271,7 @@ impl SimulationEngine {
                 };
                 self.link_states
                     .entry(entry.link_id)
-                    .or_insert_with(LinkState::default)
+                    .or_default()
                     .approaching
                     .insert(veh_id, data);
                 self.vehicles[vidx].registered_link_ids.push(entry.link_id);
@@ -477,14 +476,14 @@ impl SimulationEngine {
                 None => break,
             };
             match current {
-                LaneId::Internal(jid, _) => self.exit_internal_lane(vidx, current, jid),
+                LaneId::Internal(_, _) => self.exit_internal_lane(vidx, current),
                 LaneId::Normal(edge, _) => self.enter_junction_or_arrive(vidx, current, edge),
             }
 
         }
     }
 
-    fn exit_internal_lane(&mut self, vidx: usize, from_lane: LaneId, _jid: u32) {
+    fn exit_internal_lane(&mut self, vidx: usize, from_lane: LaneId) {
         let il_len = self.lane_length(vidx);
         self.vehicles[vidx].position_on_lane -= il_len;
         self.vehicles[vidx].path_index += 1;
@@ -560,8 +559,6 @@ impl SimulationEngine {
 impl SimulationEngine {
     fn flush_transfers(&mut self) {
         let transfers: Vec<PendingTransfer> = self.pending_transfers.drain(..).collect();
-        if !transfers.is_empty() {
-        }
         for t in transfers {
             if let Some(lst) = self.vehicles_by_lane.get_mut(&t.from_lane) {
                 lst.retain(|&i| i != t.vehicle_idx);
@@ -571,8 +568,7 @@ impl SimulationEngine {
             }
             if let Some(to_lane) = t.to_lane {
                 if self.vehicles[t.vehicle_idx].state != VehicleState::Arrived {
-                    let pos = self.vehicles[t.vehicle_idx].position_on_lane;
-                    lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx, pos);
+                    lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx);
                 }
             }
         }
@@ -584,9 +580,8 @@ fn lane_insert_sorted(
     vehicles: &[Vehicle],
     lane: LaneId,
     vehicle_idx: usize,
-    _pos: f32,
 ) {
-    let list = by_lane.entry(lane).or_insert_with(Vec::new);
+    let list = by_lane.entry(lane).or_default();
     let insert_at = list.partition_point(|&i| {
         vehicles[i].position_on_lane < vehicles[vehicle_idx].position_on_lane
     });
