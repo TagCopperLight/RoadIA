@@ -10,6 +10,7 @@ pub struct Map {
     pub node_index_map: HashMap<u32, NodeIndex>,
     pub next_node_id: u32,
     pub next_edge_id: u32,
+    pub next_link_id: u32,
 }
 
 #[derive(Clone)]
@@ -25,6 +26,7 @@ impl Map {
             node_index_map: HashMap::new(),
             next_node_id: 0,
             next_edge_id: 0,
+            next_link_id: 0,
         }
     }
 
@@ -37,7 +39,7 @@ impl Map {
         let id = self.next_node_id;
         self.next_node_id += 1;
         
-        let intersection = Intersection::new(id, kind, Coordinates { x, y });
+        let intersection = Intersection::new(id, kind, Coordinates { x, y }, 10.0);
         let idx = self.graph.add_node(intersection);
         self.node_index_map.insert(id, idx);
         id
