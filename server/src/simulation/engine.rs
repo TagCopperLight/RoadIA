@@ -48,6 +48,7 @@ impl Simulation for SimulationEngine {
         }
         while self.current_time < self.config.end_time {
             self.step();
+            self.current_time += self.config.time_step;
         }
     }
 
