@@ -240,7 +240,7 @@ impl SimulationEngine {
 
 impl SimulationEngine {
     fn register_approaches(&mut self) {
-        let dt = self.config.time_step;
+        // let dt = self.config.time_step;
 
         for vidx in 0..self.vehicles.len() {
             if self.vehicles[vidx].state != VehicleState::OnRoad {
@@ -262,7 +262,9 @@ impl SimulationEngine {
                 if !entry.set_request {
                     continue;
                 }
-                let jitter = if rand::random::<bool>() { dt } else { 0.0 };
+                // In case of deadlock, we can add a random jitter to the arrival and leave times.
+                // let jitter = if rand::random::<bool>() { dt } else { 0.0 };
+                let jitter = 0.0;
                 let data = ApproachData {
                     arrival_time: entry.arrival_time + jitter,
                     leave_time: entry.leave_time + jitter,

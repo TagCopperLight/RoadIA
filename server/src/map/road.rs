@@ -69,7 +69,7 @@ impl Road {
         Self {
             id,
             length,
-            speed_limit,
+            speed_limit: speed_limit.clamp(1.0, MAX_SPEED),
             lane_width: LANE_WIDTH,
             lanes,
         }
