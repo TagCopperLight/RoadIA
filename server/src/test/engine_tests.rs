@@ -1,7 +1,7 @@
 use crate::map::intersection::{IntersectionKind, IntersectionType};
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::{
-    fastest_path, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState,
+    TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState,
 };
 
 fn all_arrived(sim: &SimulationEngine) -> bool {
@@ -17,13 +17,7 @@ mod tests {
     fn test_simulation_engine_creation_and_step() {
         let map = Map::default();
         let vehicles = vec![];
-        let config = SimulationConfig {
-            start_time: 0.0,
-            end_time: 10.0,
-            time_step: 1.0,
-            minimum_gap: 1.0,
-            map,
-        };
+        let config = SimulationConfig::new(10.0, 1.0, map);
         let mut sim = SimulationEngine::new(config, vehicles);
 
         assert_eq!(sim.current_time, 0.0);

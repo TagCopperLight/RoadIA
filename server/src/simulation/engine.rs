@@ -2,6 +2,7 @@ use crate::map::intersection::IntersectionRules;
 use crate::map::model::Map;
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{Vehicle, VehicleState};
+use crate::scoring;
 use petgraph::graph::EdgeIndex;
 use std::collections::HashMap;
 
@@ -9,6 +10,7 @@ pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
     fn run(&mut self);
     fn step(&mut self);
+    fn get_score(&self) -> f32;
 }
 
 #[derive(Clone)]
@@ -203,6 +205,7 @@ impl SimulationEngine {
         if vehicle.path_index + 1 == vehicle.path.len() - 1 {
             vehicle.state = VehicleState::Arrived;
             vehicle.path_index += 1;
+            vehicle.arrived_at = Some(_current_time);
             if let Some(road_vehicles) = vehicles_by_road.get_mut(&current_road_index) {
                 road_vehicles.retain(|&v_idx| proxies[v_idx].id != v_id);
             }
@@ -338,6 +341,10 @@ impl Simulation for SimulationEngine {
         }
     }
 
+    fn get_score(&self) -> f32 {
+        scoring::compute_score(&self.vehicles, &self.config)
+    }
+
     fn run(&mut self) {
         for vehicle in &mut self.vehicles {
             vehicle.update_path(&self.config.map);
@@ -356,26 +363,39 @@ impl Simulation for SimulationEngine {
         }
 
         let mut proxies = self.build_proxies();
+        let mut need_print_score = true;
 
         for (vehicle_index, vehicle) in self.vehicles.iter_mut().enumerate() {
             match vehicle.state {
-                VehicleState::WaitingToDepart => Self::handle_waiting_to_depart(
-                    &mut self.config,
-                    &mut self.vehicles_by_road,
-                    &mut proxies,
-                    vehicle,
-                    vehicle_index,
-                ),
-                VehicleState::OnRoad => Self::handle_on_road(
-                    &mut self.config,
-                    &mut self.vehicles_by_road,
-                    &mut proxies,
-                    vehicle,
-                    vehicle_index,
-                    self.current_time,
-                ),
-                VehicleState::Arrived => {}
+                VehicleState::WaitingToDepart => {
+                    Self::handle_waiting_to_depart(
+                        &mut self.config,
+                        &mut self.vehicles_by_road,
+                        &mut proxies,
+                        vehicle,
+                        vehicle_index,
+                    );
+                    need_print_score = false;
+                },
+                VehicleState::OnRoad => {
+                    scoring::update_co2_emissions(vehicle, &self.config);
+                    Self::handle_on_road(
+                        &mut self.config,
+                        &mut self.vehicles_by_road,
+                        &mut proxies,
+                        vehicle,
+                        vehicle_index,
+                        self.current_time,
+                    );
+                    need_print_score = false;
+                },
+                VehicleState::Arrived => {
+                }
             }
+        }
+
+        if need_print_score {
+            println!("Score : {}", self.get_score());
         }
     }
 }

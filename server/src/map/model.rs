@@ -114,4 +114,5 @@ impl Map {
         let dy = n1.y - n2.y;
         (dx * dx + dy * dy).sqrt()
     }
+
 }
