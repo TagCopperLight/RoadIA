@@ -5,29 +5,69 @@ use crate::simulation::vehicle::{Vehicle, VehicleState};
 use petgraph::graph::EdgeIndex;
 use std::collections::HashMap;
 
+/// Abstraction d'une simulation de trafic.
+///
+/// Les types qui implémentent ce trait doivent fournir un constructeur `new`,
+/// une boucle principale `run` et une étape d'avancement `step`.
 pub trait Simulation {
+    /// Crée une nouvelle instance de simulation à partir de la configuration
+    /// et d'une liste de véhicules initiale.
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
+
+    /// Exécute la simulation sur toute la durée configurée.
     fn run(&mut self);
+
+    /// Effectue une seule itération / pas de temps de la simulation.
     fn step(&mut self);
 }
 
+/// Représentation légère d'un véhicule utilisée pour les calculs internes.
+///
+/// Ce proxy contient uniquement les informations nécessaires aux algorithmes
+/// de gestion des distances et collisions (position précédente, vitesse,
+/// longueur et index de route courant).
 #[derive(Clone)]
 struct VehicleProxy {
+    /// Identifiant unique du véhicule.
     id: u64,
+
+    /// Position précédente sur la route (mètres depuis le début de la route).
     previous_position: f32,
+
+    /// Vitesse précédente du véhicule (m/s).
     previous_velocity: f32,
+
+    /// Longueur du véhicule (m).
     length: f32,
+
+    /// Index de l'arête (route) sur laquelle le véhicule se trouve, si applicable.
     road_index: Option<EdgeIndex>,
 }
 
+/// Moteur de simulation qui exécute la logique de déplacement des véhicules.
+///
+/// Contient la configuration, l'ensemble des véhicules et l'état temporel de
+/// la simulation ainsi que des index par route pour accéder rapidement aux
+/// véhicules présents sur chaque arête.
 pub struct SimulationEngine {
+    /// Configuration de la simulation (`start_time`, `end_time`, `time_step`, ...).
     pub config: SimulationConfig,
+
+    /// Vecteur des véhicules gérés par la simulation.
     pub vehicles: Vec<Vehicle>,
+
+    /// Temps courant de la simulation (seconds since start).
     pub current_time: f32,
+
+    /// Mapping route -> indices des véhicules présents sur cette route.
     pub vehicles_by_road: HashMap<EdgeIndex, Vec<usize>>,
 }
 
 impl SimulationEngine {
+    /// Recherche le véhicule immédiatement en avant d'un véhicule donné sur une route.
+    ///
+    /// Parcourt `vehicles_by_road` et utilise les `proxies` pour déterminer
+    /// lequel se trouve le plus proche devant `current_vehicle_position`.
     fn get_vehicle_ahead(
         vehicles_by_road: &HashMap<EdgeIndex, Vec<usize>>,
         proxies: &[VehicleProxy],
@@ -61,6 +101,10 @@ impl SimulationEngine {
         closest_ahead
     }
 
+    /// Calcule la distance disponible devant un véhicule jusqu'à l'obstacle suivant.
+    ///
+    /// Si `vehicle_ahead` est présent, retourne l'espace libre jusqu'à l'arrière
+    /// de ce véhicule; sinon retourne la distance jusqu'à la fin de la route.
     fn get_available_distance_ahead(map: &Map, vehicle: &Vehicle, vehicle_ahead: Option<VehicleProxy>) -> f32 {
         match vehicle_ahead {
             Some(vehicle_ahead) => vehicle_ahead.previous_position - vehicle_ahead.length - vehicle.position_on_road,
@@ -68,6 +112,7 @@ impl SimulationEngine {
         }
     }
 
+    /// Construit un vecteur de `VehicleProxy` correspondant à l'état courant des véhicules.
     fn build_proxies(&self) -> Vec<VehicleProxy> {
         self.vehicles.iter().map(|v| VehicleProxy {
             id: v.id,
@@ -84,6 +129,10 @@ impl SimulationEngine {
 
     /// Registers an intersection request for the next intersection on the vehicle's path,
     /// if one exists. Should be called after the vehicle has entered a new road.
+    /// Enregistre une demande d'accès à l'intersection suivante pour `vehicle`.
+    ///
+    /// Calcule le temps d'arrivée estimé et soumet une requête à l'intersection
+    /// avec les coordonnées d'entrée/sortie.
     fn register_next_intersection_request(
         map: &mut Map,
         vehicle: &Vehicle,
@@ -115,6 +164,10 @@ impl SimulationEngine {
 
     /// Computes the acceleration for a vehicle with no vehicle immediately ahead,
     /// taking intersection rules into account.
+    /// Calcule l'accélération d'un véhicule lorsqu'il n'y a pas de véhicule direct devant.
+    ///
+    /// Prend en compte les règles d'intersection (par ex. stop) et la nécessité
+    /// de s'arrêter à la destination si le véhicule est sur la dernière route.
     fn compute_acceleration_without_vehicle_ahead(
         vehicle: &Vehicle,
         speed_limit: f32,
@@ -147,6 +200,10 @@ impl SimulationEngine {
         }
     }
 
+    /// Gère le passage d'un véhicule de l'état `WaitingToDepart` à `OnRoad`.
+    ///
+    /// Vérifie l'espace disponible, positionne le véhicule sur la route et
+    /// enregistre la requête d'intersection suivante si nécessaire.
     fn handle_waiting_to_depart(
         config: &mut SimulationConfig,
         vehicles_by_road: &mut HashMap<EdgeIndex, Vec<usize>>,
@@ -189,6 +246,11 @@ impl SimulationEngine {
 
     /// Attempts to move the vehicle to the next road. Handles both arrival at the
     /// destination and mid-journey road transitions.
+    /// Tente d'avancer le véhicule vers la route suivante de son itinéraire.
+    ///
+    /// Gère l'arrivée à destination, la vérification de l'autorisation d'entrer
+    /// sur la route suivante, la mise à jour des structures internes et la
+    /// notification de l'intersection.
     fn try_advance_to_next_road(
         config: &mut SimulationConfig,
         vehicles_by_road: &mut HashMap<EdgeIndex, Vec<usize>>,
@@ -266,6 +328,11 @@ impl SimulationEngine {
         );
     }
 
+    /// Met à jour l'état d'un véhicule se trouvant déjà sur une route (`OnRoad`).
+    ///
+    /// Calcule l'accélération selon le véhicule précédent ou la règle
+    /// d'intersection, met à jour la vitesse et la position et gère la
+    /// transition vers la route suivante si le véhicule atteint la fin de la route.
     fn handle_on_road(
         config: &mut SimulationConfig,
         vehicles_by_road: &mut HashMap<EdgeIndex, Vec<usize>>,

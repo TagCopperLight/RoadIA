@@ -11,6 +11,7 @@ use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::api::runner::map_generator::{create_one_intersection_congestion_map, create_random_vehicles};
 
+/// Contrôleur léger pour démarrer/stopper la boucle de simulation.
 #[derive(Clone)]
 pub struct SimulationController {
     running: Arc<AtomicBool>,

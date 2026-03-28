@@ -3,53 +3,102 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::map::{model::Coordinates, model::Map};
 
+/// Type de véhicule supporté par la simulation.
 #[derive(Copy, Clone)]
 pub enum VehicleKind {
+    /// Véhicule particulier (voiture).
     Car,
+    /// Transport en commun, par ex. bus.
     Bus,
 }
 
+/// Spécification physique et comportementale d'un véhicule.
 #[derive(Copy, Clone)]
 pub struct VehicleSpec {
+    /// Type du véhicule (`Car`, `Bus`, ...).
     pub kind: VehicleKind,
+
+    /// Vitesse maximale souhaitée (m/s).
     pub max_speed: f32,
+
+    /// Accélération maximale disponible (m/s^2).
     pub max_acceleration: f32,
+
+    /// Décélération confortable (m/s^2) utilisée pour les calculs d'IDM.
     pub comfortable_deceleration: f32,
+
+    /// Temps de réaction du conducteur (s).
     pub reaction_time: f32,
+
+    /// Longueur du véhicule (m).
     pub length: f32,
 }
 
+/// Requête de trajet pour un véhicule: origine, destination et horaire.
 #[derive(Clone)]
 pub struct TripRequest {
+    /// Nœud d'origine dans le graphe de la carte.
     pub origin: NodeIndex,
+
+    /// Nœud de destination dans le graphe de la carte.
     pub destination: NodeIndex,
+
+    /// Temps de départ (ex: timestamp en secondes).
     pub departure_time: u64,
+
+    /// Optionnel: temps de retour si applicable.
     pub return_time: Option<u64>,
 }
 
+/// État d'un véhicule dans la simulation.
 #[derive(Copy, Clone, PartialEq)]
 pub enum VehicleState {
+    /// En attente de départ.
     WaitingToDepart,
+    /// Actuellement sur une route.
     OnRoad,
+    /// Arrivé à destination.
     Arrived,
 }
 
+/// Représentation d'un véhicule dans la simulation avec son état et son itinéraire.
 #[derive(Clone)]
 pub struct Vehicle {
+    /// Identifiant unique.
     pub id: u64,
+
+    /// Spécification du véhicule.
     pub spec: VehicleSpec,
+
+    /// Requête de trajet associée au véhicule.
     pub trip: TripRequest,
+
+    /// État courant du véhicule.
     pub state: VehicleState,
 
+    /// Trajet calculé sous forme de liste de nœuds.
     pub path: Vec<NodeIndex>,
+
+    /// Index courant dans le chemin (`path`).
     pub path_index: usize,
-	
-    pub position_on_road: f32, // distance entre l'avant du véhicule et le début de la route
+
+    /// Position actuelle sur la route (distance entre l'avant du véhicule et le début de la route).
+    pub position_on_road: f32,
+
+    /// Position au pas de temps précédent.
     pub previous_position: f32,
+
+    /// Vitesse actuelle (m/s).
     pub velocity: f32,
+
+    /// Vitesse au pas de temps précédent.
     pub previous_velocity: f32,
 }
 
+/// Calcule le chemin le plus rapide entre `source` et `destination` en utilisant A*.
+///
+/// La métrique utilise la longueur des routes et les limites de vitesse pour estimer
+/// le coût temporel.
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
     let result = petgraph::algo::astar(
         &map.graph,
@@ -65,6 +114,7 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
 }
 
 impl Vehicle {
+    /// Construit un nouveau véhicule avec état initial et chemin vide.
     pub fn new(id: u64, spec: VehicleSpec, trip: TripRequest) -> Self {
         Self {
             id,
@@ -80,6 +130,7 @@ impl Vehicle {
         }
     }
 
+    /// Met à jour le chemin du véhicule vers sa destination en recalculant le plus rapide.
     pub fn update_path(&mut self, map: &Map) {
         self.path = fastest_path(map, self.trip.origin, self.trip.destination);
         self.path_index = 0;
@@ -89,6 +140,12 @@ impl Vehicle {
         }
     }
 
+    /// Calcule l'accélération souhaitée selon l'IDM (Intelligent Driver Model).
+    ///
+    /// `desired_velocity` : vitesse souhaitée (m/s),
+    /// `minimum_gap` : écart minimum de sécurité (m),
+    /// `vehicle_ahead_distance` : distance jusqu'au véhicule précédent (m),
+    /// `vehicle_ahead_velocity` : vitesse du véhicule précédent (m/s).
     pub fn compute_acceleration(
         &self,
         desired_velocity: f32,
@@ -111,6 +168,8 @@ impl Vehicle {
         free_road_acc - self.spec.max_acceleration * (s / vehicle_ahead_distance).powf(2.0)
     }
 
+    /// Retourne les coordonnées 2D du véhicule sur la carte en interpolant
+    /// sa position le long de la route courante.
     pub fn get_coordinates(&self, map: &Map) -> Coordinates {
         let current_node = map
             .graph
@@ -148,10 +207,12 @@ impl Vehicle {
         }
     }
 
+    /// Renvoie le nœud courant du chemin (`path[path_index]`).
     pub fn get_current_node(&self) -> NodeIndex {
         self.path[self.path_index]
     }
 
+    /// Renvoie le nœud suivant dans le chemin. Panique si le véhicule est arrivé.
     pub fn get_next_node(&self) -> NodeIndex {
         if self.path_index + 1 >= self.path.len() {
             panic!("Vehicle is at destination");
@@ -159,6 +220,7 @@ impl Vehicle {
         self.path[self.path_index + 1]
     }
 
+    /// Renvoie l'index de l'arête (route) entre le nœud courant et le nœud suivant.
     pub fn get_current_road(&self, map: &Map) -> EdgeIndex {
         map.graph
             .find_edge(self.get_current_node(), self.get_next_node())

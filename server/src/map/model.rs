@@ -4,16 +4,30 @@ use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use crate::map::intersection::{Intersection, IntersectionKind, IntersectionRules, IntersectionType};
 use crate::map::road::Road;
 
+/// Représentation d'une carte routière sous forme de graphe orienté.
+///
+/// Les nœuds sont des `Intersection` et les arêtes sont des `Road`.
 #[derive(Default, Clone)]
 pub struct Map {
+    /// Graphe principal contenant les intersections et routes.
     pub graph: Graph<Intersection, Road>,
+
+    /// Mapping d'identifiants numériques vers `NodeIndex` du graphe.
     pub node_index_map: HashMap<u32, NodeIndex>,
+
+    /// Identifiant unique à attribuer au prochain nœud.
     pub next_node_id: u32,
+
+    /// Identifiant unique à attribuer à la prochaine arête.
     pub next_edge_id: u32,
 }
 
+/// Coordonnées 2D simples utilisées pour représenter une position.
 pub struct Coordinates{
+    /// Abscisse (x).
     pub x : f32,
+
+    /// Ordonnée (y).
     pub y : f32,
 }
 

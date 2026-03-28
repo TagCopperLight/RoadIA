@@ -1,9 +1,11 @@
+//! Tests unitaires pour `SimulationEngine` et utilitaires associés.
 use crate::map::intersection::{IntersectionKind, IntersectionType};
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::{
     fastest_path, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState,
 };
 
+/// Retourne `true` si tous les véhicules de la simulation ont l'état `Arrived`.
 fn all_arrived(sim: &SimulationEngine) -> bool {
     sim.vehicles.iter().all(|v| v.state == VehicleState::Arrived)
 }

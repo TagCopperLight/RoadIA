@@ -1,3 +1,7 @@
+//! Générateurs de carte et de véhicules pour tests et démonstrations.
+//!
+//! Fournit des fonctions utilitaires pour construire rapidement des cartes
+//! connectées et une liste de véhicules aléatoires utilisées par le runner.
 use petgraph::graph::NodeIndex;
 
 use crate::map::intersection::{IntersectionKind, IntersectionRules, IntersectionType};
@@ -5,6 +9,7 @@ use crate::map::model::Map;
 use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest};
 
 
+/// Crée `count` véhicules positionnés aléatoirement entre habitations et workplaces.
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     let mut vehicles = Vec::new();
     let mut ids = 0..;
@@ -55,6 +60,8 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     vehicles
 }
 
+/// Construit une carte connectée aléatoire contenant `num_nodes` nœuds
+/// répartis dans une zone de taille `width` x `height`.
 pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     let mut map = Map::new();
 
@@ -160,6 +167,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     map
 }
 
+/// Construit une petite carte illustrant une congestion autour d'une intersection.
 pub fn create_one_intersection_congestion_map() -> Map {
     let mut map = Map::new();
 
@@ -175,6 +183,7 @@ pub fn create_one_intersection_congestion_map() -> Map {
     map
 }
 
+/// Carte de test spécialisée pour vérifier les règles d'intersection.
 pub fn create_intersection_test_map() -> Map {
     let mut map = Map::new();
 

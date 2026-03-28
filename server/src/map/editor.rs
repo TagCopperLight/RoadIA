@@ -6,11 +6,15 @@ use crate::map::intersection::{IntersectionKind, IntersectionRules, Intersection
 use crate::map::model::Map;
 use crate::simulation::config::MAX_SPEED;
 
+/// Fonctions utilitaires pour éditer la carte (ajout/suppression/nœuds et routes).
+
+/// Ajoute un nœud (intersection) et retourne son `id` interne.
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind, name: String) -> u32 {
     let idx = map.add_intersection(kind, name, x, y, IntersectionType::Priority);
     map.graph[idx].id
 }
 
+/// Supprime un nœud identifé par `id` et met à jour les règles d'intersection.
 pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {
     let idx = map
         .node_index_map
@@ -42,6 +46,7 @@ pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// Déplace un nœud et recalcule la longueur des arêtes connectées.
 pub fn move_node(map: &mut Map, id: u32, x: f32, y: f32) -> Result<(), String> {
     let idx = map
         .node_index_map
@@ -74,6 +79,7 @@ pub fn move_node(map: &mut Map, id: u32, x: f32, y: f32) -> Result<(), String> {
     Ok(())
 }
 
+/// Met à jour les propriétés d'un nœud (type, nom).
 pub fn update_node(
     map: &mut Map,
     id: u32,
@@ -92,6 +98,7 @@ pub fn update_node(
     Ok(())
 }
 
+/// Ajoute une route entre deux nœuds identifiés par leurs `id` et retourne l'id de la route.
 pub fn add_road(
     map: &mut Map,
     from_id: u32,
@@ -127,6 +134,7 @@ pub fn add_road(
     Ok(road_id)
 }
 
+/// Supprime une route et met à jour les règles d'intersection associées.
 pub fn delete_road(map: &mut Map, id: u32) -> Result<(), String> {
     let edge_idx = map
         .find_edge_by_id(id)
@@ -149,6 +157,7 @@ pub fn delete_road(map: &mut Map, id: u32) -> Result<(), String> {
     Ok(())
 }
 
+/// Met à jour les propriétés d'une route (voies, vitesse, état de blocage).
 pub fn update_road(
     map: &mut Map,
     id: u32,
@@ -170,6 +179,7 @@ pub fn update_road(
     Ok(())
 }
 
+/// Recalcule les règles d'intersection d'un nœud donné en fonction des arêtes entrantes.
 fn recalculate_intersection_rules(map: &mut Map, node_idx: NodeIndex) {
     let incoming_count = map
         .graph

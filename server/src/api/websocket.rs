@@ -13,6 +13,7 @@ use crate::map::editor;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::AppState;
 
+/// Paquets reçus du client via WebSocket.
 #[derive(Debug, Deserialize)]
 #[serde(tag = "id", content = "data")]
 #[serde(rename_all = "camelCase")]
@@ -30,6 +31,7 @@ pub enum ClientPacket {
     UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, is_blocked: bool, can_overtake: bool },
 }
 
+/// Paquets envoyés par le serveur aux clients.
 #[derive(Debug, Serialize, Clone)]
 #[serde(tag = "id", content = "data")]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +41,7 @@ pub enum ServerPacket {
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
 }
 
+/// Service de diffusion d'événements WebSocket pour les clients connectés.
 pub struct WebSocketService {
     sender: broadcast::Sender<ServerPacket>,
 }

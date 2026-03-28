@@ -10,3 +10,8 @@ To run the frontend in development mode, execute these commands :
 Then, open http://localhost:3000 in your favorite browser.
 
 For now the maps are in http://localhost:3000/map/{uuid} where {uuid} is not used and can be any string.
+
+# Build the documentation
+To build the documentation, execute these commands:
+`cd RoadIA/server/`
+`cargo doc --no-deps --open`
