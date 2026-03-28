@@ -33,27 +33,12 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         let origin = habitations[rand::random_range(0..habitations.len())];
         let destination = workplaces[rand::random_range(0..workplaces.len())];
 
-        let spec = VehicleSpec {
-            kind: VehicleKind::Car,
-            max_speed: 40.0, // m/s
-            max_acceleration: 4.0,
-            comfortable_deceleration: 3.0,
-            reaction_time: 1.0,
-            length: 10.0,
-            mass: 1680.0,
-            engine_thermal_efficiency: 0.35,
-            drive_train_efficiency:0.9,
-            idle_power: 2500.0,
-            lower_heating_value_for_fuel: 43200.0,
-            aerodynamic_drag_coefficient: 0.3,
-            front_area: 2.0,
-            rolling_resistance_coefficient: 0.01,
-            stoichiometric_co2_factor: 3.16
-        };
+        let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
 
         let trip = TripRequest {
             origin,
             destination,
+            departure_time: 0.0,
         };
 
         vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip));

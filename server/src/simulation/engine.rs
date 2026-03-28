@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::scoring;
 use crate::simulation::config::{
     SimulationConfig, IMPATIENCE_RATE, LOOK_AHEAD, MIN_CREEP_SPEED, STOP_DWELL_TIME,
 };
@@ -66,6 +67,16 @@ impl Simulation for SimulationEngine {
         self.register_approaches();
         self.execute_movements();
         self.flush_transfers();
+        let dt = self.config.time_step;
+        let t = self.current_time;
+        for v in &mut self.vehicles {
+            if v.state == VehicleState::OnRoad {
+                scoring::update_co2_emissions(v, dt);
+            }
+            if v.state == VehicleState::Arrived && v.arrived_at.is_none() {
+                v.arrived_at = Some(t);
+            }
+        }
     }
 }
 
@@ -579,10 +590,6 @@ impl SimulationEngine {
                     lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx);
                 }
             }
-        }
-
-        if need_print_score {
-            println!("Score : {}", self.get_score());
         }
     }
 }

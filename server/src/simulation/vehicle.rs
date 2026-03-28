@@ -17,16 +17,6 @@ pub struct VehicleSpec {
     pub comfortable_deceleration: f32,
     pub reaction_time: f32,
     pub length: f32,
-    //Les attributs suivant permettent de calculer les émissions co2
-    pub mass : f32,//en kg
-    pub engine_thermal_efficiency: f32,
-    pub drive_train_efficiency: f32,
-    pub idle_power: f32, // en W
-    pub lower_heating_value_for_fuel: f32,//en Kj/Kg
-    pub aerodynamic_drag_coefficient: f32,
-    pub front_area: f32,
-    pub rolling_resistance_coefficient: f32,
-    pub stoichiometric_co2_factor: f32
 }
 
 impl VehicleSpec {
@@ -38,15 +28,6 @@ impl VehicleSpec {
             comfortable_deceleration,
             reaction_time,
             length,
-            mass: 1680.0,
-            engine_thermal_efficiency: 0.35,
-            drive_train_efficiency: 0.9,
-            idle_power: 2500.0,
-            lower_heating_value_for_fuel: 43200.0,
-            aerodynamic_drag_coefficient: 0.3,
-            front_area: 2.0,
-            rolling_resistance_coefficient: 0.01,
-            stoichiometric_co2_factor: 3.16,
         }
     }
 }
@@ -55,6 +36,7 @@ impl VehicleSpec {
 pub struct TripRequest {
     pub origin: NodeIndex,
     pub destination: NodeIndex,
+    pub departure_time: f32,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Hash, Eq)]
@@ -105,6 +87,9 @@ pub struct Vehicle {
     pub registered_link_ids: Vec<u32>,
     pub waiting_time: f32,
     pub impatience: f32,
+
+    pub emitted_co2: f32,
+    pub arrived_at: Option<f32>,
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
@@ -138,6 +123,8 @@ impl Vehicle {
             registered_link_ids: Vec::new(),
             waiting_time: 0.0,
             impatience: 0.0,
+            emitted_co2: 0.0,
+            arrived_at: None,
         }
     }
 
