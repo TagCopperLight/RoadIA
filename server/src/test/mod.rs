@@ -14,14 +14,7 @@ use crate::simulation::config::SimulationConfig;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
 
 pub(crate) fn make_standard_spec() -> VehicleSpec {
-    VehicleSpec {
-        kind: VehicleKind::Car,
-        max_speed: 40.0,
-        max_acceleration: 4.0,
-        comfortable_deceleration: 3.0,
-        reaction_time: 1.0,
-        length: 10.0,
-    }
+    VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0)
 }
 
 pub(crate) fn make_vehicle(id: u64, origin: NodeIndex, dest: NodeIndex) -> Vehicle {
@@ -31,6 +24,7 @@ pub(crate) fn make_vehicle(id: u64, origin: NodeIndex, dest: NodeIndex) -> Vehic
         TripRequest {
             origin,
             destination: dest,
+            departure_time: 0.0,
         },
     )
 }
