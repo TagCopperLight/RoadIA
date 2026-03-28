@@ -5,6 +5,8 @@ use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::simulation::config::MAX_SPEED;
 
+// TODO: When editing the map, intersection (lanes and links) needs to be rebuilt.
+
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind) -> u32 {
     
     map.add_intersection(kind, x, y)
