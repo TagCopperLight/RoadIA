@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 
-use crate::map::intersection::{Intersection, IntersectionKind, IntersectionRules, IntersectionType};
+use crate::map::intersection::{Intersection, IntersectionKind};
 use crate::map::road::Road;
 
 #[derive(Default, Clone)]
@@ -10,8 +10,10 @@ pub struct Map {
     pub node_index_map: HashMap<u32, NodeIndex>,
     pub next_node_id: u32,
     pub next_edge_id: u32,
+    pub next_link_id: u32,
 }
 
+#[derive(Clone)]
 pub struct Coordinates{
     pub x : f32,
     pub y : f32,
@@ -24,60 +26,54 @@ impl Map {
             node_index_map: HashMap::new(),
             next_node_id: 0,
             next_edge_id: 0,
+            next_link_id: 0,
         }
     }
 
     pub fn add_intersection(
         &mut self,
         kind: IntersectionKind,
-        name: String,
         x: f32,
         y: f32,
-        intersection_type: IntersectionType,
-    ) -> NodeIndex {
+    ) -> u32 {
         let id = self.next_node_id;
         self.next_node_id += 1;
-        let intersection = Intersection::new(id, kind, name, x, y, intersection_type);
+        
+        let intersection = Intersection::new(id, kind, Coordinates { x, y }, 10.0);
         let idx = self.graph.add_node(intersection);
         self.node_index_map.insert(id, idx);
-        idx
+        id
     }
 
     pub fn add_road(
         &mut self,
-        from: NodeIndex,
-        to: NodeIndex,
+        from: u32,
+        to: u32,
         lane_count: u8,
         speed_limit: f32,
         length: f32,
-        is_blocked: bool,
-        can_overtake: bool,
     ) -> u32 {
         let id = self.next_edge_id;
         self.next_edge_id += 1;
-        let rule = match self.graph[to].intersection_type {
-            IntersectionType::Priority => IntersectionRules::Priority,
-            IntersectionType::Stop => IntersectionRules::Stop,
-            IntersectionType::TrafficLight => IntersectionRules::TrafficLight,
-        };
-        self.graph[to].set_rule(id, rule);
-        let road = Road::new(id, lane_count, speed_limit, length, is_blocked, can_overtake);
-        self.graph.add_edge(from, to, road);
+        
+        let from_node = self.find_node(from).expect("Start intersection not found");
+        let to_node = self.find_node(to).expect("End intersection not found");
+        
+        let road = Road::new(id, lane_count, speed_limit, length);
+        self.graph.add_edge(from_node, to_node, road);
         id
     }
 
     pub fn add_two_way_road(
         &mut self,
-        from: NodeIndex,
-        to: NodeIndex,
+        from: u32,
+        to: u32,
         lane_count: u8,
         speed_limit: f32,
         length: f32,
-        is_blocked: bool,
-        can_overtake: bool,
     ) -> (u32, u32) {
-        let id1 = self.add_road(from, to, lane_count, speed_limit, length, is_blocked, can_overtake);
-        let id2 = self.add_road(to, from, lane_count, speed_limit, length, is_blocked, can_overtake);
+        let id1 = self.add_road(from, to, lane_count, speed_limit, length);
+        let id2 = self.add_road(to, from, lane_count, speed_limit, length);
         (id1, id2)
     }
 
@@ -85,7 +81,7 @@ impl Map {
         self.node_index_map.get(&id).copied()
     }
 
-    pub fn find_edge_by_id(&self, id: u32) -> Option<EdgeIndex> {
+    pub fn find_edge(&self, id: u32) -> Option<EdgeIndex> {
         self.graph.edge_indices().find(|&e| self.graph[e].id == id)
     }
 
@@ -110,8 +106,8 @@ impl Map {
     ) -> f32 {
         let n1 = &self.graph[source];
         let n2 = &self.graph[destination];
-        let dx = n1.x - n2.x;
-        let dy = n1.y - n2.y;
+        let dx = n1.center_coordinates.x - n2.center_coordinates.x;
+        let dy = n1.center_coordinates.y - n2.center_coordinates.y;
         (dx * dx + dy * dy).sqrt()
     }
 

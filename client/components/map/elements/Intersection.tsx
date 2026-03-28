@@ -6,7 +6,7 @@ export function Intersection({ node }: { node: MapNode }) {
 			graphics.clear();
 			graphics.position.set(node.x, node.y);
 			graphics.setFillStyle({ color: node.kind === 'Habitation' ? 'blue' : node.kind === 'Workplace' ? 'red' : 'lightgray' });
-			graphics.circle(0, 0, 10);
+			graphics.circle(0, 0, 2);
 			graphics.fill();
 		}} />
 	);

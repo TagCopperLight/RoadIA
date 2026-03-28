@@ -1,8 +1,8 @@
 use petgraph::graph::NodeIndex;
 
-use crate::map::intersection::{IntersectionKind, IntersectionRules, IntersectionType};
+use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
-use crate::simulation::vehicle::{Vehicle, VehicleSpec, VehicleKind, TripRequest};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
 
 
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
@@ -33,29 +33,12 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         let origin = habitations[rand::random_range(0..habitations.len())];
         let destination = workplaces[rand::random_range(0..workplaces.len())];
 
-        let spec = VehicleSpec {
-            kind: VehicleKind::Car,
-            max_speed: 40.0, // m/s
-            max_acceleration: 4.0,
-            comfortable_deceleration: 3.0,
-            reaction_time: 1.0,
-            length: 10.0,
-            mass: 1680.0,
-            engine_thermal_efficiency: 0.35,
-            drive_train_efficiency:0.9,
-            idle_power: 2500.0,
-            lower_heating_value_for_fuel: 43200.0,
-            aerodynamic_drag_coefficient: 0.3,
-            front_area: 2.0,
-            rolling_resistance_coefficient: 0.01,
-            stoichiometric_co2_factor: 3.16
-        };
+        let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
 
         let trip = TripRequest {
             origin,
             destination,
-            departure_time: 0,
-            return_time: None,
+            departure_time: 0.0,
         };
 
         vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip));
@@ -93,12 +76,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             }
         };
 
-        let node_idx = map.add_intersection(
-            kind,
-            format!("node_{}", i),
-            x, y,
-            IntersectionType::Priority,
-        );
+        let node_idx = map.add_intersection(kind, x, y);
         nodes.push(node_idx);
         positions.push((x, y));
         i += 1;
@@ -120,7 +98,9 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             for (i, &v_idx) in available_indices.iter().enumerate() {
                 let u = nodes[u_idx];
                 let v = nodes[v_idx];
-                let dist = map.intersections_euclidean_distance(u, v);
+                let u_node = map.find_node(u).unwrap();
+                let v_node = map.find_node(v).unwrap();
+                let dist = map.intersections_euclidean_distance(u_node, v_node);
 
                 if dist < min_dist {
                     min_dist = dist;
@@ -136,7 +116,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
         let u = nodes[best_u];
         let v = nodes[best_v];
         let speed_limit = rand::random_range(13..33) as f32;
-        map.add_two_way_road(u, v, 1, speed_limit, min_dist, false, false);
+        map.add_two_way_road(u, v, 1, speed_limit, min_dist);
     }
 
     // 3. Add extra edges for cycles (connect to k nearest neighbors)
@@ -148,7 +128,9 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             .enumerate()
             .filter(|&(j, _)| i != j)
             .map(|(j, &v)| {
-                let dist = map.intersections_euclidean_distance(u, v);
+                let u_node = map.find_node(u).unwrap();
+                let v_node = map.find_node(v).unwrap();
+                let dist = map.intersections_euclidean_distance(u_node, v_node);
                 (j, dist)
             })
             .collect();
@@ -159,52 +141,49 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
             let (v_idx, dist) = neighbors[k];
             let v = nodes[v_idx];
 
-            if map.graph.find_edge(u, v).is_none() {
+            let u_node = map.find_node(u).unwrap();
+            let v_node = map.find_node(v).unwrap();
+            if map.graph.find_edge(u_node, v_node).is_none() {
                 let speed_limit = rand::random_range(13..33) as f32;
-                map.add_two_way_road(u, v, 1, speed_limit, dist, false, false);
+                map.add_two_way_road(u, v, 1, speed_limit, dist);
             }
         }
     }
 
+    intersection::build_intersections(&mut map);
     map
 }
 
 pub fn create_one_intersection_congestion_map() -> Map {
     let mut map = Map::new();
 
-    let h1 = map.add_intersection(IntersectionKind::Habitation, "habitation 1".into(), 0.0, 0.0, IntersectionType::Priority);
-    let h2 = map.add_intersection(IntersectionKind::Habitation, "habitation 2".into(), 0.0, 100.0, IntersectionType::Priority);
-    let i1 = map.add_intersection(IntersectionKind::Intersection, "intersection 1".into(), 50.0, 50.0, IntersectionType::Priority);
-    let w1 = map.add_intersection(IntersectionKind::Workplace, "workplace 1".into(), 950.0, 50.0, IntersectionType::Priority);
+    let h1 = map.add_intersection(IntersectionKind::Habitation, 0.0, 0.0);
+    let h2 = map.add_intersection(IntersectionKind::Habitation, 0.0, 100.0);
+    let i1 = map.add_intersection(IntersectionKind::Intersection, 50.0, 50.0);
+    let w1 = map.add_intersection(IntersectionKind::Workplace, 950.0, 50.0);
 
-    map.add_two_way_road(h1, i1, 1, 40.0, 70.0, false, false);
-    map.add_two_way_road(h2, i1, 1, 40.0, 70.0, false, false);
-    map.add_two_way_road(i1, w1, 1, 40.0, 950.0, false, false);
+    map.add_two_way_road(h1, i1, 1, 40.0, 70.0);
+    map.add_two_way_road(h2, i1, 1, 40.0, 70.0);
+    map.add_two_way_road(i1, w1, 1, 40.0, 950.0);
 
+    intersection::build_intersections(&mut map);
     map
 }
 
 pub fn create_intersection_test_map() -> Map {
     let mut map = Map::new();
 
-    let center = map.add_intersection(IntersectionKind::Intersection, "Center".into(), 500.0, 500.0,  IntersectionType::Priority);
-    let north  = map.add_intersection(IntersectionKind::Habitation,   "North".into(),  500.0, 0.0,    IntersectionType::Priority);
-    let south  = map.add_intersection(IntersectionKind::Workplace,    "South".into(),  500.0, 1000.0, IntersectionType::Priority);
-    let east   = map.add_intersection(IntersectionKind::Habitation,   "East".into(),   1000.0, 500.0, IntersectionType::Priority);
-    let west   = map.add_intersection(IntersectionKind::Workplace,    "West".into(),   0.0,    500.0, IntersectionType::Priority);
+    let center = map.add_intersection(IntersectionKind::Intersection, 500.0, 500.0);
+    let north  = map.add_intersection(IntersectionKind::Habitation,   500.0, 0.0);
+    let south  = map.add_intersection(IntersectionKind::Workplace,    500.0, 1000.0);
+    let east   = map.add_intersection(IntersectionKind::Habitation,   1000.0, 500.0);
+    let west   = map.add_intersection(IntersectionKind::Workplace,    0.0,    500.0);
 
-    // N -> C and S -> C are Priority (default)
-    map.add_two_way_road(north, center, 1, 40.0, 500.0, false, false);
-    map.add_two_way_road(south, center, 1, 40.0, 500.0, false, false);
+    map.add_two_way_road(north, center, 1, 40.0, 500.0);
+    map.add_two_way_road(south, center, 1, 40.0, 500.0);
+    map.add_two_way_road(east, center, 1, 40.0, 500.0);
+    map.add_two_way_road(west, center, 1, 40.0, 500.0);
 
-    // E -> C and W -> C are Yield — capture the inbound road IDs to override rules
-    let (east_road_id, _) = map.add_two_way_road(east, center, 1, 40.0, 500.0, false, false);
-    let (west_road_id, _) = map.add_two_way_road(west, center, 1, 40.0, 500.0, false, false);
-
-    if let Some(center_node) = map.graph.node_weight_mut(center) {
-        center_node.set_rule(east_road_id, IntersectionRules::Yield);
-        center_node.set_rule(west_road_id, IntersectionRules::Yield);
-    }
-
+    intersection::build_intersections(&mut map);
     map
 }
