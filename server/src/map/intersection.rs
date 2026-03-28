@@ -234,12 +234,12 @@ fn build_intersection(map: &mut Map, junction: NodeIndex) {
     }
 }
 
-fn node_coords(map: &Map, n: NodeIndex) -> (f32, f32) {
+pub(crate) fn node_coords(map: &Map, n: NodeIndex) -> (f32, f32) {
     let node = &map.graph[n];
     (node.center_coordinates.x, node.center_coordinates.y)
 }
 
-fn boundary_point(jx: f32, jy: f32, radius: f32, px: f32, py: f32) -> (f32, f32) {
+pub(crate) fn boundary_point(jx: f32, jy: f32, radius: f32, px: f32, py: f32) -> (f32, f32) {
     let dx = px - jx;
     let dy = py - jy;
     let len = (dx * dx + dy * dy).sqrt();
@@ -249,7 +249,7 @@ fn boundary_point(jx: f32, jy: f32, radius: f32, px: f32, py: f32) -> (f32, f32)
     (jx + dx / len * radius, jy + dy / len * radius)
 }
 
-fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
+pub(crate) fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
     let dx = b.0 - a.0;
     let dy = b.1 - a.1;
     (dx * dx + dy * dy).sqrt()
@@ -288,11 +288,11 @@ pub fn segments_intersect(
     false
 }
 
-fn cross(o: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+pub(crate) fn cross(o: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
     (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
 }
 
-fn on_segment(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> bool {
+pub(crate) fn on_segment(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> bool {
     r.0 <= p.0.max(q.0)
         && r.0 >= p.0.min(q.0)
         && r.1 <= p.1.max(q.1)
@@ -368,7 +368,7 @@ pub fn is_link_open(
     true
 }
 
-fn foe_is_to_the_right(ego: &Link, foe: &FoeLink) -> bool {
+pub(crate) fn foe_is_to_the_right(ego: &Link, foe: &FoeLink) -> bool {
     let ex = ego.junction_center.0 - ego.entry.0;
     let ey = ego.junction_center.1 - ego.entry.1;
     let fx = ego.junction_center.0 - foe.entry.0;
@@ -376,7 +376,7 @@ fn foe_is_to_the_right(ego: &Link, foe: &FoeLink) -> bool {
     ex * fy - ey * fx < 0.0
 }
 
-fn time_window_conflict(
+pub(crate) fn time_window_conflict(
     ego_arrival: f32,
     ego_leave: f32,
     foe_arrival: f32,
@@ -416,11 +416,11 @@ fn time_window_conflict(
     true
 }
 
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
+pub(crate) fn lerp(a: f32, b: f32, t: f32) -> f32 {
     a + (b - a) * t.clamp(0.0, 1.0)
 }
 
-fn perp_right(dx: f32, dy: f32) -> (f32, f32) {
+pub(crate) fn perp_right(dx: f32, dy: f32) -> (f32, f32) {
     let len = (dx * dx + dy * dy).sqrt();
     if len < 1e-6 {
         return (1.0, 0.0);
@@ -428,7 +428,7 @@ fn perp_right(dx: f32, dy: f32) -> (f32, f32) {
     (-dy / len, dx / len)
 }
 
-fn lane_boundary_point(
+pub(crate) fn lane_boundary_point(
     base: (f32, f32),
     perp: (f32, f32),
     lane_idx: usize,

@@ -578,7 +578,7 @@ impl SimulationEngine {
     }
 }
 
-fn lane_insert_sorted(
+pub(crate) fn lane_insert_sorted(
     by_lane: &mut HashMap<LaneId, Vec<usize>>,
     vehicles: &[Vehicle],
     lane: LaneId,

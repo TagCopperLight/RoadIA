@@ -31,7 +31,7 @@ pub enum LaneId {
     Internal(u32, u32), // Internal lane (intersection.id, internal_lane.id).
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum VehicleState {
     WaitingToDepart,
     OnRoad,
