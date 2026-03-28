@@ -17,7 +17,7 @@ export default function Toolbar() {
         if (tool === 'Play') {
             wsClient.send('startSimulation', {});
         } else if (tool === 'Stop') {
-            wsClient.send('stopSimulation', {});
+            wsClient.send('resetSimulation', {});
         }
     };
 

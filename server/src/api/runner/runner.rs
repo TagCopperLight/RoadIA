@@ -9,11 +9,17 @@ use axum::{Router, routing::get};
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_one_intersection_congestion_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_connected_map, create_random_vehicles};
 
 #[derive(Clone)]
 pub struct SimulationController {
     running: Arc<AtomicBool>,
+}
+
+impl Default for SimulationController {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimulationController {
@@ -43,21 +49,15 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_one_intersection_congestion_map();
+    let map = create_connected_map(200, 1500.0, 1500.0);
     let vehicles = create_random_vehicles(&map, 50);
 
     let config = SimulationConfig {
         start_time: 0.0,
         end_time: f32::MAX,
-        time_step: 0.1,
+        time_step: 0.05,
         minimum_gap: 2.0,
-        air_density: 1.225, // in kg/m^3
-        gravity_coefficient: 9.81,
-        time_weight : 0.4,
-        success_weight: 0.2,
-        pollution_weight: 0.2,
-        infrastructure_weight: 0.2,
-        map: map.clone(),
+        map,
     };
 
     let mut simulation = SimulationEngine::new(config, vehicles);

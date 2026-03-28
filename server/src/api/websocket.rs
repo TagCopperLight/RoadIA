@@ -21,13 +21,13 @@ pub enum ClientPacket {
     StartSimulation {},
     StopSimulation {},
     ResetSimulation {},
-    AddNode { x: f32, y: f32, kind: String, name: String },
+    AddNode { x: f32, y: f32, kind: String },
     DeleteNode { id: u32 },
     MoveNode { id: u32, x: f32, y: f32 },
-    UpdateNode { id: u32, kind: String, name: String },
+    UpdateNode { id: u32, kind: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
-    UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, is_blocked: bool, can_overtake: bool },
+    UpdateRoad { id: u32, speed_limit: f32 },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -41,6 +41,12 @@ pub enum ServerPacket {
 
 pub struct WebSocketService {
     sender: broadcast::Sender<ServerPacket>,
+}
+
+impl Default for WebSocketService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WebSocketService {
@@ -168,23 +174,22 @@ async fn handle_client_packet(
             state.simulation.stop();
             let mut eng = state.engine.lock().await;
             eng.current_time = 0.0;
-            eng.vehicles_by_road.clear();
-
-            // Clear all intersection requests from the map nodes.
-            for node_idx in eng.config.map.graph.node_indices().collect::<Vec<_>>() {
-                eng.config.map.graph[node_idx].requests.clear();
-                eng.config.map.graph[node_idx].traffic_order.clear();
-            }
+            eng.vehicles_by_lane.clear();
+            eng.link_states.clear();
 
             // Reset each vehicle to its initial state.
             for vehicle in &mut eng.vehicles {
                 vehicle.state = VehicleState::WaitingToDepart;
-                vehicle.position_on_road = 0.0;
-                vehicle.previous_position = 0.0;
+                vehicle.position_on_lane = 0.0;
                 vehicle.velocity = 0.0;
                 vehicle.previous_velocity = 0.0;
                 vehicle.path = Vec::new();
                 vehicle.path_index = 0;
+                vehicle.current_lane = None;
+                vehicle.drive_plan = Vec::new();
+                vehicle.registered_link_ids = Vec::new();
+                vehicle.waiting_time = 0.0;
+                vehicle.impatience = 0.0;
             }
 
             // Re-initialize paths with current map.
@@ -195,7 +200,7 @@ async fn handle_client_packet(
         }
 
         // Map editing packets — require simulation to be stopped.
-        ClientPacket::AddNode { x, y, kind, name } => {
+        ClientPacket::AddNode { x, y, kind } => {
             if state.simulation.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
@@ -205,7 +210,7 @@ async fn handle_client_packet(
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
             let mut eng = state.engine.lock().await;
-            editor::add_node(&mut eng.config.map, x, y, kind, name);
+            editor::add_node(&mut eng.config.map, x, y, kind);
             let (nodes, edges) = serialize_map(&eng.config.map);
             drop(eng);
             broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -249,7 +254,7 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::UpdateNode { id, kind, name } => {
+        ClientPacket::UpdateNode { id, kind } => {
             if state.simulation.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
@@ -259,7 +264,7 @@ async fn handle_client_packet(
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
             let mut eng = state.engine.lock().await;
-            match editor::update_node(&mut eng.config.map, id, kind, name) {
+            match editor::update_node(&mut eng.config.map, id, kind) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
@@ -310,13 +315,13 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::UpdateRoad { id, lane_count, speed_limit, is_blocked, can_overtake } => {
+        ClientPacket::UpdateRoad { id, speed_limit } => {
             if state.simulation.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
             let mut eng = state.engine.lock().await;
-            match editor::update_road(&mut eng.config.map, id, lane_count, speed_limit, is_blocked, can_overtake) {
+            match editor::update_road(&mut eng.config.map, id, speed_limit) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
@@ -366,9 +371,8 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
             json!({
                 "id": n.id,
                 "kind": format!("{:?}", n.kind),
-                "name": n.name,
-                "x": n.x,
-                "y": n.y
+                "x": n.center_coordinates.x,
+                "y": n.center_coordinates.y
             })
         })
         .collect();
@@ -386,11 +390,9 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "id": r.id,
                 "from": map.graph[a].id,
                 "to": map.graph[b].id,
-                "lane_count": r.lane_count,
+                "lane_count": r.lanes.len(),
                 "length": r.length,
                 "speed_limit": r.speed_limit,
-                "is_blocked": r.is_blocked,
-                "can_overtake": r.can_overtake,
             })
         })
         .collect();
