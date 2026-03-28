@@ -17,6 +17,38 @@ pub struct VehicleSpec {
     pub comfortable_deceleration: f32,
     pub reaction_time: f32,
     pub length: f32,
+    //Les attributs suivant permettent de calculer les émissions co2
+    pub mass : f32,//en kg
+    pub engine_thermal_efficiency: f32,
+    pub drive_train_efficiency: f32,
+    pub idle_power: f32, // en W
+    pub lower_heating_value_for_fuel: f32,//en Kj/Kg
+    pub aerodynamic_drag_coefficient: f32,
+    pub front_area: f32,
+    pub rolling_resistance_coefficient: f32,
+    pub stoichiometric_co2_factor: f32
+}
+
+impl VehicleSpec {
+    pub fn new(kind: VehicleKind, max_speed: f32, max_acceleration: f32, comfortable_deceleration: f32, reaction_time: f32, length: f32) -> Self {
+        Self {
+            kind,
+            max_speed,
+            max_acceleration,
+            comfortable_deceleration,
+            reaction_time,
+            length,
+            mass: 1680.0,
+            engine_thermal_efficiency: 0.35,
+            drive_train_efficiency: 0.9,
+            idle_power: 2500.0,
+            lower_heating_value_for_fuel: 43200.0,
+            aerodynamic_drag_coefficient: 0.3,
+            front_area: 2.0,
+            rolling_resistance_coefficient: 0.01,
+            stoichiometric_co2_factor: 3.16,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -233,4 +265,5 @@ impl Vehicle {
                 .find_edge(self.get_current_node(), self.get_next_node()),
         }
     }
+
 }

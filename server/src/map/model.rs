@@ -110,4 +110,5 @@ impl Map {
         let dy = n1.center_coordinates.y - n2.center_coordinates.y;
         (dx * dx + dy * dy).sqrt()
     }
+
 }

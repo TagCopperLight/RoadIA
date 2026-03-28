@@ -57,6 +57,12 @@ pub async fn run() -> io::Result<()> {
         end_time: f32::MAX,
         time_step: 0.05,
         minimum_gap: 2.0,
+        air_density: 1.225, // in kg/m^3
+        gravity_coefficient: 9.81,
+        time_weight : 0.4,
+        success_weight: 0.2,
+        pollution_weight: 0.2,
+        infrastructure_weight: 0.2,
         map,
     };
 
