@@ -12,6 +12,7 @@ pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
     fn run(&mut self);
     fn step(&mut self);
+    fn get_score(&self) -> f32;
 }
 
 struct PendingTransfer {
@@ -50,6 +51,10 @@ impl Simulation for SimulationEngine {
             self.step();
             self.current_time += self.config.time_step;
         }
+    }
+  
+    fn get_score(&self) -> f32 {
+        scoring::compute_score(&self.vehicles, &self.config)
     }
 
     fn step(&mut self) {
@@ -574,6 +579,10 @@ impl SimulationEngine {
                     lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx);
                 }
             }
+        }
+
+        if need_print_score {
+            println!("Score : {}", self.get_score());
         }
     }
 }
