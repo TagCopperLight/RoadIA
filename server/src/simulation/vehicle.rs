@@ -88,6 +88,8 @@ pub struct Vehicle {
     pub waiting_time: f32,
     pub impatience: f32,
 
+    pub speed_gain_probability: f32,
+
     pub emitted_co2: f32,
     pub arrived_at: Option<f32>,
 }
@@ -123,6 +125,7 @@ impl Vehicle {
             registered_link_ids: Vec::new(),
             waiting_time: 0.0,
             impatience: 0.0,
+            speed_gain_probability: 0.0,
             emitted_co2: 0.0,
             arrived_at: None,
         }
@@ -253,4 +256,95 @@ impl Vehicle {
         }
     }
 
+    pub fn is_on_correct_lane(&self, map: &Map) -> bool {
+        let current_lane = match self.current_lane {
+            Some(l) => l,
+            None => return false,
+        };
+        if matches!(current_lane, LaneId::Internal(_, _)) {
+            return true;
+        }
+        if self.path_index + 1 >= self.path.len() {
+            return true;
+        }
+        let expected_edge = match map.graph.find_edge(self.get_current_node(), self.get_next_node()) {
+            Some(e) => e,
+            None => return false,
+        };
+        match current_lane {
+            LaneId::Normal(edge_idx, lane_id) => {
+                let road = &map.graph[edge_idx];
+                let dest_road_id = map.graph[expected_edge].id;
+                if let Some(lane_obj) = road.lanes.iter().find(|l| l.id == lane_id) {
+                    return lane_obj
+                        .links
+                        .iter()
+                        .any(|link| link.destination_road_id == dest_road_id);
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    pub fn lane_index_offset_to_correct_lane(&self, map: &Map) -> Option<i32> {
+        // Return None if we cannot determine an offset (no lane, no path, or wrong road)
+        let current_lane = match self.current_lane {
+            Some(l) => l,
+            None => return None,
+        };
+
+        // If inside an internal lane, consider offset 0 (committed)
+        if matches!(current_lane, LaneId::Internal(_, _)) {
+            return Some(0);
+        }
+
+        // If at destination or no next node, trivially zero
+        if self.path_index + 1 >= self.path.len() {
+            return Some(0);
+        }
+
+        let next_node = self.get_next_node();
+
+        let expected_edge = match map.graph.find_edge(self.get_current_node(), next_node) {
+            Some(e) => e,
+            None => return None,
+        };
+
+        match current_lane {
+            LaneId::Normal(edge_idx, lane_id) => {
+                if edge_idx != expected_edge {
+                    return None;
+                }
+
+                let road = &map.graph[edge_idx];
+                let dest_road_id = map.graph[expected_edge].id;
+
+                // Find current lane index within the road.lanes vector
+                let current_idx = match road.lanes.iter().position(|l| l.id == lane_id) {
+                    Some(i) => i as isize,
+                    None => return None,
+                };
+
+                // Find the nearest lane index that has a link to the destination road
+                let mut best: Option<(isize, usize)> = None; // (distance, index)
+                for (i, l) in road.lanes.iter().enumerate() {
+                    if l.links.iter().any(|link| link.destination_road_id == dest_road_id) {
+                        let dist = (i as isize - current_idx).abs();
+                        if best.is_none() || dist < best.unwrap().0 {
+                            best = Some((dist, i));
+                        }
+                    }
+                }
+
+                if let Some((_dist, idx)) = best {
+                    let offset = idx as isize - current_idx;
+                    return Some(offset as i32);
+                }
+
+                None
+            }
+            _ => None,
+        }
+    }
 }

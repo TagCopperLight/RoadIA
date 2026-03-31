@@ -360,6 +360,11 @@ impl SimulationEngine {
             }
         }
 
+        // After applying IDM (velocity/position update), update speed gain probability
+        // and attempt an instant lane change if conditions are met and there is a sufficient gap.
+        self.update_speed_gain_probability(vidx, dt);
+        let _switched = self.try_switch_line(vidx);
+
         self.process_lane_advances(vidx);
     }
 
@@ -478,6 +483,287 @@ impl SimulationEngine {
                 })
                 .unwrap_or(crate::simulation::config::MAX_SPEED),
             None => crate::simulation::config::MAX_SPEED,
+        }
+    }
+
+    fn lane_length_by_id(&self, lane: LaneId) -> Option<f32> {
+        match lane {
+            LaneId::Normal(edge, _) => Some(self.config.map.graph[edge].length),
+            LaneId::Internal(jid, ilid) => self
+                .config
+                .map
+                .node_index_map
+                .get(&jid)
+                .and_then(|&ni| {
+                    self.config.map.graph[ni]
+                        .internal_lanes
+                        .iter()
+                        .find(|il| il.id == ilid)
+                        .map(|il| il.length)
+                }),
+        }
+    }
+
+    fn lane_occupancy_from(&self, lane: LaneId, from_distance: f32) -> Option<f32> {
+        let lane_len = self.lane_length_by_id(lane)?;
+
+        if from_distance >= lane_len {
+            return Some(0.0);
+        }
+
+        let section_len = lane_len - from_distance;
+        let mut occupied = 0.0f32;
+
+        if let Some(list) = self.vehicles_by_lane.get(&lane) {
+            for &vidx in list {
+                let v = &self.vehicles[vidx];
+                let v_start = (v.position_on_lane - v.spec.length).max(0.0);
+                let v_end = v.position_on_lane.min(lane_len);
+
+                let overlap_start = v_start.max(from_distance);
+                let overlap_end = v_end;
+                let overlap = (overlap_end - overlap_start).max(0.0);
+                occupied += overlap;
+            }
+        }
+
+        Some((occupied / section_len).clamp(0.0, 1.0))
+    }
+
+    pub fn lane_mean_speed_from(&self, lane: LaneId, from_distance: f32) -> f32 {
+        let lane_len = self.lane_length_by_id(lane).unwrap_or(1.0);
+        let lane_speed_limit = match lane {
+            LaneId::Normal(edge, _) => self.config.map.graph[edge].speed_limit,
+            LaneId::Internal(jid, ilid) => self
+                .config
+                .map
+                .node_index_map
+                .get(&jid)
+                .and_then(|&ni| {
+                    self.config.map.graph[ni]
+                        .internal_lanes
+                        .iter()
+                        .find(|il| il.id == ilid)
+                        .map(|il| il.speed_limit)
+                })
+                .unwrap_or(crate::simulation::config::MAX_SPEED),
+        };
+
+        if from_distance >= lane_len {
+            return lane_speed_limit;
+        }
+
+        let mut weighted_speed = 0.0f32;
+        let mut total_overlap = 0.0f32;
+
+        if let Some(list) = self.vehicles_by_lane.get(&lane) {
+            for &vidx in list {
+                let v = &self.vehicles[vidx];
+                let v_start = (v.position_on_lane - v.spec.length).max(0.0);
+                let v_end = v.position_on_lane.min(lane_len);
+
+                let overlap_start = v_start.max(from_distance);
+                let overlap_end = v_end;
+                let overlap = (overlap_end - overlap_start).max(0.0);
+                if overlap > 0.0 {
+                    weighted_speed += overlap * v.velocity;
+                    total_overlap += overlap;
+                }
+            }
+        }
+
+        if total_overlap > 0.0 {
+            (weighted_speed / total_overlap).max(0.0)
+        } else {
+            lane_speed_limit
+        }
+    }
+
+    pub fn lane_changing_urgency(&self, vidx: usize, lookahead_speed: f32) -> bool {
+        let v = match self.vehicles.get(vidx) {
+            Some(v) => v,
+            None => return false,
+        };
+
+        if v.is_on_correct_lane(&self.config.map) {
+            return false;
+        }
+
+        let best_offset = match v.lane_index_offset_to_correct_lane(&self.config.map) {
+            Some(o) => o,
+            None => return false,
+        };
+
+        if best_offset == 0 {
+            return false;
+        }
+
+        let (edge_idx, lane_id, position_on_lane) = match v.current_lane {
+            Some(LaneId::Normal(e, lid)) => (e, lid, v.position_on_lane),
+            _ => return false,
+        };
+
+        let d = (self.lane_length(vidx) - position_on_lane).max(0.0);
+
+        let road = &self.config.map.graph[edge_idx];
+        let current_idx = match road.lanes.iter().position(|l| l.id == lane_id) {
+            Some(i) => i as isize,
+            None => return false,
+        };
+
+        let target_idx_isize = current_idx + best_offset as isize;
+        if target_idx_isize < 0 || target_idx_isize >= road.lanes.len() as isize {
+            return false;
+        }
+        let target_idx = target_idx_isize as usize;
+        let target_lane = LaneId::Normal(edge_idx, road.lanes[target_idx].id);
+        let o = match self.lane_occupancy_from(target_lane, position_on_lane) {
+            Some(x) => x,
+            None => return false,
+        };
+        
+        let f = if best_offset > 0 {20.0} else {10.0};
+
+        d * o < lookahead_speed * (best_offset.abs() as f32) * f
+    }
+
+    /// Return true if the target `lane` has no vehicle occupying the interval [start, start+length].
+    /// Vehicles are assumed to occupy [position_on_lane - spec.length, position_on_lane].
+    pub fn lane_has_gap_between(&self, lane: LaneId, start: f32, length: f32) -> bool {
+        let lane_len = match self.lane_length_by_id(lane) {
+            Some(l) => l,
+            None => return false,
+        };
+
+        if start >= lane_len {
+            return false;
+        }
+
+        let end = (start + length).min(lane_len);
+
+        if let Some(list) = self.vehicles_by_lane.get(&lane) {
+            for &vidx in list {
+                let v = &self.vehicles[vidx];
+                let v_start = (v.position_on_lane - v.spec.length).max(0.0);
+                let v_end = v.position_on_lane.min(lane_len);
+
+                // If vehicle interval overlaps [start, end) there is no gap
+                if v_end > start && v_start < end {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Try to switch lane for vehicle `vidx` based on `speed_gain_probability`.
+    /// - If `speed_gain_probability > 0.2` try left; if `< -2.0` try right.
+    /// - Uses `lane_has_gap_between` to check the availability of the interval
+    ///   corresponding to the vehicle rear..front ([pos - len, pos]).
+    /// Returns true if the switch was performed.
+    pub fn try_switch_line(&mut self, vidx: usize) -> bool {
+        // gather read-only data first
+        let (edge_idx, lane_id, pos, veh_len, speed_prob) = match self.vehicles.get(vidx) {
+            Some(v) => match v.current_lane {
+                Some(LaneId::Normal(e, lid)) => (e, lid, v.position_on_lane, v.spec.length, v.speed_gain_probability),
+                _ => return false,
+            },
+            None => return false,
+        };
+
+        let road = &self.config.map.graph[edge_idx];
+        let current_idx = match road.lanes.iter().position(|l| l.id == lane_id) {
+            Some(i) => i,
+            None => return false,
+        };
+
+        let mut target_idx_opt: Option<usize> = None;
+        if speed_prob > 0.2 && current_idx > 0 {
+            target_idx_opt = Some(current_idx - 1);
+        } else if speed_prob < -2.0 && current_idx + 1 < road.lanes.len() {
+            target_idx_opt = Some(current_idx + 1);
+        }
+
+        let target_idx = match target_idx_opt {
+            Some(i) => i,
+            None => return false,
+        };
+
+        let target_lane = LaneId::Normal(edge_idx, road.lanes[target_idx].id);
+        let start = (pos - veh_len).max(0.0);
+
+        if !self.lane_has_gap_between(target_lane, start, veh_len) {
+            return false;
+        }
+
+        // perform lane change: remove from old lane list, update vehicle, insert into new lane list
+        let current_lane = LaneId::Normal(edge_idx, lane_id);
+
+        if let Some(lst) = self.vehicles_by_lane.get_mut(&current_lane) {
+            lst.retain(|&i| i != vidx);
+        }
+
+        // update vehicle lane
+        if let Some(v) = self.vehicles.get_mut(vidx) {
+            v.current_lane = Some(target_lane);
+            v.speed_gain_probability = 0.0;
+        }
+
+        // insert in target lane sorted by position
+        lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, target_lane, vidx);
+
+        true
+    }
+
+    pub fn update_speed_gain_probability(&mut self, vidx: usize, time_step: f32) {
+
+        // Only consider normal lanes and a left neighbor lane (index -1)
+        // Gather read-only data first to avoid mutable/immutable borrow conflicts
+        let (edge_idx, lane_id, pos, ego_speed, ego_max_speed) = match self.vehicles.get(vidx) {
+            Some(v) => match v.current_lane {
+                Some(LaneId::Normal(e, lid)) => (e, lid, v.position_on_lane, v.velocity.max(0.1), v.spec.max_speed),
+                _ => return,
+            },
+            None => return,
+        };
+
+        let road = &self.config.map.graph[edge_idx];
+        let current_idx = match road.lanes.iter().position(|l| l.id == lane_id) {
+            Some(i) => i,
+            None => return,
+        };
+
+        let mut total_gain = 0.0f32;
+        let mut faster_lane = false;
+        let mean_lane = self.lane_mean_speed_from(LaneId::Normal(edge_idx, road.lanes[current_idx].id), pos+0.01);
+
+        if current_idx > 0 {
+            let left_lane = LaneId::Normal(edge_idx, road.lanes[current_idx - 1].id);
+            let mean_left = self.lane_mean_speed_from(left_lane, pos);
+            let left_gain_factor = time_step * (mean_left.min(ego_max_speed) - mean_lane) / mean_lane;
+            if left_gain_factor > 0.1 {
+                faster_lane = true;
+                total_gain += left_gain_factor;
+            }
+        }
+
+        if current_idx + 1 < road.lanes.len() {
+            let right_lane = LaneId::Normal(edge_idx, road.lanes[current_idx + 1].id);
+            let mean_right = self.lane_mean_speed_from(right_lane, pos);
+            let right_gain_factor = time_step * (mean_right.min(ego_max_speed) - mean_lane) / mean_lane;
+            if right_gain_factor > 0.1 {
+                faster_lane = true;
+                total_gain -= right_gain_factor;
+            }
+        }
+
+
+        if let Some(v) = self.vehicles.get_mut(vidx) {
+            v.speed_gain_probability += total_gain;
+            if !faster_lane{
+                v.speed_gain_probability = v.speed_gain_probability * (0.5_f32).powf(time_step);
+            }
         }
     }
 

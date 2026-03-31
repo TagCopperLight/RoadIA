@@ -187,3 +187,58 @@ pub fn create_intersection_test_map() -> Map {
     intersection::build_intersections(&mut map);
     map
 }
+
+pub fn create_vehicles_for_one_way_road(map: &Map, _count: usize) -> Vec<Vehicle> {
+    let mut vehicles = Vec::new();
+    let mut ids = 0..;
+
+    // Find origin (Habitation) and destination (Workplace)
+    let nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
+    let origin = nodes.iter()
+        .find(|&&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
+        .copied();
+    let destination = nodes.iter()
+        .find(|&&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
+        .copied();
+
+    let origin = match origin {
+        Some(o) => o,
+        None => return vehicles,
+    };
+    let destination = match destination {
+        Some(d) => d,
+        None => return vehicles,
+    };
+
+    // Slow vehicle (id 0) — departs at t=0
+    // Set slow vehicle max speed to 10 m/s
+    let slow_spec = VehicleSpec::new(VehicleKind::Car, 10.0, 2.0, 3.0, 1.0, 10.0);
+    let slow_trip = TripRequest { origin, destination, departure_time: 0.0 };
+    vehicles.push(Vehicle::new(ids.next().unwrap(), slow_spec, slow_trip));
+
+    // Fast vehicle (id 1) — departs at t=5.0
+    // Fast vehicle with max speed 50 m/s
+    let fast_spec = VehicleSpec::new(VehicleKind::Car, 50.0, 4.0, 3.0, 1.0, 10.0);
+    let fast_trip = TripRequest { origin, destination, departure_time: 5.0 };
+    vehicles.push(Vehicle::new(ids.next().unwrap(), fast_spec, fast_trip));
+
+    vehicles
+}
+
+pub fn one_way_road() -> Map {
+    let mut map = Map::new();
+
+    // Create nodes: A (Habitation) at (0,100), B (Intersection) at (100,100), C (Workplace) at (1000,100)
+    let a = map.add_intersection(IntersectionKind::Habitation, 0.0, 100.0);
+    let b = map.add_intersection(IntersectionKind::Intersection, 100.0, 100.0);
+    let c = map.add_intersection(IntersectionKind::Workplace, 1000.0, 100.0);
+
+    // Road from A -> B : 1 lane (higher speed to allow differentiation)
+    map.add_road(a, b, 1, 60.0, 100.0);
+
+    // Road from B -> C : 2 lanes (fast road)
+    map.add_road(b, c, 2, 120.0, 900.0);
+
+    intersection::build_intersections(&mut map);
+    map
+}

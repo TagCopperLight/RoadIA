@@ -9,7 +9,7 @@ use axum::{Router, routing::get};
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_connected_map, create_random_vehicles};
+use crate::api::runner::map_generator::{one_way_road, create_vehicles_for_one_way_road};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -49,8 +49,9 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_connected_map(200, 1500.0, 1500.0);
-    let vehicles = create_random_vehicles(&map, 50);
+    // Use the one-way test map and its two test vehicles
+    let map = one_way_road();
+    let vehicles = create_vehicles_for_one_way_road(&map, 2);
 
     let config = SimulationConfig {
         start_time: 0.0,
