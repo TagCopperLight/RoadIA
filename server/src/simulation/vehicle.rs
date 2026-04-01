@@ -264,22 +264,27 @@ impl Vehicle {
         if matches!(current_lane, LaneId::Internal(_, _)) {
             return true;
         }
+        // If at destination or no next node, consider correct
         if self.path_index + 1 >= self.path.len() {
             return true;
         }
-        let expected_edge = match map.graph.find_edge(self.get_current_node(), self.get_next_node()) {
+        // Determine the outgoing road from the junction: path[path_index+1] -> path[path_index+2]
+        if self.path_index + 2 >= self.path.len() {
+            return true;
+        }
+        let next_node = self.get_next_node();
+        let to_node = self.path[self.path_index + 2];
+        let out_edge = match map.graph.find_edge(next_node, to_node) {
             Some(e) => e,
             None => return false,
         };
+
         match current_lane {
             LaneId::Normal(edge_idx, lane_id) => {
                 let road = &map.graph[edge_idx];
-                let dest_road_id = map.graph[expected_edge].id;
+                let dest_road_id = map.graph[out_edge].id;
                 if let Some(lane_obj) = road.lanes.iter().find(|l| l.id == lane_id) {
-                    return lane_obj
-                        .links
-                        .iter()
-                        .any(|link| link.destination_road_id == dest_road_id);
+                    return lane_obj.links.iter().any(|link| link.destination_road_id == dest_road_id);
                 }
                 false
             }
@@ -304,21 +309,32 @@ impl Vehicle {
             return Some(0);
         }
 
+        // We need the incoming edge (current road) and the outgoing edge from the junction
         let next_node = self.get_next_node();
+        if self.path_index + 2 >= self.path.len() {
+            return Some(0);
+        }
+        let to_node = self.path[self.path_index + 2];
 
-        let expected_edge = match map.graph.find_edge(self.get_current_node(), next_node) {
+        let expected_in_edge = match map.graph.find_edge(self.get_current_node(), next_node) {
+            Some(e) => e,
+            None => return None,
+        };
+        let expected_out_edge = match map.graph.find_edge(next_node, to_node) {
             Some(e) => e,
             None => return None,
         };
 
         match current_lane {
             LaneId::Normal(edge_idx, lane_id) => {
-                if edge_idx != expected_edge {
+                // Ensure vehicle is on the expected incoming edge
+                if edge_idx != expected_in_edge {
                     return None;
                 }
 
                 let road = &map.graph[edge_idx];
-                let dest_road_id = map.graph[expected_edge].id;
+                // The destination road id we want is the outgoing edge from the junction
+                let dest_road_id = map.graph[expected_out_edge].id;
 
                 // Find current lane index within the road.lanes vector
                 let current_idx = match road.lanes.iter().position(|l| l.id == lane_id) {

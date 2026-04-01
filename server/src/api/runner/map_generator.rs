@@ -242,3 +242,105 @@ pub fn one_way_road() -> Map {
     intersection::build_intersections(&mut map);
     map
 }
+
+/// Create a map where:
+/// - A at (0,0) is a Habitation
+/// - B at (1000,0) is an Intersection
+/// - C at (1000,-200) and D at (1000,200) are destinations
+/// - Road A->B has 2 lanes. Lane 0 from A->B is restricted to go to C.
+///   Lane 1 from A->B is restricted to go to D.
+/// After building intersections we prune the generated links so each lane
+/// only points to its intended outgoing road.
+pub fn create_lane_restriction_map() -> Map {
+    let mut map = Map::new();
+
+    let a = map.add_intersection(IntersectionKind::Habitation, 0.0, 0.0);
+    let b = map.add_intersection(IntersectionKind::Intersection, 1000.0, 0.0);
+    let c = map.add_intersection(IntersectionKind::Habitation, 1000.0, -200.0);
+    let d = map.add_intersection(IntersectionKind::Workplace, 1000.0, 200.0);
+
+    // A -> B with 2 lanes
+    let ab_id = map.add_road(a, b, 2, 60.0, 1000.0);
+    // B -> C and B -> D (single lane each)
+    let bc_id = map.add_road(b, c, 1, 40.0, 200.0);
+    let bd_id = map.add_road(b, d, 1, 40.0, 200.0);
+
+    // Build intersections (creates internal lanes + all links)
+    intersection::build_intersections(&mut map);
+
+    // Prune links so lane 0 of AB only goes to BC and lane 1 only to BD
+    if let Some(ab_edge) = map.find_edge(ab_id) {
+        for (i, lane) in map.graph[ab_edge].lanes.iter_mut().enumerate() {
+            if i == 0 {
+                lane.links.retain(|l| l.destination_road_id == bc_id);
+            } else if i == 1 {
+                lane.links.retain(|l| l.destination_road_id == bd_id);
+            }
+        }
+    }
+
+    map
+}
+
+/// Same as `create_lane_restriction_map` but without pruning per-lane links.
+/// Useful to test behavior when lanes are not restricted to specific outgoing roads.
+pub fn create_lane_unrestricted_map() -> Map {
+    let mut map = Map::new();
+
+    let a = map.add_intersection(IntersectionKind::Habitation, 0.0, 0.0);
+    let b = map.add_intersection(IntersectionKind::Intersection, 1000.0, 0.0);
+    let c = map.add_intersection(IntersectionKind::Habitation, 1000.0, -200.0);
+    let d = map.add_intersection(IntersectionKind::Workplace, 1000.0, 200.0);
+
+    // A -> B with 2 lanes
+    let _ab_id = map.add_road(a, b, 2, 60.0, 1000.0);
+    // B -> C and B -> D (single lane each)
+    let _bc_id = map.add_road(b, c, 1, 40.0, 200.0);
+    let _bd_id = map.add_road(b, d, 1, 40.0, 200.0);
+
+    // Build intersections (creates internal lanes + all links)
+    intersection::build_intersections(&mut map);
+
+    map
+}
+
+/// Create a single vehicle that starts at A (0,0) and is destined to D (1000,200).
+pub fn create_vehicle_for_lane_restriction_map(map: &Map) -> Vec<Vehicle> {
+    let mut vehicles = Vec::new();
+    let mut ids = 0..;
+
+    let nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
+
+    let origin = nodes
+        .iter()
+        .copied()
+        .find(|&n| {
+            (map.graph[n].center_coordinates.x - 0.0).abs() < 1e-6
+                && (map.graph[n].center_coordinates.y - 0.0).abs() < 1e-6
+        });
+
+    let destination = nodes
+        .iter()
+        .copied()
+        .find(|&n| {
+            (map.graph[n].center_coordinates.x - 1000.0).abs() < 1e-6
+                && (map.graph[n].center_coordinates.y - 200.0).abs() < 1e-6
+        });
+
+    let (origin, destination) = match (origin, destination) {
+        (Some(o), Some(d)) => (o, d),
+        _ => return vehicles,
+    };
+
+    let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
+
+    let trip = TripRequest {
+        origin,
+        destination,
+        departure_time: 0.0,
+    };
+
+    vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip));
+
+    vehicles
+}

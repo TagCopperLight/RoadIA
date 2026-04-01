@@ -360,10 +360,11 @@ impl SimulationEngine {
             }
         }
 
-        // After applying IDM (velocity/position update), update speed gain probability
-        // and attempt an instant lane change if conditions are met and there is a sufficient gap.
+        // After applying IDM (velocity/position update), update speed gain probability,
+        // attempt a strategic overtake, then fall back to instant lane change if needed.
         self.update_speed_gain_probability(vidx, dt);
-        let _switched = self.try_switch_line(vidx);
+        let _overtake = self.try_strategical_overtake(vidx);
+        let _switched = if !_overtake { self.try_switch_line(vidx) } else { false };
 
         self.process_lane_advances(vidx);
     }
@@ -716,10 +717,72 @@ impl SimulationEngine {
         true
     }
 
-    pub fn update_speed_gain_probability(&mut self, vidx: usize, time_step: f32) {
+    pub fn try_strategical_overtake(&mut self, vidx: usize) -> bool {
+        let (edge_idx, lane_id, pos, veh_len) = match self.vehicles.get(vidx) {
+            Some(v) => match v.current_lane {
+                Some(LaneId::Normal(e, lid)) => (e, lid, v.position_on_lane, v.spec.length),
+                _ => return false,
+            },
+            None => return false,
+        };
 
-        // Only consider normal lanes and a left neighbor lane (index -1)
-        // Gather read-only data first to avoid mutable/immutable borrow conflicts
+        let road = &self.config.map.graph[edge_idx];
+        let current_idx = match road.lanes.iter().position(|l| l.id == lane_id) {
+            Some(i) => i,
+            None => return false,
+        };
+
+        let offset = match self.vehicles.get(vidx).and_then(|v| v.lane_index_offset_to_correct_lane(&self.config.map)) {
+            Some(o) if o != 0 => o,
+            _ => return false,
+        };
+
+        let target_idx_opt: Option<usize> = if offset > 0 {
+            // need to move to higher index (right)
+            if current_idx + 1 < road.lanes.len() {
+                Some(current_idx + 1)
+            } else {
+                None
+            }
+        } else {
+            // need to move to lower index (left)
+            if current_idx > 0 {
+                Some(current_idx - 1)
+            } else {
+                None
+            }
+        };
+
+        let target_idx = match target_idx_opt {
+            Some(i) => i,
+            None => return false,
+        };
+
+        let target_lane = LaneId::Normal(edge_idx, road.lanes[target_idx].id);
+        let start = (pos - veh_len).max(0.0);
+
+        if !self.lane_has_gap_between(target_lane, start, veh_len) {
+            return false;
+        }
+
+        // perform lane change: remove from old lane list, update vehicle, insert into new lane list
+        let current_lane = LaneId::Normal(edge_idx, lane_id);
+
+        if let Some(lst) = self.vehicles_by_lane.get_mut(&current_lane) {
+            lst.retain(|&i| i != vidx);
+        }
+
+        if let Some(v) = self.vehicles.get_mut(vidx) {
+            v.current_lane = Some(target_lane);
+            v.speed_gain_probability = 0.0;
+        }
+
+        lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, target_lane, vidx);
+
+        true
+    }
+
+    pub fn update_speed_gain_probability(&mut self, vidx: usize, time_step: f32) {
         let (edge_idx, lane_id, pos, ego_speed, ego_max_speed) = match self.vehicles.get(vidx) {
             Some(v) => match v.current_lane {
                 Some(LaneId::Normal(e, lid)) => (e, lid, v.position_on_lane, v.velocity.max(0.1), v.spec.max_speed),
@@ -740,21 +803,46 @@ impl SimulationEngine {
 
         if current_idx > 0 {
             let left_lane = LaneId::Normal(edge_idx, road.lanes[current_idx - 1].id);
-            let mean_left = self.lane_mean_speed_from(left_lane, pos);
-            let left_gain_factor = time_step * (mean_left.min(ego_max_speed) - mean_lane) / mean_lane;
-            if left_gain_factor > 0.1 {
-                faster_lane = true;
-                total_gain += left_gain_factor;
+            let consider_left = {
+                if let Some(v) = self.vehicles.get(vidx) {
+                    let mut tmp = v.clone();
+                    tmp.current_lane = Some(left_lane);
+                    tmp.is_on_correct_lane(&self.config.map)
+                } else {
+                    false
+                }
+            };
+
+            if consider_left {
+                let mean_left = self.lane_mean_speed_from(left_lane, pos);
+                let left_gain_factor = time_step * (mean_left.min(ego_max_speed) - mean_lane) / mean_lane;
+                if left_gain_factor > 0.1 {
+                    faster_lane = true;
+                    total_gain += left_gain_factor;
+                }
             }
         }
 
         if current_idx + 1 < road.lanes.len() {
             let right_lane = LaneId::Normal(edge_idx, road.lanes[current_idx + 1].id);
-            let mean_right = self.lane_mean_speed_from(right_lane, pos);
-            let right_gain_factor = time_step * (mean_right.min(ego_max_speed) - mean_lane) / mean_lane;
-            if right_gain_factor > 0.1 {
-                faster_lane = true;
-                total_gain -= right_gain_factor;
+            // Only consider right lane if it is a 'correct' lane towards the vehicle's next node
+            let consider_right = {
+                if let Some(v) = self.vehicles.get(vidx) {
+                    let mut tmp = v.clone();
+                    tmp.current_lane = Some(right_lane);
+                    tmp.is_on_correct_lane(&self.config.map)
+                } else {
+                    false
+                }
+            };
+
+            if consider_right {
+                let mean_right = self.lane_mean_speed_from(right_lane, pos);
+                let right_gain_factor = time_step * (mean_right.min(ego_max_speed) - mean_lane) / mean_lane;
+                if right_gain_factor > 0.1 {
+                    faster_lane = true;
+                    total_gain -= right_gain_factor;
+                }
             }
         }
 
