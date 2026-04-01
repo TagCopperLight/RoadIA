@@ -1,117 +1,124 @@
-import { useEffect } from 'react';
+'use client';
+
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 
 type Listener = (data: unknown) => void;
 
 class WebSocketClient {
     private socket: WebSocket | null = null;
-    private listeners: Map<string, Listener[]> = new Map();
+    private listeners: Map<string, Set<Listener>> = new Map();
     private url: string;
-    private reconnectInterval: number = 5000;
-    private shouldReconnect: boolean = true;
-
-    private messageQueue: string[] = [];
+    private shouldReconnect: boolean = false;
+    private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 
     constructor(url: string) {
         this.url = url;
-        this.connect();
     }
 
-    private connect() {
-        // Verify we are client-side
+    connect() {
         if (typeof window === 'undefined') return;
+        this.shouldReconnect = true;
+        this.open();
+    }
+
+    private open() {
+        if (
+            this.socket?.readyState === WebSocket.OPEN ||
+            this.socket?.readyState === WebSocket.CONNECTING
+        ) return;
 
         this.socket = new WebSocket(this.url);
 
         this.socket.onopen = () => {
-            console.log(`[WebSocket] Connected to ${this.url}`);
-            this.flushQueue();
+            console.log(`[WS] Connected to ${this.url}`);
         };
 
         this.socket.onmessage = (event: MessageEvent) => {
             try {
-                const json = JSON.parse(event.data);
-                const packetID = json.id;
-                const data = json.data;
-                this.dispatch(packetID, data);
+                const { id, data } = JSON.parse(event.data);
+                this.listeners.get(id)?.forEach(fn => fn(data));
             } catch (e) {
-                console.error("[WebSocket] Failed to parse message:", e);
+                console.error('[WS] Parse error:', e);
             }
         };
 
         this.socket.onclose = () => {
-            console.log("[WebSocket] Disconnected");
+            console.log('[WS] Disconnected');
             if (this.shouldReconnect) {
-                setTimeout(() => this.connect(), this.reconnectInterval);
+                this.reconnectTimeout = setTimeout(() => this.open(), 3000);
             }
         };
 
-        this.socket.onerror = (error) => {
-            console.error("[WebSocket] Error:", error);
+        this.socket.onerror = () => {
             this.socket?.close();
         };
     }
 
-    private flushQueue() {
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            while (this.messageQueue.length > 0) {
-                const message = this.messageQueue.shift();
-                if (message) {
-                    this.socket.send(message);
-                }
-            }
-        }
-    }
-
-    private dispatch(packetID: string, data: unknown) {
-        const packetListeners = this.listeners.get(packetID);
-        if (packetListeners) {
-            packetListeners.forEach(callback => callback(data));
-        } else {
-            console.warn(`[WebSocket] No listener for packetID: "${packetID}"`);
-        }
-    }
-
-    public on(packetID: string, callback: Listener) {
-        if (!this.listeners.has(packetID)) {
-            this.listeners.set(packetID, []);
-        }
-        this.listeners.get(packetID)!.push(callback);
-    }
-
-    public off(packetID: string, callback: Listener) {
-        const packetListeners = this.listeners.get(packetID);
-        if (packetListeners) {
-            this.listeners.set(packetID, packetListeners.filter(l => l !== callback));
-        }
-    }
-
-    public send(packetID: string, data: unknown) {
-        const payload = JSON.stringify({ id: packetID, data: data });
-        if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-            this.socket.send(payload);
-        } else {
-            console.warn("[WebSocket] Socket not open, queueing message");
-            this.messageQueue.push(payload);
-        }
-    }
-
-    public close() {
+    close() {
         this.shouldReconnect = false;
+        if (this.reconnectTimeout !== null) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
         this.socket?.close();
+        this.socket = null;
+    }
+
+    send(packetID: string, data: unknown) {
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.socket.send(JSON.stringify({ id: packetID, data }));
+        }
+    }
+
+    on(packetID: string, listener: Listener) {
+        if (!this.listeners.has(packetID)) this.listeners.set(packetID, new Set());
+        this.listeners.get(packetID)!.add(listener);
+    }
+
+    off(packetID: string, listener: Listener) {
+        this.listeners.get(packetID)?.delete(listener);
     }
 }
 
-export const wsClient = new WebSocketClient("ws://localhost:8080/ws");
+const WsContext = createContext<WebSocketClient | null>(null);
 
-export function sendConnectionToken(token: string) {
-    wsClient.send("connect", { token: token });
+export function WsProvider({ uuid, children }: { uuid: string; children: ReactNode }) {
+    const [ws, setWs] = useState<WebSocketClient | null>(null);
+
+    useEffect(() => {
+        const token = sessionStorage.getItem('sim_token') ?? '';
+        const wsUrl = process.env.NEXT_PUBLIC_API_URL!.replace(/^http/, 'ws');
+        const client = new WebSocketClient(
+            `${wsUrl}/ws?uuid=${encodeURIComponent(uuid)}&token=${encodeURIComponent(token)}`
+        );
+        client.connect();
+        setWs(client);
+        return () => client.close();
+    }, [uuid]);
+
+    return <WsContext.Provider value={ws}>{children}</WsContext.Provider>;
 }
 
-export function useWebSocket(packetID: string, callback: Listener) {
+export function useWs(): WebSocketClient | null {
+    return useContext(WsContext);
+}
+
+export function usePacket(packetID: string, callback: Listener) {
+    const ws = useContext(WsContext);
+    const callbackRef = useRef(callback);
+    callbackRef.current = callback;
+
     useEffect(() => {
-        wsClient.on(packetID, callback);
-        return () => {
-            wsClient.off(packetID, callback);
-        };
-    }, [packetID, callback]);
+        if (!ws) return;
+        const stable: Listener = (data) => callbackRef.current(data);
+        ws.on(packetID, stable);
+        return () => ws.off(packetID, stable);
+    }, [ws, packetID]);
+}
+
+export async function createSimulation(): Promise<{ uuid: string; token: string }> {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/simulations`, { method: 'POST' });
+    if (!res.ok) throw new Error(`Failed to create simulation: ${res.status}`);
+    return res.json();
 }
