@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use petgraph::graph::NodeIndex;
 
@@ -345,7 +345,7 @@ fn is_link_open_already_in_internal_lane_always_true() {
     vehicle.current_lane = Some(LaneId::Internal(0, 0));
     let ego_data = make_approach_data(1.0, 2.0);
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
     );
     assert!(result);
 }
@@ -358,7 +358,7 @@ fn is_link_open_stop_sign_not_waited() {
     vehicle.waiting_time = 0.0; // hasn't waited yet
     let ego_data = make_approach_data(1.0, 2.0);
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
     );
     assert!(!result);
 }
@@ -371,7 +371,7 @@ fn is_link_open_stop_sign_after_dwell() {
     vehicle.waiting_time = 2.0; // > STOP_DWELL_TIME=1.0
     let ego_data = make_approach_data(1.0, 2.0);
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
     );
     assert!(result);
 }
@@ -392,7 +392,7 @@ fn is_link_open_foe_in_internal_lane_blocks() {
 
     let dummy = make_vehicle_on_road(99);
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &vehicles_by_lane, &[dummy], junction_id, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &HashMap::new(), &vehicles_by_lane, &[dummy], junction_id, 0.1, 1.0, &HashSet::new(),
     );
     assert!(!result);
 }
@@ -412,7 +412,7 @@ fn is_link_open_foe_internal_lane_empty_allows() {
     vehicles_by_lane.insert(LaneId::Internal(junction_id, foe_il_id), vec![]);
 
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &vehicles_by_lane, &[], junction_id, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &HashMap::new(), &vehicles_by_lane, &[], junction_id, 0.1, 1.0, &HashSet::new(),
     );
     assert!(result);
 }
@@ -423,7 +423,7 @@ fn is_link_open_priority_no_foes() {
     let vehicle = make_vehicle_on_road(1);
     let ego_data = make_approach_data(1.0, 2.0);
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
     );
     assert!(result);
 }
@@ -454,7 +454,7 @@ fn is_link_open_yield_to_priority_conflict_blocks() {
     link_states.insert(foe_link_id, foe_state);
 
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &link_states, &HashMap::new(), &[foe_vehicle], 0, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &link_states, &HashMap::new(), &[foe_vehicle], 0, 0.1, 1.0, &HashSet::new(),
     );
     assert!(!result, "expected blocked by yielding to priority foe");
 }
@@ -480,7 +480,7 @@ fn is_link_open_priority_ignores_yield_foe() {
     link_states.insert(foe_link_id, foe_state);
 
     let result = is_link_open(
-        &link, &vehicle, &ego_data, &link_states, &HashMap::new(), &[foe_vehicle], 0, 0.1, 1.0,
+        &link, &vehicle, &ego_data, &link_states, &HashMap::new(), &[foe_vehicle], 0, 0.1, 1.0, &HashSet::new(),
     );
     assert!(result, "Priority vehicle should not be blocked by Yield foe");
 }
@@ -531,4 +531,37 @@ fn build_intersections_populates_links_on_lanes() {
         road.lanes.iter().any(|l| !l.links.is_empty()),
         "road lanes should have links after build_intersections"
     );
+}
+
+// ---- is_link_open: traffic light ----
+
+#[test]
+fn is_link_open_traffic_light_red_blocks() {
+    let mut link = make_default_link(0);
+    link.link_type = LinkType::TrafficLight;
+    let vehicle = make_vehicle_on_road(1);
+    let ego_data = make_approach_data(1.0, 2.0);
+    // green_links is empty → link 0 is red
+    let result = is_link_open(
+        &link, &vehicle, &ego_data,
+        &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
+        &HashSet::new(),
+    );
+    assert!(!result, "traffic light link should be blocked when not in green set");
+}
+
+#[test]
+fn is_link_open_traffic_light_green_allows() {
+    let mut link = make_default_link(0);
+    link.link_type = LinkType::TrafficLight;
+    let vehicle = make_vehicle_on_road(1);
+    let ego_data = make_approach_data(1.0, 2.0);
+    let mut green_links = HashSet::new();
+    green_links.insert(0u32); // link id 0 is green
+    let result = is_link_open(
+        &link, &vehicle, &ego_data,
+        &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
+        &green_links,
+    );
+    assert!(result, "traffic light link should be open when in green set");
 }

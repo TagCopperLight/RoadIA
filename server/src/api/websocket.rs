@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
+use std::collections::HashSet;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
@@ -35,7 +36,7 @@ pub enum ClientPacket {
 #[serde(rename_all = "camelCase")]
 pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
-    VehicleUpdate { vehicles: Vec<Value> },
+    VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value> },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
 }
 
@@ -368,11 +369,15 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
         .node_indices()
         .map(|i| {
             let n = &map.graph[i];
+            let has_traffic_light = map.traffic_lights
+                .values()
+                .any(|c| c.intersection_id == n.id);
             json!({
                 "id": n.id,
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
-                "y": n.center_coordinates.y
+                "y": n.center_coordinates.y,
+                "has_traffic_light": has_traffic_light
             })
         })
         .collect();
@@ -425,4 +430,35 @@ fn serialize_intersection_kind(s: &str) -> Result<IntersectionKind, String> {
         "Workplace" => Ok(IntersectionKind::Workplace),
         other => Err(format!("Unknown intersection kind: {}", other)),
     }
+}
+
+pub fn serialize_traffic_lights(map: &Map, green_links: &HashSet<u32>) -> Vec<Value> {
+    map.traffic_lights
+        .values()
+        .map(|controller| {
+            let green_road_ids: Vec<u32> = map
+                .graph
+                .edge_indices()
+                .filter_map(|e| {
+                    let road = &map.graph[e];
+                    let is_green = road.lanes.iter().any(|lane| {
+                        lane.links.iter().any(|link| {
+                            green_links.contains(&link.id)
+                                && map
+                                    .graph
+                                    .edge_endpoints(e)
+                                    .map(|(_, to)| map.graph[to].id == controller.intersection_id)
+                                    .unwrap_or(false)
+                        })
+                    });
+                    if is_green { Some(road.id) } else { None }
+                })
+                .collect();
+
+            json!({
+                "id": controller.intersection_id,
+                "green_road_ids": green_road_ids
+            })
+        })
+        .collect()
 }

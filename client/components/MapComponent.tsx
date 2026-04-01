@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData } from './map/types';
+import { MapData, VehicleData, TrafficLightData } from './map/types';
 
 interface MapComponentProps {
 	uuid: string;
@@ -14,6 +14,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
@@ -65,11 +66,20 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 
 		    setVehicles(processedVehicles);
         }
+
+		// Parse traffic light states
+		if (data && Array.isArray(data.traffic_lights)) {
+			const tlMap = new Map<number, TrafficLightData>();
+			(data.traffic_lights as TrafficLightData[]).forEach(tl => {
+				tlMap.set(tl.id, tl);
+			});
+			setTrafficLights(tlMap);
+		}
 	});
 
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
-			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} />}
+			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} trafficLights={trafficLights} />}
 			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>
