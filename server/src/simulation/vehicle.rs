@@ -196,17 +196,32 @@ impl Vehicle {
                                     .expect("edge"),
                             )
                             .expect("edge weight");
+                            
+                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                        let tlen = (tdx * tdx + tdy * tdy).sqrt();
+
+                        let (start_x, start_y) = if tlen > 1e-6 {
+                            (cur.center_coordinates.x + (tdx / tlen) * cur.radius, cur.center_coordinates.y + (tdy / tlen) * cur.radius)
+                        } else {
+                            (cur.center_coordinates.x, cur.center_coordinates.y)
+                        };
+
+                        let (end_x, end_y) = if tlen > 1e-6 {
+                            (nxt.center_coordinates.x - (tdx / tlen) * nxt.radius, nxt.center_coordinates.y - (tdy / tlen) * nxt.radius)
+                        } else {
+                            (nxt.center_coordinates.x, nxt.center_coordinates.y)
+                        };
+
                         let t = self.position_on_lane / road.length;
-                        let cx = cur.center_coordinates.x * (1.0 - t) + nxt.center_coordinates.x * t;
-                        let cy = cur.center_coordinates.y * (1.0 - t) + nxt.center_coordinates.y * t;
+                        let cx = start_x * (1.0 - t) + end_x * t;
+                        let cy = start_y * (1.0 - t) + end_y * t;
 
                         let lane_idx = match self.current_lane {
                             Some(LaneId::Normal(_, lid)) => lid as usize,
                             _ => 0,
                         };
-                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
-                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
-                        let tlen = (tdx * tdx + tdy * tdy).sqrt();
+                        
                         let (perp_x, perp_y) = if tlen > 1e-6 {
                             (-tdy / tlen, tdx / tlen)
                         } else {
