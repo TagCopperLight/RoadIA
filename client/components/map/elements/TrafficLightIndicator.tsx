@@ -3,7 +3,6 @@ import { MapNode } from '../types';
 export function TrafficLightIndicator({
 	start,
 	end,
-	edgeId,
 	isGreen,
 }: {
 	start: MapNode;

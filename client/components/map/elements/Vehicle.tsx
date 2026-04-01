@@ -13,8 +13,8 @@ export function Vehicle({ data }: VehicleProps) {
         <pixiGraphics draw={(graphics) => {
             graphics.clear();
             
-            let x = data.x;
-            let y = data.y;
+            const x = data.x;
+            const y = data.y;
 
             graphics.position.set(x, y);
             
