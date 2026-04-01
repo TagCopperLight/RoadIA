@@ -14,6 +14,9 @@ use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec}
 pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Map {
     let mut map = osm_parser::parse_osm_pbf(path).expect("Failed to parse OSM PBF file");
 
+    // Remove disconnected fragments — keep only the largest connected component.
+    map.retain_largest_component();
+
     // Tag some intersections as Workplace so vehicles have destinations.
     // Leaf nodes with only outgoing edges → Habitation (already default).
     // Leaf nodes with only incoming edges → Workplace.

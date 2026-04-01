@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 
 use crate::map::intersection::{Intersection, IntersectionKind};
@@ -114,6 +114,105 @@ impl Map {
         let dx = n1.center_coordinates.x - n2.center_coordinates.x;
         let dy = n1.center_coordinates.y - n2.center_coordinates.y;
         (dx * dx + dy * dy).sqrt()
+    }
+
+    /// Keep only the largest weakly connected component of the graph.
+    ///
+    /// OSM data often contains small disconnected road fragments.
+    /// This method removes them so that every node is reachable from
+    /// every other node (treating edges as undirected for connectivity).
+    pub fn retain_largest_component(&mut self) {
+        let all_nodes: Vec<NodeIndex> = self.graph.node_indices().collect();
+        if all_nodes.is_empty() {
+            return;
+        }
+
+        // ── Find weakly connected components via BFS ────────────────
+        // Build an undirected adjacency list from the directed graph.
+        let mut adj: HashMap<NodeIndex, Vec<NodeIndex>> = HashMap::new();
+        for edge in self.graph.edge_indices() {
+            if let Some((a, b)) = self.graph.edge_endpoints(edge) {
+                adj.entry(a).or_default().push(b);
+                adj.entry(b).or_default().push(a);
+            }
+        }
+
+        let mut visited: HashSet<NodeIndex> = HashSet::new();
+        let mut components: Vec<HashSet<NodeIndex>> = Vec::new();
+
+        for &start in &all_nodes {
+            if visited.contains(&start) {
+                continue;
+            }
+            let mut component = HashSet::new();
+            let mut queue = VecDeque::new();
+            queue.push_back(start);
+            visited.insert(start);
+
+            while let Some(node) = queue.pop_front() {
+                component.insert(node);
+                if let Some(neighbors) = adj.get(&node) {
+                    for &neighbor in neighbors {
+                        if visited.insert(neighbor) {
+                            queue.push_back(neighbor);
+                        }
+                    }
+                }
+            }
+            components.push(component);
+        }
+
+        // ── Find the largest component ──────────────────────────────
+        let largest = components
+            .into_iter()
+            .max_by_key(|c| c.len())
+            .unwrap_or_default();
+
+        let total = all_nodes.len();
+        let kept = largest.len();
+        if kept == total {
+            return; // graph is already fully connected
+        }
+
+        println!(
+            "Retaining largest connected component: {} / {} nodes ({} removed)",
+            kept,
+            total,
+            total - kept
+        );
+
+        // ── Rebuild the graph with only the largest component ───────
+        let mut new_map = Map::new();
+        let mut old_to_new: HashMap<NodeIndex, u32> = HashMap::new();
+
+        // Re-add nodes
+        for &old_idx in &largest {
+            let node = &self.graph[old_idx];
+            let new_id = new_map.add_intersection(
+                node.kind.clone(),
+                node.center_coordinates.x,
+                node.center_coordinates.y,
+            );
+            old_to_new.insert(old_idx, new_id);
+        }
+
+        // Re-add edges
+        for edge in self.graph.edge_indices() {
+            if let Some((a, b)) = self.graph.edge_endpoints(edge) {
+                if let (Some(&new_a), Some(&new_b)) = (old_to_new.get(&a), old_to_new.get(&b)) {
+                    let road = &self.graph[edge];
+                    new_map.add_road(
+                        new_a,
+                        new_b,
+                        road.lanes.len() as u8,
+                        road.speed_limit,
+                        road.length,
+                    );
+                }
+            }
+        }
+
+        *self = new_map;
     }
 
 }
