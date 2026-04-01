@@ -9,7 +9,7 @@ use axum::{Router, routing::get};
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_traffic_light_test_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_osm_map, create_random_vehicles};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -49,8 +49,7 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    // let map = create_connected_map(200, 1500.0, 1500.0);
-    let map = create_traffic_light_test_map();
+    let map = create_osm_map("../data/planet_-3.488,48.716_-3.416,48.749.osm.pbf");
     let vehicles = create_random_vehicles(&map, 50);
 
     let config = SimulationConfig {
@@ -63,10 +62,11 @@ pub async fn run() -> io::Result<()> {
 
     let mut simulation = SimulationEngine::new(config, vehicles);
     
-    // Initialize vehicle paths
-    for vehicle in &mut simulation.vehicles {
-        vehicle.update_path(&simulation.config.map);
-    }
+    // Initialize vehicle paths, removing those without valid routes
+    simulation.vehicles.retain_mut(|vehicle| {
+        vehicle.update_path(&simulation.config.map)
+    });
+    println!("Vehicles with valid paths: {}", simulation.vehicles.len());
 
     let engine = Arc::new(Mutex::new(simulation));
     let websocket_service = Arc::new(WebSocketService::new());
