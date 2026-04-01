@@ -213,7 +213,6 @@ fn four_way_four_vehicles_no_deadlock() {
     let mut engine = SimulationEngine::new(config, vehicles);
     engine.run();
 
-    // TODO: This test does not pass, need to fix the deadlock but it's a choice to take
     // for v in &engine.vehicles {
     //     assert_eq!(
     //         v.state,
