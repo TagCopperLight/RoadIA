@@ -19,20 +19,53 @@ pub struct VehicleSpec {
     pub length: f32,
 }
 
+impl VehicleSpec {
+    pub fn new(kind: VehicleKind, max_speed: f32, max_acceleration: f32, comfortable_deceleration: f32, reaction_time: f32, length: f32) -> Self {
+        Self {
+            kind,
+            max_speed,
+            max_acceleration,
+            comfortable_deceleration,
+            reaction_time,
+            length,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct TripRequest {
     pub origin: NodeIndex,
     pub destination: NodeIndex,
-    pub departure_time: u64,
-    pub return_time: Option<u64>,
+    pub departure_time: f32,
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug, Hash, Eq)]
+pub enum LaneId {
+    Normal(EdgeIndex, u32), // Normal lane (EdgeIndex, lane.id).
+    Internal(u32, u32), // Internal lane (intersection.id, internal_lane.id).
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum VehicleState {
     WaitingToDepart,
     OnRoad,
-    AtIntersection,
     Arrived,
+}
+
+#[derive(Clone)]
+pub struct DrivePlanEntry {
+    pub link_id: u32,
+    pub lane_id: LaneId,
+    pub via_internal_lane_id: u32,
+    pub junction_id: u32,
+    pub v_pass: f32,
+    pub v_wait: f32,
+    pub arrival_time: f32,
+    pub arrival_speed: f32,
+    pub leave_time: f32,
+    pub leave_speed: f32,
+    pub distance: f32,
+    pub set_request: bool,
 }
 
 #[derive(Clone)]
@@ -45,10 +78,18 @@ pub struct Vehicle {
     pub path: Vec<NodeIndex>,
     pub path_index: usize,
 
-    pub position_on_road: f32, // distance entre l'avant du véhicule et le début de la route
-    pub previous_position: f32,
+    pub position_on_lane: f32,
     pub velocity: f32,
     pub previous_velocity: f32,
+
+    pub current_lane: Option<LaneId>,
+    pub drive_plan: Vec<DrivePlanEntry>,
+    pub registered_link_ids: Vec<u32>,
+    pub waiting_time: f32,
+    pub impatience: f32,
+
+    pub emitted_co2: f32,
+    pub arrived_at: Option<f32>,
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
@@ -56,12 +97,12 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
         &map.graph,
         source,
         |finish| finish == destination,
-        |e| e.weight().length / f32::from(e.weight().speed_limit),
-        |n| map.intersections_euclidean_distance(n, destination) / f32::from(MAX_SPEED),
+        |e| e.weight().length / e.weight().speed_limit,
+        |n| map.intersections_euclidean_distance(n, destination) / MAX_SPEED,
     );
     match result {
         Some((_cost, path)) => path,
-        None => Vec::new(),
+        None => panic!("No path found between {:?} and {:?}", source, destination),
     }
 }
 
@@ -76,80 +117,119 @@ impl Vehicle {
             path_index: 0,
             previous_velocity: 0.0,
             velocity: 0.0,
-            position_on_road: 0.0,
-            previous_position: 0.0,
+            position_on_lane: 0.0,
+            current_lane: None,
+            drive_plan: Vec::new(),
+            registered_link_ids: Vec::new(),
+            waiting_time: 0.0,
+            impatience: 0.0,
+            emitted_co2: 0.0,
+            arrived_at: None,
         }
     }
 
     pub fn update_path(&mut self, map: &Map) {
         self.path = fastest_path(map, self.trip.origin, self.trip.destination);
         self.path_index = 0;
-
-        if self.path.len() < 2 {
-            self.state = VehicleState::Arrived;
-        }
     }
 
     pub fn compute_acceleration(
         &self,
         desired_velocity: f32,
-        minimum_gap: f32,
-        vehicle_ahead: Option<(f32, f32)>, // (distance, velocity)
+        mut minimum_gap: f32,
+        vehicle_ahead_distance: f32,
+        vehicle_ahead_velocity: f32,
     ) -> f32 {
+        if minimum_gap == 0.0 {
+            minimum_gap = 0.1;
+        }
+
         let free_road_acc = self.spec.max_acceleration
             * (1.0 - (self.previous_velocity / desired_velocity).powf(ACCELERATION_EXPONENT));
 
-        match vehicle_ahead {
-            Some((distance, velocity)) => {
-                if distance <= 0.0 {
-                    panic!("Vehicle ahead is too close");
-                }
-                let s: f32 = minimum_gap
-                    + self.previous_velocity * self.spec.reaction_time
-                    + 0.5 * self.previous_velocity * (self.previous_velocity - velocity)
-                        / (self.spec.max_acceleration * self.spec.comfortable_deceleration)
-                            .powf(0.5);
-
-                free_road_acc - self.spec.max_acceleration * (s / distance).powf(2.0)
-            }
-            None => free_road_acc,
+        if vehicle_ahead_distance <= 0.0 {
+            return -self.spec.comfortable_deceleration;
         }
+
+        let s_delta = 0.5 * self.previous_velocity * (self.previous_velocity - vehicle_ahead_velocity)
+            / (self.spec.max_acceleration * self.spec.comfortable_deceleration).sqrt();
+        let s: f32 = minimum_gap
+            + self.previous_velocity * self.spec.reaction_time
+            + s_delta.max(0.0);
+
+        free_road_acc - self.spec.max_acceleration * (s / vehicle_ahead_distance).powf(2.0)
     }
 
     pub fn get_coordinates(&self, map: &Map) -> Coordinates {
-        let current_node = map
-            .graph
-            .node_weight(self.get_current_node())
-            .ok_or("Vehicle not in map")
-            .unwrap();
         match self.state {
             VehicleState::OnRoad => {
-                let next_node_o = map
-                    .graph
-                    .node_weight(self.get_next_node())
-                    .ok_or("Vehicle not in map")
-                    .unwrap();
-                let current_road = map
-                    .graph
-                    .edge_weight(
-                        map.graph
-                            .find_edge(self.get_current_node(), self.get_next_node())
-                            .ok_or("Edge not in map")
-                            .unwrap(),
-                    )
-                    .ok_or("Edge not in map")
-                    .unwrap();
+                match self.current_lane {
+                    Some(LaneId::Internal(junction_id, internal_lane_id)) => {
+                        if let Some(&junction_node_idx) = map.node_index_map.get(&junction_id) {
+                            let junction = &map.graph[junction_node_idx];
+                            if let Some(il) = junction
+                                .internal_lanes
+                                .iter()
+                                .find(|il| il.id == internal_lane_id)
+                            {
+                                let t = (self.position_on_lane / il.length).clamp(0.0, 1.0);
+                                return Coordinates {
+                                    x: il.entry.0 + (il.exit.0 - il.entry.0) * t,
+                                    y: il.entry.1 + (il.exit.1 - il.entry.1) * t,
+                                };
+                            }
+                        }
+                        let node = map.graph.node_weight(self.get_current_node()).expect("node");
+                        Coordinates {
+                            x: node.center_coordinates.x,
+                            y: node.center_coordinates.y,
+                        }
+                    }
+                    _ => {
+                        let cur = map.graph.node_weight(self.get_current_node()).expect("node");
+                        let nxt = map.graph.node_weight(self.get_next_node()).expect("node");
+                        let road = map
+                            .graph
+                            .edge_weight(
+                                map.graph
+                                    .find_edge(self.get_current_node(), self.get_next_node())
+                                    .expect("edge"),
+                            )
+                            .expect("edge weight");
+                        let t = self.position_on_lane / road.length;
+                        let cx = cur.center_coordinates.x * (1.0 - t) + nxt.center_coordinates.x * t;
+                        let cy = cur.center_coordinates.y * (1.0 - t) + nxt.center_coordinates.y * t;
 
-                let pos_rate: f32 = self.position_on_road / current_road.length;
-                Coordinates {
-                    x: current_node.x * (1.0 - pos_rate) + next_node_o.x * pos_rate,
-                    y: current_node.y * (1.0 - pos_rate) + next_node_o.y * pos_rate,
+                        let lane_idx = match self.current_lane {
+                            Some(LaneId::Normal(_, lid)) => lid as usize,
+                            _ => 0,
+                        };
+                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                        let tlen = (tdx * tdx + tdy * tdy).sqrt();
+                        let (perp_x, perp_y) = if tlen > 1e-6 {
+                            (-tdy / tlen, tdx / tlen)
+                        } else {
+                            (0.0, 0.0)
+                        };
+                        let offset = (lane_idx as f32 + 0.5) * road.lane_width;
+                        Coordinates {
+                            x: cx + perp_x * offset,
+                            y: cy + perp_y * offset,
+                        }
+                    }
                 }
             }
-            _ => Coordinates {
-                x: current_node.x,
-                y: current_node.y,
-            },
+            _ => {
+                let node = map
+                    .graph
+                    .node_weight(self.get_current_node())
+                    .expect("node");
+                Coordinates {
+                    x: node.center_coordinates.x,
+                    y: node.center_coordinates.y,
+                }
+            }
         }
     }
 
@@ -159,15 +239,18 @@ impl Vehicle {
 
     pub fn get_next_node(&self) -> NodeIndex {
         if self.path_index + 1 >= self.path.len() {
-            panic!("Vehicle is at destination");
+            panic!("Vehicle {} is at destination", self.id);
         }
         self.path[self.path_index + 1]
     }
 
-    pub fn get_current_road(&self, map: &Map) -> EdgeIndex {
-        map.graph
-            .find_edge(self.get_current_node(), self.get_next_node())
-            .ok_or("Edge not in map")
-            .unwrap()
+    pub fn get_current_road(&self, map: &Map) -> Option<EdgeIndex> {
+        match self.current_lane {
+            Some(LaneId::Internal(_, _)) => None,
+            _ => map
+                .graph
+                .find_edge(self.get_current_node(), self.get_next_node()),
+        }
     }
+
 }

@@ -1,8 +1,8 @@
 use tokio::io;
-use server::api::server;
+use server::api::runner::runner;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    server::run().await?;
+    runner::run().await?;
     Ok(())
 }

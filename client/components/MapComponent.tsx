@@ -1,135 +1,10 @@
 'use client';
 
 import Image from "next/image";
-import { Application, extend, PixiReactElementProps, useApplication } from '@pixi/react';
-import { IViewportOptions, Viewport, IWheelOptions } from 'pixi-viewport';
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { useCallback, useState, useEffect, type RefObject } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
-
-const intersections = [
-	{ x: -400, y: 400 },
-	{ x: -400, y: -400 },
-	{ x: 400, y: -400 },
-	{ x: 400, y: 400 },
-];
-
-const roads = [
-	{ start: intersections[0], end: intersections[1] },
-	{ start: intersections[1], end: intersections[2] },
-	{ start: intersections[2], end: intersections[3] },
-	{ start: intersections[3], end: intersections[0] },
-	{ start: intersections[1], end: intersections[3] },
-];
-
-class CustomViewport extends Viewport {
-	constructor(
-		options: IViewportOptions & {
-			decelerate?: boolean;
-			drag?: boolean;
-			pinch?: boolean;
-			wheel?: boolean | IWheelOptions;
-		}
-	) {
-		const { decelerate, drag, pinch, wheel, ...rest } = options;
-		super(rest);
-		if (decelerate) this.decelerate();
-		if (drag) this.drag();
-		if (pinch) this.pinch();
-		if (wheel) {
-			if (typeof wheel === 'boolean') {
-				this.wheel();
-			} else {
-				this.wheel(wheel);
-			}
-		}
-	}
-}
-
-declare module "@pixi/react" {
-	interface PixiElements {
-		pixiCustomViewport: PixiReactElementProps<typeof CustomViewport>;
-	}
-}
-
-extend({ Container, Graphics, Sprite, Text, CustomViewport });
-
-function Road({ start, end }: { start: { x: number, y: number }, end: { x: number, y: number } }) {
-	const width = 40;
-	return (
-		<pixiGraphics draw={(graphics) => {
-			graphics.clear();
-
-			const dx = end.x - start.x;
-			const dy = end.y - start.y;
-			const length = Math.sqrt(dx * dx + dy * dy);
-			const angle = Math.atan2(dy, dx);
-
-			graphics.position.set(start.x, start.y);
-			graphics.rotation = angle;
-
-			graphics.setFillStyle({ color: 'gray' });
-			graphics.rect(0, -width / 2, length, width);
-			graphics.fill();
-
-			graphics.setStrokeStyle({ color: 'white' });
-			graphics.moveTo(0, 0);
-			graphics.lineTo(length, 0);
-			graphics.stroke();
-		}} />
-	);
-}
-
-function Intersection({ x, y }: { x: number, y: number }) {
-	return (
-		<pixiGraphics draw={(graphics) => {
-			graphics.clear();
-			graphics.position.set(x, y);
-			graphics.setFillStyle({ color: 'lightgray' });
-			graphics.circle(0, 0, 20);
-			graphics.fill();
-		}} />
-	);
-}
-
-function Map() {
-	const { app } = useApplication();
-
-	return (
-		<pixiCustomViewport
-			events={app.renderer.events}
-			drag
-			pinch
-			wheel={{ trackpadPinch: true, percent: 2 }}
-			passiveWheel={false}
-		>
-			<pixiContainer x={app.screen.width / 2} y={app.screen.height / 2}>
-				{roads.map((road, index) => (
-					<Road key={index} start={road.start} end={road.end} />
-				))}
-				{intersections.map((intersection, index) => (
-					<Intersection key={index} x={intersection.x} y={intersection.y} />
-				))}
-			</pixiContainer>
-		</pixiCustomViewport>
-	);
-}
-
-
-interface AppProps {
-	resizeTo: RefObject<HTMLElement> | HTMLElement;
-}
-
-function App({ resizeTo }: AppProps) {
-	const [isInitialized, setIsInitialized] = useState(false);
-	const handleInit = useCallback(() => setIsInitialized(true), []);
-
-	return (
-		<Application onInit={handleInit} background={0xC1D9B7} resizeTo={resizeTo}>
-			{isInitialized && <Map />}
-		</Application>
-	);
-}
+import { PixiApp } from './map/PixiApp';
+import { MapData, VehicleData, TrafficLightData } from './map/types';
 
 interface MapComponentProps {
 	uuid: string;
@@ -137,6 +12,11 @@ interface MapComponentProps {
 
 export default function MapComponent({ uuid }: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
+	const [mapData, setMapData] = useState<MapData | null>(null);
+	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
+	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
+
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
 	}, []);
@@ -146,16 +26,63 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	}, []);
 
 	useWebSocket("map", (data) => {
-		console.log(data);
+		console.log("Received map data:", data);
+		setMapData(data as MapData);
+	});
+
+
+	useWebSocket("vehicleUpdate", (data: any) => {
+        if (data && Array.isArray(data.vehicles)) {
+			const newVehicles = data.vehicles as VehicleData[];
+			const processedVehicles = newVehicles.map(vehicle => {
+				const prevVehicle = prevVehiclesRef.current[vehicle.id];
+				
+				if (prevVehicle) {
+					const dx = vehicle.x - prevVehicle.x;
+					const dy = vehicle.y - prevVehicle.y;
+					const dist = Math.sqrt(dx * dx + dy * dy);
+					
+					if (dist > 0.01) {
+						vehicle.heading = Math.atan2(dy, dx);
+						vehicle.speed = dist;
+					} else {
+						vehicle.heading = prevVehicle.heading;
+						vehicle.speed = 0;
+					}
+				} else {
+                    // Initial heading if unknown, maybe 0 or undefined
+                    vehicle.heading = undefined;
+                    vehicle.speed = 0;
+                }
+				return vehicle;
+			});
+
+			// Update ref for next frame
+			const newPrevVehicles: Record<number, VehicleData> = {};
+			processedVehicles.forEach(v => {
+				newPrevVehicles[v.id] = v;
+			});
+			prevVehiclesRef.current = newPrevVehicles;
+
+		    setVehicles(processedVehicles);
+        }
+
+		// Parse traffic light states
+		if (data && Array.isArray(data.traffic_lights)) {
+			const tlMap = new Map<number, TrafficLightData>();
+			(data.traffic_lights as TrafficLightData[]).forEach(tl => {
+				tlMap.set(tl.id, tl);
+			});
+			setTrafficLights(tlMap);
+		}
 	});
 
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
-			{container && <App resizeTo={container} />}
+			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} trafficLights={trafficLights} />}
 			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>
 		</div>
 	);
-
 }
