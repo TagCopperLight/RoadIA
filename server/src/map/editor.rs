@@ -3,12 +3,12 @@ use petgraph::Direction;
 
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
+use crate::map::road::LinkType;
+use crate::map::roundabout::RoundaboutHandle;
+use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
 
-// TODO: When editing the map, intersection (lanes and links) needs to be rebuilt.
-
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind) -> u32 {
-    
     map.add_intersection(kind, x, y)
 }
 
@@ -136,4 +136,96 @@ pub fn update_road(
     road.speed_limit = speed_limit.clamp(1.0, MAX_SPEED);
 
     Ok(())
+}
+
+pub fn add_roundabout(
+    map: &mut Map,
+    center_x: f32,
+    center_y: f32,
+    ring_radius: f32,
+    num_arms: usize,
+    ring_speed_limit: f32,
+    ring_lane_count: u8,
+) -> RoundaboutHandle {
+    assert!(num_arms >= 3, "A roundabout needs at least 3 arms");
+    assert!(ring_radius > 0.0, "ring_radius must be positive");
+    assert!(ring_lane_count >= 1, "ring_lane_count must be at least 1");
+
+    let min_radius = 20.0_f32 / (std::f32::consts::TAU / num_arms as f32).sin();
+    assert!(
+        ring_radius >= min_radius,
+        "ring_radius {ring_radius:.1} is too small for {num_arms} arms (minimum {min_radius:.1})"
+    );
+
+    let mut ring_node_ids = Vec::with_capacity(num_arms);
+    for i in 0..num_arms {
+        let angle = std::f32::consts::TAU * i as f32 / num_arms as f32;
+        let x = center_x + ring_radius * angle.sin();
+        let y = center_y - ring_radius * angle.cos();
+        let id = map.add_intersection(IntersectionKind::Intersection, x, y);
+        ring_node_ids.push(id);
+    }
+
+    let chord = 2.0 * ring_radius * (std::f32::consts::PI / num_arms as f32).sin();
+
+    let mut ring_road_ids = Vec::with_capacity(num_arms);
+    for i in 0..num_arms {
+        let from = ring_node_ids[(i + 1) % num_arms];
+        let to = ring_node_ids[i];
+        let id = map.add_road(from, to, ring_lane_count, ring_speed_limit, chord);
+        ring_road_ids.push(id);
+    }
+
+    RoundaboutHandle { ring_node_ids, ring_road_ids }
+}
+
+pub fn add_traffic_light_controller(
+    map: &mut Map,
+    intersection_id: u32,
+    phases: Vec<(Vec<u32>, f32, f32)>,
+) -> Result<TrafficLightControllerHandle, String> {
+    if !map.node_index_map.contains_key(&intersection_id) {
+        return Err(format!("Intersection {} not found", intersection_id));
+    }
+    if phases.is_empty() {
+        return Err("Traffic light controller must have at least one phase".to_string());
+    }
+
+    let all_link_ids: Vec<u32> = phases.iter().flat_map(|(ids, _, _)| ids.iter().copied()).collect();
+
+    for edge_idx in map.graph.edge_indices() {
+        for lane in &mut map.graph[edge_idx].lanes {
+            for link in &mut lane.links {
+                if all_link_ids.contains(&link.id) {
+                    link.link_type = LinkType::TrafficLight;
+                }
+                for foe in &mut link.foe_links {
+                    if all_link_ids.contains(&foe.id) {
+                        foe.link_type = LinkType::TrafficLight;
+                    }
+                }
+            }
+        }
+    }
+
+    let controller_id = map.next_controller_id;
+    map.next_controller_id += 1;
+
+    let signal_phases = phases
+        .into_iter()
+        .map(|(green_link_ids, green_duration, yellow_duration)| SignalPhase {
+            green_link_ids,
+            green_duration,
+            yellow_duration,
+        })
+        .collect();
+
+    let controller = TrafficLightController {
+        id: controller_id,
+        intersection_id,
+        phases: signal_phases,
+    };
+    map.traffic_lights.insert(controller_id, controller);
+
+    Ok(TrafficLightControllerHandle { controller_id })
 }

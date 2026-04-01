@@ -1,8 +1,11 @@
 use crate::map::editor::{
-    add_node, add_road, delete_node, delete_road, move_node, update_node, update_road,
+    add_node, add_road, add_roundabout, delete_node, delete_road, move_node, update_node,
+    update_road,
 };
-use crate::map::intersection::IntersectionKind;
+use crate::map::intersection::{build_intersections, IntersectionKind};
 use crate::map::model::Map;
+use crate::map::roundabout::{finalize_roundabout_links, RoundaboutHandle};
+use crate::map::road::LinkType;
 use crate::simulation::config::MAX_SPEED;
 
 fn make_two_node_map() -> (Map, u32, u32) {
@@ -208,4 +211,128 @@ fn update_road_clamps_to_max_speed() {
 fn update_road_missing_returns_err() {
     let mut map = Map::new();
     assert!(update_road(&mut map, 9999, 30.0).is_err());
+}
+
+// ---- add_roundabout ----
+
+fn make_roundabout_map() -> (Map, RoundaboutHandle) {
+    let mut map = Map::new();
+    let north = map.add_intersection(IntersectionKind::Habitation, 500.0, 0.0);
+    let east = map.add_intersection(IntersectionKind::Workplace, 1000.0, 500.0);
+    let south = map.add_intersection(IntersectionKind::Habitation, 500.0, 1000.0);
+    let west = map.add_intersection(IntersectionKind::Workplace, 0.0, 500.0);
+
+    let handle = add_roundabout(&mut map, 500.0, 500.0, 40.0, 4, 30.0, 1);
+
+    map.add_two_way_road(north, handle.ring_node_ids[0], 1, 30.0, 460.0);
+    map.add_two_way_road(east, handle.ring_node_ids[1], 1, 30.0, 460.0);
+    map.add_two_way_road(south, handle.ring_node_ids[2], 1, 30.0, 460.0);
+    map.add_two_way_road(west, handle.ring_node_ids[3], 1, 30.0, 460.0);
+
+    build_intersections(&mut map);
+    finalize_roundabout_links(&mut map, &handle);
+
+    (map, handle)
+}
+
+#[test]
+fn add_roundabout_ring_node_count() {
+    let (_, handle) = make_roundabout_map();
+    assert_eq!(handle.ring_node_ids.len(), 4);
+}
+
+#[test]
+fn add_roundabout_ring_road_count() {
+    let (_, handle) = make_roundabout_map();
+    assert_eq!(handle.ring_road_ids.len(), 4);
+}
+
+#[test]
+fn add_roundabout_ring_nodes_at_correct_radius() {
+    let (map, handle) = make_roundabout_map();
+    for &id in &handle.ring_node_ids {
+        let idx = map.find_node(id).unwrap();
+        let n = &map.graph[idx];
+        let dx = n.center_coordinates.x - 500.0;
+        let dy = n.center_coordinates.y - 500.0;
+        let r = (dx * dx + dy * dy).sqrt();
+        assert!((r - 40.0).abs() < 1e-3, "node {id} is at radius {r}, expected 40.0");
+    }
+}
+
+#[test]
+fn add_roundabout_ring_nodes_equidistant() {
+    let (map, handle) = make_roundabout_map();
+    let n = handle.ring_node_ids.len();
+    let chords: Vec<f32> = (0..n)
+        .map(|i| {
+            let a = map.find_node(handle.ring_node_ids[i]).unwrap();
+            let b = map.find_node(handle.ring_node_ids[(i + 1) % n]).unwrap();
+            let ax = map.graph[a].center_coordinates.x;
+            let ay = map.graph[a].center_coordinates.y;
+            let bx = map.graph[b].center_coordinates.x;
+            let by = map.graph[b].center_coordinates.y;
+            ((bx - ax).powi(2) + (by - ay).powi(2)).sqrt()
+        })
+        .collect();
+    let first = chords[0];
+    for (i, &c) in chords.iter().enumerate() {
+        assert!((c - first).abs() < 1e-2, "chord {i} length {c} != {first}");
+    }
+}
+
+#[test]
+fn add_roundabout_ring_edges_are_one_way() {
+    let (map, handle) = make_roundabout_map();
+    let n = handle.ring_node_ids.len();
+    for i in 0..n {
+        let from = map.find_node(handle.ring_node_ids[(i + 1) % n]).unwrap();
+        let to = map.find_node(handle.ring_node_ids[i]).unwrap();
+        assert!(map.graph.find_edge(from, to).is_some());
+        // The reverse edge must not be a ring road.
+        if let Some(rev) = map.graph.find_edge(to, from) {
+            assert!(
+                !handle.ring_road_ids.contains(&map.graph[rev].id),
+                "ring segment {i} has an unexpected reverse ring edge"
+            );
+        }
+    }
+}
+
+#[test]
+fn add_roundabout_entry_links_are_yield() {
+    use petgraph::visit::EdgeRef;
+    use petgraph::Direction;
+    use std::collections::HashSet;
+
+    let (map, handle) = make_roundabout_map();
+    let ring_set: HashSet<u32> = handle.ring_node_ids.iter().copied().collect();
+
+    for &ring_id in &handle.ring_node_ids {
+        let ring_idx = map.find_node(ring_id).unwrap();
+        for e in map.graph.edges_directed(ring_idx, Direction::Incoming) {
+            let (src, _) = map.graph.edge_endpoints(e.id()).unwrap();
+            if ring_set.contains(&map.graph[src].id) {
+                continue;
+            }
+            for lane in &map.graph[e.id()].lanes {
+                for link in &lane.links {
+                    assert_eq!(link.link_type, LinkType::Yield, "entry link {} should be Yield", link.id);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn add_roundabout_ring_segment_links_are_priority() {
+    let (map, handle) = make_roundabout_map();
+    for &road_id in &handle.ring_road_ids {
+        let edge = map.find_edge(road_id).unwrap();
+        for lane in &map.graph[edge].lanes {
+            for link in &lane.links {
+                assert_eq!(link.link_type, LinkType::Priority, "ring link {} should be Priority", link.id);
+            }
+        }
+    }
 }

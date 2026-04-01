@@ -1,7 +1,9 @@
 use petgraph::graph::NodeIndex;
 
+use crate::map::editor as map_editor;
 use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
+use crate::map::roundabout;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
 
 
@@ -185,5 +187,81 @@ pub fn create_intersection_test_map() -> Map {
     map.add_two_way_road(west, center, 1, 40.0, 500.0);
 
     intersection::build_intersections(&mut map);
+    map
+}
+
+pub fn create_traffic_light_test_map() -> Map {
+    let mut map = Map::new();
+
+    let center = map.add_intersection(IntersectionKind::Intersection, 500.0, 500.0);
+    let north  = map.add_intersection(IntersectionKind::Habitation,   500.0, 0.0);
+    let south  = map.add_intersection(IntersectionKind::Workplace,    500.0, 1000.0);
+    let east   = map.add_intersection(IntersectionKind::Habitation,   1000.0, 500.0);
+    let west   = map.add_intersection(IntersectionKind::Workplace,    0.0, 500.0);
+
+    map.add_two_way_road(north, center, 1, 40.0, 500.0);
+    map.add_two_way_road(south, center, 1, 40.0, 500.0);
+    map.add_two_way_road(east,  center, 1, 40.0, 500.0);
+    map.add_two_way_road(west,  center, 1, 40.0, 500.0);
+
+    intersection::build_intersections(&mut map);
+
+    let ns_links: Vec<u32> = [
+        link_ids_for_arm(&map, north, center),
+        link_ids_for_arm(&map, south, center),
+    ].concat();
+    let ew_links: Vec<u32> = [
+        link_ids_for_arm(&map, east,  center),
+        link_ids_for_arm(&map, west,  center),
+    ].concat();
+
+    map_editor::add_traffic_light_controller(
+        &mut map,
+        center,
+        vec![
+            (ns_links, 30.0, 3.0),
+            (ew_links, 30.0, 3.0),
+        ],
+    ).expect("traffic light setup failed");
+
+    map
+}
+
+fn link_ids_for_arm(map: &Map, from_id: u32, to_id: u32) -> Vec<u32> {
+    let from_idx = match map.node_index_map.get(&from_id) {
+        Some(&idx) => idx,
+        None => return vec![],
+    };
+    let to_idx = match map.node_index_map.get(&to_id) {
+        Some(&idx) => idx,
+        None => return vec![],
+    };
+    match map.graph.find_edge(from_idx, to_idx) {
+        Some(edge) => map.graph[edge]
+            .lanes
+            .iter()
+            .flat_map(|lane| lane.links.iter().map(|l| l.id))
+            .collect(),
+        None => vec![],
+    }
+}
+
+pub fn create_roundabout_test_map() -> Map {
+    let mut map = Map::new();
+
+    let north = map.add_intersection(IntersectionKind::Habitation, 500.0, 0.0);
+    let east = map.add_intersection(IntersectionKind::Workplace, 1000.0, 500.0);
+    let south = map.add_intersection(IntersectionKind::Habitation, 500.0, 1000.0);
+    let west = map.add_intersection(IntersectionKind::Workplace, 0.0, 500.0);
+
+    let handle = map_editor::add_roundabout(&mut map, 500.0, 500.0, 40.0, 4, 30.0, 1);
+
+    map.add_two_way_road(north, handle.ring_node_ids[0], 1, 30.0, 460.0);
+    map.add_two_way_road(east, handle.ring_node_ids[1], 1, 30.0, 460.0);
+    map.add_two_way_road(south, handle.ring_node_ids[2], 1, 30.0, 460.0);
+    map.add_two_way_road(west, handle.ring_node_ids[3], 1, 30.0, 460.0);
+
+    intersection::build_intersections(&mut map);
+    roundabout::finalize_roundabout_links(&mut map, &handle);
     map
 }
