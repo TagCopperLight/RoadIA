@@ -1,5 +1,5 @@
 import { useApplication } from '@pixi/react';
-import { MapData, VehicleData, TrafficLightData, MapNode } from './types';
+import { MapData, VehicleData, TrafficLightData } from './types';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
 import { Vehicle } from './elements/Vehicle';

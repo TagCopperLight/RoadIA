@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-type Listener = (data: any) => void;
+type Listener = (data: unknown) => void;
 
 class WebSocketClient {
     private socket: WebSocket | null = null;
@@ -62,7 +62,7 @@ class WebSocketClient {
         }
     }
 
-    private dispatch(packetID: string, data: any) {
+    private dispatch(packetID: string, data: unknown) {
         const packetListeners = this.listeners.get(packetID);
         if (packetListeners) {
             packetListeners.forEach(callback => callback(data));
@@ -85,7 +85,7 @@ class WebSocketClient {
         }
     }
 
-    public send(packetID: string, data: any) {
+    public send(packetID: string, data: unknown) {
         const payload = JSON.stringify({ id: packetID, data: data });
         if (this.socket && this.socket.readyState === WebSocket.OPEN) {
             this.socket.send(payload);

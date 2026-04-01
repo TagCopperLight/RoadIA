@@ -10,7 +10,7 @@ interface MapComponentProps {
 	uuid: string;
 }
 
-export default function MapComponent({ uuid }: MapComponentProps) {
+export default function MapComponent({ uuid: _uuid }: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
@@ -31,17 +31,18 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	});
 
 
-	useWebSocket("vehicleUpdate", (data: any) => {
-        if (data && Array.isArray(data.vehicles)) {
-			const newVehicles = data.vehicles as VehicleData[];
+	useWebSocket("vehicleUpdate", (data) => {
+		const update = data as { vehicles?: VehicleData[], traffic_lights?: TrafficLightData[] };
+        if (update && Array.isArray(update.vehicles)) {
+			const newVehicles = update.vehicles as VehicleData[];
 			const processedVehicles = newVehicles.map(vehicle => {
 				const prevVehicle = prevVehiclesRef.current[vehicle.id];
-				
+
 				if (prevVehicle) {
 					const dx = vehicle.x - prevVehicle.x;
 					const dy = vehicle.y - prevVehicle.y;
 					const dist = Math.sqrt(dx * dx + dy * dy);
-					
+
 					if (dist > 0.01) {
 						vehicle.heading = Math.atan2(dy, dx);
 						vehicle.speed = dist;
@@ -68,9 +69,9 @@ export default function MapComponent({ uuid }: MapComponentProps) {
         }
 
 		// Parse traffic light states
-		if (data && Array.isArray(data.traffic_lights)) {
+		if (update && Array.isArray(update.traffic_lights)) {
 			const tlMap = new Map<number, TrafficLightData>();
-			(data.traffic_lights as TrafficLightData[]).forEach(tl => {
+			(update.traffic_lights as TrafficLightData[]).forEach(tl => {
 				tlMap.set(tl.id, tl);
 			});
 			setTrafficLights(tlMap);
