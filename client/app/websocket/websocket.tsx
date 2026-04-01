@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 type Listener = (data: unknown) => void;
@@ -84,20 +84,20 @@ class WebSocketClient {
 const WsContext = createContext<WebSocketClient | null>(null);
 
 export function WsProvider({ uuid, children }: { uuid: string; children: ReactNode }) {
-    const [ws, setWs] = useState<WebSocketClient | null>(null);
-
-    useEffect(() => {
+    const client = useMemo(() => {
         const token = sessionStorage.getItem('sim_token') ?? '';
         const wsUrl = process.env.NEXT_PUBLIC_API_URL!.replace(/^http/, 'ws');
-        const client = new WebSocketClient(
+        return new WebSocketClient(
             `${wsUrl}/ws?uuid=${encodeURIComponent(uuid)}&token=${encodeURIComponent(token)}`
         );
-        client.connect();
-        setWs(client);
-        return () => client.close();
     }, [uuid]);
 
-    return <WsContext.Provider value={ws}>{children}</WsContext.Provider>;
+    useEffect(() => {
+        client.connect();
+        return () => client.close();
+    }, [client]);
+
+    return <WsContext.Provider value={client}>{children}</WsContext.Provider>;
 }
 
 export function useWs(): WebSocketClient | null {
@@ -107,7 +107,10 @@ export function useWs(): WebSocketClient | null {
 export function usePacket(packetID: string, callback: Listener) {
     const ws = useContext(WsContext);
     const callbackRef = useRef(callback);
-    callbackRef.current = callback;
+
+    useEffect(() => {
+        callbackRef.current = callback;
+    });
 
     useEffect(() => {
         if (!ws) return;
