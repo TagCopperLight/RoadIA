@@ -1,16 +1,12 @@
 'use client';
 
 import Image from "next/image";
-import { useCallback, useState, useEffect, useRef } from 'react';
-import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
+import { useCallback, useState, useRef } from 'react';
+import { usePacket } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData, TrafficLightData } from './map/types';
 
-interface MapComponentProps {
-	uuid: string;
-}
-
-export default function MapComponent({ uuid: _uuid }: MapComponentProps) {
+export default function MapComponent() {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
@@ -21,17 +17,12 @@ export default function MapComponent({ uuid: _uuid }: MapComponentProps) {
 		setContainer(node);
 	}, []);
 
-	useEffect(() => {
-		sendConnectionToken("auth-token");
-	}, []);
-
-	useWebSocket("map", (data) => {
+	usePacket("map", (data) => {
 		console.log("Received map data:", data);
 		setMapData(data as MapData);
 	});
 
-
-	useWebSocket("vehicleUpdate", (data) => {
+	usePacket("vehicleUpdate", (data) => {
 		const update = data as { vehicles?: VehicleData[], traffic_lights?: TrafficLightData[] };
         if (update && Array.isArray(update.vehicles)) {
 			const newVehicles = update.vehicles as VehicleData[];
@@ -51,14 +42,12 @@ export default function MapComponent({ uuid: _uuid }: MapComponentProps) {
 						vehicle.speed = 0;
 					}
 				} else {
-                    // Initial heading if unknown, maybe 0 or undefined
                     vehicle.heading = undefined;
                     vehicle.speed = 0;
                 }
 				return vehicle;
 			});
 
-			// Update ref for next frame
 			const newPrevVehicles: Record<number, VehicleData> = {};
 			processedVehicles.forEach(v => {
 				newPrevVehicles[v.id] = v;
@@ -68,7 +57,6 @@ export default function MapComponent({ uuid: _uuid }: MapComponentProps) {
 		    setVehicles(processedVehicles);
         }
 
-		// Parse traffic light states
 		if (update && Array.isArray(update.traffic_lights)) {
 			const tlMap = new Map<number, TrafficLightData>();
 			(update.traffic_lights as TrafficLightData[]).forEach(tl => {

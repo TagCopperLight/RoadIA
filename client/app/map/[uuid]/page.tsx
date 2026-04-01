@@ -1,7 +1,5 @@
 import Image from 'next/image';
-import MapComponent from '@/components/MapComponent';
-
-import Toolbar from '@/components/Toolbar';
+import MapShell from '@/components/MapShell';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
@@ -33,11 +31,7 @@ export default async function MapPage({ params }: { params: Promise<{ uuid: stri
   return (
     <div className="flex flex-col h-screen w-screen items-center">
         <Header />
-        <Toolbar />
-
-        <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
-            <MapComponent uuid={uuid} />
-        </div>
+        <MapShell uuid={uuid} />
     </div>
   );
 }
