@@ -195,9 +195,9 @@ async fn handle_client_packet(
 
             // Re-initialize paths with current map.
             let map_snapshot = eng.config.map.clone();
-            for vehicle in &mut eng.vehicles {
-                vehicle.update_path(&map_snapshot);
-            }
+            eng.vehicles.retain_mut(|vehicle| {
+                vehicle.update_path(&map_snapshot)
+            });
         }
 
         // Map editing packets — require simulation to be stopped.
