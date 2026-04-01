@@ -51,6 +51,11 @@ pub struct Vehicle {
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
+    // Check if both nodes exist in the graph
+    if map.graph.node_weight(source).is_none() || map.graph.node_weight(destination).is_none() {
+        return Vec::new();
+    }
+    
     let result = petgraph::algo::astar(
         &map.graph,
         source,

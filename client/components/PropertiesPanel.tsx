@@ -4,15 +4,17 @@ import { useState, useEffect, useCallback } from 'react';
 import { MapNode, MapEdge } from './map/types';
 
 interface PropertiesPanelProps {
+	nodes: MapNode[];
 	selectedNode: MapNode | null;
 	selectedEdge: MapEdge | null;
 	onUpdateNode: (id: number, kind: string, name: string) => void;
 	onDeleteNode: (id: number) => void;
-	onUpdateEdge: (id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean, intersection_type?: string) => void;
+	onUpdateEdge: (id: number, lane_count: number, speed_limit: number, intersection_type?: string) => void;
 	onDeleteEdge: (id: number) => void;
 }
 
 export default function PropertiesPanel({
+	nodes,
 	selectedNode,
 	selectedEdge,
 	onUpdateNode,
@@ -23,12 +25,11 @@ export default function PropertiesPanel({
 	// Node form state
 	const [nodeName, setNodeName] = useState('');
 	const [nodeKind, setNodeKind] = useState<'Intersection' | 'Habitation' | 'Workplace' | 'RoundAbout' | 'TrafficLight'>('Intersection');
+	const [nameError, setNameError] = useState<string | null>(null);
 
 	// Edge form state
 	const [laneCount, setLaneCount] = useState(1);
 	const [speedLimit, setSpeedLimit] = useState(40);
-	const [isBlocked, setIsBlocked] = useState(false);
-	const [canOvertake, setCanOvertake] = useState(false);
 	const [intersectionType, setIntersectionType] = useState<'Priority' | 'Yield' | 'Stop'>('Priority');
 
 	// Sync form state when selection changes
@@ -43,23 +44,38 @@ export default function PropertiesPanel({
 		if (selectedEdge) {
 			setLaneCount(selectedEdge.lane_count);
 			setSpeedLimit(selectedEdge.speed_limit ?? 40);
-			setIsBlocked(selectedEdge.is_blocked ?? false);
-			setCanOvertake(selectedEdge.can_overtake ?? false);
 			setIntersectionType(selectedEdge.intersection_type ?? 'Priority');
 		}
 	}, [selectedEdge]);
 
+	const validateNodeName = (name: string): string | null => {
+		if (!name.trim()) {
+			return 'Node name cannot be empty';
+		}
+		const isDuplicate = nodes.some(n => n.id !== selectedNode?.id && n.name.toLowerCase() === name.toLowerCase());
+		if (isDuplicate) {
+			return 'A node with this name already exists';
+		}
+		return null;
+	};
+
 	const handleNodeCommit = useCallback(() => {
 		if (selectedNode) {
+			const error = validateNodeName(nodeName);
+			if (error) {
+				setNameError(error);
+				return;
+			}
+			setNameError(null);
 			onUpdateNode(selectedNode.id, nodeKind, nodeName);
 		}
-	}, [selectedNode, nodeKind, nodeName, onUpdateNode]);
+	}, [selectedNode, nodeKind, nodeName, onUpdateNode, nodes]);
 
 	const handleEdgeCommit = useCallback(() => {
 		if (selectedEdge) {
-			onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, canOvertake, intersectionType);
+			onUpdateEdge(selectedEdge.id, laneCount, speedLimit, intersectionType);
 		}
-	}, [selectedEdge, laneCount, speedLimit, isBlocked, canOvertake, intersectionType, onUpdateEdge]);
+	}, [selectedEdge, laneCount, speedLimit, intersectionType, onUpdateEdge]);
 
 	const labelClass = 'text-[12px] text-neutral-400 mb-[2px]';
 	const inputClass = 'bg-neutral-700 text-white text-[13px] rounded-[6px] px-[8px] py-[4px] w-full outline-none focus:ring-1 focus:ring-yellow-400';
@@ -73,15 +89,17 @@ export default function PropertiesPanel({
 					<div>
 						<p className={labelClass}>Name</p>
 						<input
-							className={inputClass}
-							value={nodeName}
-							onChange={e => setNodeName(e.target.value)}
-							onBlur={handleNodeCommit}
-							onKeyDown={e => e.key === 'Enter' && handleNodeCommit()}
-						/>
-					</div>
-
-					<div>
+						className={`${inputClass} ${nameError ? 'ring-1 ring-red-500' : ''}`}
+						value={nodeName}
+						onChange={e => {
+							setNodeName(e.target.value);
+							const error = validateNodeName(e.target.value);
+							setNameError(error);
+						}}
+						onBlur={handleNodeCommit}
+						onKeyDown={e => e.key === 'Enter' && handleNodeCommit()}
+					/>
+					{nameError && <p className="text-[11px] text-red-400 mt-[4px]">{nameError}</p>}
 						<p className={labelClass}>Kind</p>
 						<select
 							className={inputClass}
@@ -138,39 +156,6 @@ export default function PropertiesPanel({
 							onBlur={handleEdgeCommit}
 							onKeyDown={e => e.key === 'Enter' && handleEdgeCommit()}
 						/>
-					</div>
-
-					<div className="flex items-center gap-[8px]">
-						<input
-							type="checkbox"
-							id="is_blocked"
-							checked={isBlocked}
-							onChange={e => {
-								setIsBlocked(e.target.checked);
-								// Commit immediately for checkboxes
-								if (selectedEdge) {
-									onUpdateEdge(selectedEdge.id, laneCount, speedLimit, e.target.checked, canOvertake, intersectionType);
-								}
-							}}
-							className="accent-yellow-400"
-						/>
-						<label htmlFor="is_blocked" className="text-[13px]">Blocked</label>
-					</div>
-
-					<div className="flex items-center gap-[8px]">
-						<input
-							type="checkbox"
-							id="can_overtake"
-							checked={canOvertake}
-							onChange={e => {
-								setCanOvertake(e.target.checked);
-								if (selectedEdge) {
-									onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, e.target.checked, intersectionType);
-								}
-							}}
-							className="accent-yellow-400"
-						/>
-						<label htmlFor="can_overtake" className="text-[13px]">Can Overtake</label>
 					</div>
 
 					<div>

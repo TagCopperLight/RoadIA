@@ -27,7 +27,7 @@ pub enum ClientPacket {
     UpdateNode { id: u32, kind: String, name: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
-    UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, is_blocked: bool, can_overtake: bool },
+    UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, intersection_type: Option<String> },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -219,6 +219,12 @@ async fn handle_client_packet(
             let mut eng = state.engine.lock().await;
             match editor::delete_node(&mut eng.config.map, id) {
                 Ok(()) => {
+                    // Recalculate paths since node graph changed
+                    let map_snapshot = eng.config.map.clone();
+                    for vehicle in &mut eng.vehicles {
+                        vehicle.update_path(&map_snapshot);
+                    }
+                    
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -238,6 +244,12 @@ async fn handle_client_packet(
             let mut eng = state.engine.lock().await;
             match editor::move_node(&mut eng.config.map, id, x, y) {
                 Ok(()) => {
+                    // Recalculate paths since node positions changed
+                    let map_snapshot = eng.config.map.clone();
+                    for vehicle in &mut eng.vehicles {
+                        vehicle.update_path(&map_snapshot);
+                    }
+                    
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -280,6 +292,12 @@ async fn handle_client_packet(
             let mut eng = state.engine.lock().await;
             match editor::add_road(&mut eng.config.map, from_id, to_id, lane_count, speed_limit) {
                 Ok(_road_id) => {
+                    // Recalculate paths for all vehicles since a new road is available
+                    let map_snapshot = eng.config.map.clone();
+                    for vehicle in &mut eng.vehicles {
+                        vehicle.update_path(&map_snapshot);
+                    }
+                    
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -299,6 +317,12 @@ async fn handle_client_packet(
             let mut eng = state.engine.lock().await;
             match editor::delete_road(&mut eng.config.map, id) {
                 Ok(()) => {
+                    // Recalculate paths since road graph changed
+                    let map_snapshot = eng.config.map.clone();
+                    for vehicle in &mut eng.vehicles {
+                        vehicle.update_path(&map_snapshot);
+                    }
+                    
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -310,13 +334,13 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::UpdateRoad { id, lane_count, speed_limit, is_blocked, can_overtake } => {
+        ClientPacket::UpdateRoad { id, lane_count, speed_limit, .. } => {
             if state.simulation.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
             let mut eng = state.engine.lock().await;
-            match editor::update_road(&mut eng.config.map, id, lane_count, speed_limit, is_blocked, can_overtake) {
+            match editor::update_road(&mut eng.config.map, id, lane_count, speed_limit, false, false) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);

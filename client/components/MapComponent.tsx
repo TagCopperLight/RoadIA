@@ -86,8 +86,8 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 					mapData={mapData}
 					vehicles={vehicles}
 					sendPacket={sendPacket}
-					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean, intersection_type?: string) =>
-						sendPacket('updateRoad', { id, lane_count, speed_limit, is_blocked, can_overtake, intersection_type })
+					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, intersection_type?: string) =>
+						sendPacket('updateRoad', { id, lane_count, speed_limit, intersection_type })
 					}
 					onDeleteEdge={(id: number) => {
 						sendPacket('deleteRoad', { id });
@@ -98,6 +98,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 
 			{(selectedNode || selectedEdge) && (
 				<PropertiesPanel
+					nodes={mapData?.nodes ?? []}
 					selectedNode={selectedNode}
 					selectedEdge={selectedEdge}
 					onUpdateNode={(id: number, kind: string, name: string) =>
@@ -107,8 +108,8 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 						sendPacket('deleteNode', { id });
 						setSelectedNodeId(null);
 					}}
-					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean, intersection_type?: string) =>
-						sendPacket('updateRoad', { id, lane_count, speed_limit, is_blocked, can_overtake, intersection_type })
+					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, intersection_type?: string) =>
+						sendPacket('updateRoad', { id, lane_count, speed_limit, intersection_type })
 					}
 					onDeleteEdge={(id: number) => {
 						sendPacket('deleteRoad', { id });

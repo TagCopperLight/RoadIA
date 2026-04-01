@@ -14,7 +14,7 @@ interface MapPageClientProps {
 }
 
 export default function MapPageClient({ uuid }: MapPageClientProps) {
-	const [activeTool, setActiveTool] = useState<EditTool>('select');
+	const [activeTool, setActiveTool] = useState<EditTool>('pan');
 	const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
 	const [selectedEdgeId, setSelectedEdgeId] = useState<number | null>(null);
 	const { toasts, addToast, removeToast } = useToast();

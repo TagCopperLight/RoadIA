@@ -22,6 +22,7 @@ export default function Toolbar() {
             setIsPlaying(false);
         } else {
             wsClient.send('startSimulation', {});
+            setActiveTool('pan');
             setIsPlaying(true);
         }
     };
