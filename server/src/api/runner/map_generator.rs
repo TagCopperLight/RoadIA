@@ -1,7 +1,9 @@
 use petgraph::graph::NodeIndex;
 
+use crate::map::editor as map_editor;
 use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
+use crate::map::roundabout;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
 
 
@@ -185,5 +187,25 @@ pub fn create_intersection_test_map() -> Map {
     map.add_two_way_road(west, center, 1, 40.0, 500.0);
 
     intersection::build_intersections(&mut map);
+    map
+}
+
+pub fn create_roundabout_test_map() -> Map {
+    let mut map = Map::new();
+
+    let north = map.add_intersection(IntersectionKind::Habitation, 500.0, 0.0);
+    let east = map.add_intersection(IntersectionKind::Workplace, 1000.0, 500.0);
+    let south = map.add_intersection(IntersectionKind::Habitation, 500.0, 1000.0);
+    let west = map.add_intersection(IntersectionKind::Workplace, 0.0, 500.0);
+
+    let handle = map_editor::add_roundabout(&mut map, 500.0, 500.0, 40.0, 4, 30.0, 1);
+
+    map.add_two_way_road(north, handle.ring_node_ids[0], 1, 30.0, 460.0);
+    map.add_two_way_road(east, handle.ring_node_ids[1], 1, 30.0, 460.0);
+    map.add_two_way_road(south, handle.ring_node_ids[2], 1, 30.0, 460.0);
+    map.add_two_way_road(west, handle.ring_node_ids[3], 1, 30.0, 460.0);
+
+    intersection::build_intersections(&mut map);
+    roundabout::finalize_roundabout_links(&mut map, &handle);
     map
 }
