@@ -8,7 +8,7 @@ const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statist
 function Header() {
     return (
         <div className="flex items-center w-full p-[15px]">
-            <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} />
+            <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} loading='eager' />
             <div className='flex flex-col pl-[15px]'>
                 <p className='text-[17px]'>Lannion - 2025</p>
                 <div className='flex text-[15px] font-medium'>
