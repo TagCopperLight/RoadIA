@@ -190,6 +190,62 @@ pub fn create_intersection_test_map() -> Map {
     map
 }
 
+pub fn create_traffic_light_test_map() -> Map {
+    let mut map = Map::new();
+
+    let center = map.add_intersection(IntersectionKind::Intersection, 500.0, 500.0);
+    let north  = map.add_intersection(IntersectionKind::Habitation,   500.0, 0.0);
+    let south  = map.add_intersection(IntersectionKind::Workplace,    500.0, 1000.0);
+    let east   = map.add_intersection(IntersectionKind::Habitation,   1000.0, 500.0);
+    let west   = map.add_intersection(IntersectionKind::Workplace,    0.0, 500.0);
+
+    map.add_two_way_road(north, center, 1, 40.0, 500.0);
+    map.add_two_way_road(south, center, 1, 40.0, 500.0);
+    map.add_two_way_road(east,  center, 1, 40.0, 500.0);
+    map.add_two_way_road(west,  center, 1, 40.0, 500.0);
+
+    intersection::build_intersections(&mut map);
+
+    let ns_links: Vec<u32> = [
+        link_ids_for_arm(&map, north, center),
+        link_ids_for_arm(&map, south, center),
+    ].concat();
+    let ew_links: Vec<u32> = [
+        link_ids_for_arm(&map, east,  center),
+        link_ids_for_arm(&map, west,  center),
+    ].concat();
+
+    map_editor::add_traffic_light_controller(
+        &mut map,
+        center,
+        vec![
+            (ns_links, 30.0, 3.0),
+            (ew_links, 30.0, 3.0),
+        ],
+    ).expect("traffic light setup failed");
+
+    map
+}
+
+fn link_ids_for_arm(map: &Map, from_id: u32, to_id: u32) -> Vec<u32> {
+    let from_idx = match map.node_index_map.get(&from_id) {
+        Some(&idx) => idx,
+        None => return vec![],
+    };
+    let to_idx = match map.node_index_map.get(&to_id) {
+        Some(&idx) => idx,
+        None => return vec![],
+    };
+    match map.graph.find_edge(from_idx, to_idx) {
+        Some(edge) => map.graph[edge]
+            .lanes
+            .iter()
+            .flat_map(|lane| lane.links.iter().map(|l| l.id))
+            .collect(),
+        None => vec![],
+    }
+}
+
 pub fn create_roundabout_test_map() -> Map {
     let mut map = Map::new();
 

@@ -3,6 +3,7 @@ use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 
 use crate::map::intersection::{Intersection, IntersectionKind};
 use crate::map::road::Road;
+use crate::map::traffic_light::TrafficLightController;
 
 #[derive(Default, Clone)]
 pub struct Map {
@@ -11,6 +12,8 @@ pub struct Map {
     pub next_node_id: u32,
     pub next_edge_id: u32,
     pub next_link_id: u32,
+    pub next_controller_id: u32,
+    pub traffic_lights: HashMap<u32, TrafficLightController>,
 }
 
 #[derive(Clone)]
@@ -27,6 +30,8 @@ impl Map {
             next_node_id: 0,
             next_edge_id: 0,
             next_link_id: 0,
+            next_controller_id: 0,
+            traffic_lights: HashMap::new(),
         }
     }
 

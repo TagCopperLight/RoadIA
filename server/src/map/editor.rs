@@ -3,7 +3,9 @@ use petgraph::Direction;
 
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
+use crate::map::road::LinkType;
 use crate::map::roundabout::RoundaboutHandle;
+use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
 
 // TODO: When editing the map, intersection (lanes and links) needs to be rebuilt.
@@ -178,4 +180,55 @@ pub fn add_roundabout(
     }
 
     RoundaboutHandle { ring_node_ids, ring_road_ids }
+}
+
+pub fn add_traffic_light_controller(
+    map: &mut Map,
+    intersection_id: u32,
+    phases: Vec<(Vec<u32>, f32, f32)>,
+) -> Result<TrafficLightControllerHandle, String> {
+    if !map.node_index_map.contains_key(&intersection_id) {
+        return Err(format!("Intersection {} not found", intersection_id));
+    }
+    if phases.is_empty() {
+        return Err("Traffic light controller must have at least one phase".to_string());
+    }
+
+    let all_link_ids: Vec<u32> = phases.iter().flat_map(|(ids, _, _)| ids.iter().copied()).collect();
+
+    for edge_idx in map.graph.edge_indices() {
+        for lane in &mut map.graph[edge_idx].lanes {
+            for link in &mut lane.links {
+                if all_link_ids.contains(&link.id) {
+                    link.link_type = LinkType::TrafficLight;
+                }
+                for foe in &mut link.foe_links {
+                    if all_link_ids.contains(&foe.id) {
+                        foe.link_type = LinkType::TrafficLight;
+                    }
+                }
+            }
+        }
+    }
+
+    let controller_id = map.next_controller_id;
+    map.next_controller_id += 1;
+
+    let signal_phases = phases
+        .into_iter()
+        .map(|(green_link_ids, green_duration, yellow_duration)| SignalPhase {
+            green_link_ids,
+            green_duration,
+            yellow_duration,
+        })
+        .collect();
+
+    let controller = TrafficLightController {
+        id: controller_id,
+        intersection_id,
+        phases: signal_phases,
+    };
+    map.traffic_lights.insert(controller_id, controller);
+
+    Ok(TrafficLightControllerHandle { controller_id })
 }
