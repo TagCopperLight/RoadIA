@@ -3,6 +3,7 @@ use petgraph::Direction;
 
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
+use crate::map::roundabout::RoundaboutHandle;
 use crate::simulation::config::MAX_SPEED;
 
 // TODO: When editing the map, intersection (lanes and links) needs to be rebuilt.
@@ -136,4 +137,45 @@ pub fn update_road(
     road.speed_limit = speed_limit.clamp(1.0, MAX_SPEED);
 
     Ok(())
+}
+
+pub fn add_roundabout(
+    map: &mut Map,
+    center_x: f32,
+    center_y: f32,
+    ring_radius: f32,
+    num_arms: usize,
+    ring_speed_limit: f32,
+    ring_lane_count: u8,
+) -> RoundaboutHandle {
+    assert!(num_arms >= 3, "A roundabout needs at least 3 arms");
+    assert!(ring_radius > 0.0, "ring_radius must be positive");
+    assert!(ring_lane_count >= 1, "ring_lane_count must be at least 1");
+
+    let min_radius = 20.0_f32 / (std::f32::consts::TAU / num_arms as f32).sin();
+    assert!(
+        ring_radius >= min_radius,
+        "ring_radius {ring_radius:.1} is too small for {num_arms} arms (minimum {min_radius:.1})"
+    );
+
+    let mut ring_node_ids = Vec::with_capacity(num_arms);
+    for i in 0..num_arms {
+        let angle = std::f32::consts::TAU * i as f32 / num_arms as f32;
+        let x = center_x + ring_radius * angle.sin();
+        let y = center_y - ring_radius * angle.cos();
+        let id = map.add_intersection(IntersectionKind::Intersection, x, y);
+        ring_node_ids.push(id);
+    }
+
+    let chord = 2.0 * ring_radius * (std::f32::consts::PI / num_arms as f32).sin();
+
+    let mut ring_road_ids = Vec::with_capacity(num_arms);
+    for i in 0..num_arms {
+        let from = ring_node_ids[(i + 1) % num_arms];
+        let to = ring_node_ids[i];
+        let id = map.add_road(from, to, ring_lane_count, ring_speed_limit, chord);
+        ring_road_ids.push(id);
+    }
+
+    RoundaboutHandle { ring_node_ids, ring_road_ids }
 }
