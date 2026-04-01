@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::scoring;
 use crate::simulation::config::{
@@ -22,25 +22,40 @@ struct PendingTransfer {
     to_lane: Option<LaneId>,
 }
 
+struct TrafficLightRuntimeState {
+    phase_index: usize,
+    time_in_phase: f32,
+}
+
 pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,
     pub current_time: f32,
     pub vehicles_by_lane: HashMap<LaneId, Vec<usize>>, // Sorted by position_on_lane (back → front = index 0 first).
     pub link_states: HashMap<u32, LinkState>,
+    pub green_links: HashSet<u32>,
     pending_transfers: Vec<PendingTransfer>,
+    traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
 }
 
 impl Simulation for SimulationEngine {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self {
         let current_time = config.start_time;
+        let traffic_light_states = config
+            .map
+            .traffic_lights
+            .keys()
+            .map(|&id| (id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 }))
+            .collect();
         Self {
             config,
             vehicles,
             current_time,
             vehicles_by_lane: HashMap::new(),
             link_states: HashMap::new(),
+            green_links: HashSet::new(),
             pending_transfers: Vec::new(),
+            traffic_light_states,
         }
     }
 
@@ -65,6 +80,7 @@ impl Simulation for SimulationEngine {
         self.handle_departures();
         self.plan_movements();
         self.register_approaches();
+        self.advance_traffic_lights();
         self.execute_movements();
         self.flush_transfers();
         let dt = self.config.time_step;
@@ -299,6 +315,40 @@ impl SimulationEngine {
     }
 }
 
+// Traffic lights
+
+impl SimulationEngine {
+    fn advance_traffic_lights(&mut self) {
+        let dt = self.config.time_step;
+        self.green_links.clear();
+
+        for (&ctrl_id, state) in &mut self.traffic_light_states {
+            let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
+                Some(c) => c,
+                None => continue,
+            };
+            if controller.phases.is_empty() {
+                continue;
+            }
+
+            let phase = &controller.phases[state.phase_index];
+            let total_duration = phase.green_duration + phase.yellow_duration;
+
+            state.time_in_phase += dt;
+            if state.time_in_phase >= total_duration {
+                state.time_in_phase -= total_duration;
+                state.phase_index = (state.phase_index + 1) % controller.phases.len();
+            }
+
+            let current_phase = &controller.phases[state.phase_index];
+            if state.time_in_phase < current_phase.green_duration {
+                let ids: Vec<u32> = current_phase.green_link_ids.iter().copied().collect();
+                self.green_links.extend(ids);
+            }
+        }
+    }
+}
+
 // Execute movements
 
 impl SimulationEngine {
@@ -398,6 +448,7 @@ impl SimulationEngine {
             entry.junction_id,
             LOOK_AHEAD,
             STOP_DWELL_TIME,
+            &self.green_links,
         ) {
             // Point of no return: vehicle cannot decelerate to v_pass before the junction.
             let d_stop = v.velocity * v.velocity / (2.0 * v.spec.comfortable_deceleration);

@@ -1,6 +1,6 @@
 use crate::api::runner::map_generator::{
     create_intersection_test_map, create_one_intersection_congestion_map,
-    create_roundabout_test_map,
+    create_roundabout_test_map, create_traffic_light_test_map,
 };
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::VehicleState;
@@ -309,6 +309,61 @@ fn roundabout_two_vehicles_no_deadlock() {
     for v in &engine.vehicles {
         assert_eq!(v.state, VehicleState::Arrived, "vehicle {} did not arrive", v.id);
     }
+}
+
+// ---- Traffic lights ----
+
+#[test]
+fn traffic_light_map_vehicles_arrive() {
+    // center=0, north=1, south=2, east=3, west=4
+    // Phase A: N/S green (30s+3s), Phase B: E/W green (30s+3s)
+    let map = create_traffic_light_test_map();
+    let north = map.find_node(1).unwrap();
+    let south = map.find_node(2).unwrap();
+    let east  = map.find_node(3).unwrap();
+    let west  = map.find_node(4).unwrap();
+
+    let mut vehicles = vec![
+        make_vehicle(0, north, south),
+        make_vehicle(1, east, west),
+    ];
+    for v in &mut vehicles {
+        v.update_path(&map);
+    }
+    let config = make_sim_config(map, 600.0);
+    let mut engine = SimulationEngine::new(config, vehicles);
+    engine.run();
+
+    for v in &engine.vehicles {
+        assert_eq!(v.state, VehicleState::Arrived, "vehicle {} did not arrive", v.id);
+    }
+}
+
+#[test]
+fn traffic_light_map_vehicle_waits_at_red() {
+    // E/W starts RED (Phase A is N/S green first), so an E→W vehicle must wait.
+    let map = create_traffic_light_test_map();
+    let east = map.find_node(3).unwrap();
+    let west = map.find_node(4).unwrap();
+
+    let mut v = make_vehicle(0, east, west);
+    v.update_path(&map);
+    let config = make_sim_config(map, 600.0);
+    let mut engine = SimulationEngine::new(config, vec![v]);
+
+    let mut observed_waiting = false;
+    for _ in 0..12000 {
+        engine.step();
+        engine.current_time += engine.config.time_step;
+        if engine.vehicles[0].waiting_time > 0.5 {
+            observed_waiting = true;
+        }
+        if engine.vehicles[0].state == VehicleState::Arrived {
+            break;
+        }
+    }
+    assert!(observed_waiting, "E/W vehicle should wait at the red light");
+    assert_eq!(engine.vehicles[0].state, VehicleState::Arrived);
 }
 
 // ---- Behavior: vehicles on wrong-way roads ----
