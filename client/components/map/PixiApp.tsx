@@ -2,7 +2,7 @@ import { Application, extend, PixiReactElementProps } from '@pixi/react';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { CustomViewport } from './CustomViewport';
 import { MapCanvas } from './MapCanvas';
-import { MapData, VehicleData } from './types';
+import { MapData, VehicleData, TrafficLightData } from './types';
 import { RefObject, useCallback, useState } from 'react';
 
 extend({ Container, Graphics, Sprite, Text, CustomViewport });
@@ -17,15 +17,16 @@ interface AppProps {
 	resizeTo: RefObject<HTMLElement> | HTMLElement;
 	mapData: MapData | null;
 	vehicles: VehicleData[];
+	trafficLights: Map<number, TrafficLightData>;
 }
 
-export function PixiApp({ resizeTo, mapData, vehicles }: AppProps) {
+export function PixiApp({ resizeTo, mapData, vehicles, trafficLights }: AppProps) {
 	const [isInitialized, setIsInitialized] = useState(false);
 	const handleInit = useCallback(() => setIsInitialized(true), []);
 
 	return (
 		<Application onInit={handleInit} background={0xC1D9B7} resizeTo={resizeTo}>
-			{isInitialized && mapData && <MapCanvas data={mapData} vehicles={vehicles} />}
+			{isInitialized && mapData && <MapCanvas data={mapData} vehicles={vehicles} trafficLights={trafficLights} />}
 		</Application>
 	);
 }

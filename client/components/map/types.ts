@@ -4,6 +4,7 @@ export interface MapNode {
 	name: string;
 	x: number;
 	y: number;
+	has_traffic_light?: boolean;
 }
 
 export interface MapEdge {
@@ -27,4 +28,9 @@ export interface VehicleData {
     state: string;
     heading?: number;
     speed?: number;
+}
+
+export interface TrafficLightData {
+    id: number;            // intersection_id
+    green_road_ids: number[];  // road IDs with a green approach into this intersection
 }
