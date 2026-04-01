@@ -9,7 +9,7 @@ use axum::{Router, routing::get};
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_osm_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_osm_map, create_random_vehicles, create_traffic_light_test_map};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -49,8 +49,18 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_osm_map("../data/planet_-3.488,48.716_-3.416,48.749.osm.pbf");
-    let vehicles = create_random_vehicles(&map, 50);
+    let pbf_path = "../data/planet_-3.488,48.716_-3.416,48.749.osm.pbf";
+    
+    let (map, vehicles) = if std::path::Path::new(pbf_path).exists() {
+        let m = create_osm_map(pbf_path);
+        let v = create_random_vehicles(&m, 50);
+        (m, v)
+    } else {
+        println!("OSM map not found at '{}'. Falling back to default test map.", pbf_path);
+        let m = create_traffic_light_test_map();
+        let v = create_random_vehicles(&m, 30);
+        (m, v)
+    };
 
     let config = SimulationConfig {
         start_time: 0.0,
