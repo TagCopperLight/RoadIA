@@ -1,16 +1,9 @@
 import Image from 'next/image';
 import MapComponent from '@/components/MapComponent';
 
-const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
+import Toolbar from '@/components/Toolbar';
 
-const TOOLS = [
-    { icon: 'Move', alt: 'Move' },
-    { icon: 'Edit', alt: 'Edit' },
-    { icon: 'House', alt: 'House' },
-    { icon: 'Building', alt: 'Building' },
-    { icon: 'Play', alt: 'Play' },
-    { icon: 'Octagon', alt: 'Stop' },
-];
+const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
     return (
@@ -34,29 +27,6 @@ function Header() {
     )
 }
 
-function Toolbar() {
-    return (
-        <div className="flex items-center w-full pl-[15px] pr-[15px]">
-            <div className='flex items-center bg-black rounded-[10px] w-full'>
-                {TOOLS.map((tool, index) => (
-                    <div key={tool.alt} className="flex items-center">
-                        <Image 
-                            src={`/map/${tool.icon}.svg`} 
-                            alt={tool.alt} 
-                            width={24} 
-                            height={24} 
-                            className='m-[11px] cursor-pointer hover:opacity-50 transition-opacity' 
-                        />
-                        {index < TOOLS.length - 1 && (
-                            <Image src="/map/Separator.svg" alt="Separator" height={26} width={1} />
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
-
 
 export default async function MapPage({ params }: { params: Promise<{ uuid: string }> }) {
   const { uuid } = await params;
@@ -64,6 +34,7 @@ export default async function MapPage({ params }: { params: Promise<{ uuid: stri
     <div className="flex flex-col h-screen w-screen items-center">
         <Header />
         <Toolbar />
+
         <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
             <MapComponent uuid={uuid} />
         </div>
