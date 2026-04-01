@@ -8,10 +8,7 @@ use crate::map::roundabout::RoundaboutHandle;
 use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
 
-// TODO: When editing the map, intersection (lanes and links) needs to be rebuilt.
-
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind) -> u32 {
-    
     map.add_intersection(kind, x, y)
 }
 

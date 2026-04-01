@@ -9,9 +9,6 @@ use crate::simulation::kinematics;
 use crate::simulation::vehicle::{DrivePlanEntry, LaneId, Vehicle, VehicleState};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 
-// TODO: Vehicle don't check if the road is free before going in the intersection
-// TODO: Vehicle can stop very brutally when traffic light become red
-
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
     fn run(&mut self);
