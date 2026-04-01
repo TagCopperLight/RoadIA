@@ -45,8 +45,16 @@ class WebSocketClient {
             }
         };
 
-        this.socket.onerror = (error) => {
-            console.error("[WebSocket] Error:", error);
+        this.socket.onerror = (event: Event) => {
+            const errorMessage = 'WebSocket connection error';
+            console.error("[WebSocket] Error:", errorMessage, event);
+            
+            // Notify listeners of error
+            this.dispatch('__error__', {
+                message: errorMessage,
+                timestamp: new Date().toISOString(),
+            });
+            
             this.socket?.close();
         };
     }

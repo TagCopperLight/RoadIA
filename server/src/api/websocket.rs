@@ -421,6 +421,8 @@ fn serialize_intersection_kind(s: &str) -> Result<IntersectionKind, String> {
         "Habitation" => Ok(IntersectionKind::Habitation),
         "Intersection" => Ok(IntersectionKind::Intersection),
         "Workplace" => Ok(IntersectionKind::Workplace),
+        "RoundAbout" => Ok(IntersectionKind::Intersection), // Map to Intersection type
+        "TrafficLight" => Ok(IntersectionKind::Intersection), // Map to Intersection type
         other => Err(format!("Unknown intersection kind: {}", other)),
     }
 }

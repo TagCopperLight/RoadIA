@@ -8,7 +8,7 @@ interface PropertiesPanelProps {
 	selectedEdge: MapEdge | null;
 	onUpdateNode: (id: number, kind: string, name: string) => void;
 	onDeleteNode: (id: number) => void;
-	onUpdateEdge: (id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean) => void;
+	onUpdateEdge: (id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean, intersection_type?: string) => void;
 	onDeleteEdge: (id: number) => void;
 }
 
@@ -22,13 +22,14 @@ export default function PropertiesPanel({
 }: PropertiesPanelProps) {
 	// Node form state
 	const [nodeName, setNodeName] = useState('');
-	const [nodeKind, setNodeKind] = useState<'Intersection' | 'Habitation' | 'Workplace'>('Intersection');
+	const [nodeKind, setNodeKind] = useState<'Intersection' | 'Habitation' | 'Workplace' | 'RoundAbout' | 'TrafficLight'>('Intersection');
 
 	// Edge form state
 	const [laneCount, setLaneCount] = useState(1);
 	const [speedLimit, setSpeedLimit] = useState(40);
 	const [isBlocked, setIsBlocked] = useState(false);
 	const [canOvertake, setCanOvertake] = useState(false);
+	const [intersectionType, setIntersectionType] = useState<'Priority' | 'Yield' | 'Stop'>('Priority');
 
 	// Sync form state when selection changes
 	useEffect(() => {
@@ -44,6 +45,7 @@ export default function PropertiesPanel({
 			setSpeedLimit(selectedEdge.speed_limit ?? 40);
 			setIsBlocked(selectedEdge.is_blocked ?? false);
 			setCanOvertake(selectedEdge.can_overtake ?? false);
+			setIntersectionType(selectedEdge.intersection_type ?? 'Priority');
 		}
 	}, [selectedEdge]);
 
@@ -55,9 +57,9 @@ export default function PropertiesPanel({
 
 	const handleEdgeCommit = useCallback(() => {
 		if (selectedEdge) {
-			onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, canOvertake);
+			onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, canOvertake, intersectionType);
 		}
-	}, [selectedEdge, laneCount, speedLimit, isBlocked, canOvertake, onUpdateEdge]);
+	}, [selectedEdge, laneCount, speedLimit, isBlocked, canOvertake, intersectionType, onUpdateEdge]);
 
 	const labelClass = 'text-[12px] text-neutral-400 mb-[2px]';
 	const inputClass = 'bg-neutral-700 text-white text-[13px] rounded-[6px] px-[8px] py-[4px] w-full outline-none focus:ring-1 focus:ring-yellow-400';
@@ -92,6 +94,8 @@ export default function PropertiesPanel({
 							<option value="Intersection">Intersection</option>
 							<option value="Habitation">Habitation</option>
 							<option value="Workplace">Workplace</option>
+							<option value="RoundAbout">RoundAbout</option>
+							<option value="TrafficLight">TrafficLight</option>
 						</select>
 					</div>
 
@@ -145,7 +149,7 @@ export default function PropertiesPanel({
 								setIsBlocked(e.target.checked);
 								// Commit immediately for checkboxes
 								if (selectedEdge) {
-									onUpdateEdge(selectedEdge.id, laneCount, speedLimit, e.target.checked, canOvertake);
+									onUpdateEdge(selectedEdge.id, laneCount, speedLimit, e.target.checked, canOvertake, intersectionType);
 								}
 							}}
 							className="accent-yellow-400"
@@ -161,12 +165,28 @@ export default function PropertiesPanel({
 							onChange={e => {
 								setCanOvertake(e.target.checked);
 								if (selectedEdge) {
-									onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, e.target.checked);
+									onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, e.target.checked, intersectionType);
 								}
 							}}
 							className="accent-yellow-400"
 						/>
 						<label htmlFor="can_overtake" className="text-[13px]">Can Overtake</label>
+					</div>
+
+					<div>
+						<p className={labelClass}>Type</p>
+						<select
+							className={inputClass}
+							value={intersectionType}
+							onChange={e => {
+								setIntersectionType(e.target.value as 'Priority' | 'Yield' | 'Stop');
+							}}
+							onBlur={handleEdgeCommit}
+						>
+							<option value="Priority">Priority</option>
+							<option value="Yield">Yield</option>
+							<option value="Stop">Stop</option>
+						</select>
 					</div>
 
 					<button

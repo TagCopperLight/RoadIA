@@ -1,11 +1,11 @@
 import { FederatedPointerEvent } from 'pixi.js';
 import { MapNode, EditTool } from '../types';
+import { MAP_CONFIG } from '@/lib/constants';
 
 interface IntersectionProps {
 	node: MapNode;
 	selected?: boolean;
 	isAddRoadSource?: boolean;
-	editMode?: boolean;
 	activeTool?: EditTool;
 	isDragging?: boolean;
 	onSelect?: (e: FederatedPointerEvent) => void;
@@ -16,15 +16,14 @@ export function Intersection({
 	node,
 	selected = false,
 	isAddRoadSource = false,
-	editMode = false,
 	activeTool,
 	isDragging = false,
 	onSelect,
 	onDragStart,
 }: IntersectionProps) {
-	const nodeColor = node.kind === 'Habitation' ? 0x3366ff : node.kind === 'Workplace' ? 0xff3333 : 0xaaaaaa;
+	const nodeColor = MAP_CONFIG.NODE_COLORS[node.kind as keyof typeof MAP_CONFIG.NODE_COLORS] || MAP_CONFIG.NODE_COLORS.Intersection;
 	const radius = 10;
-	const isInteractive = editMode && (activeTool === 'select' || activeTool === 'addRoad');
+	const isInteractive = activeTool === 'select' || activeTool === 'addRoad';
 
 	return (
 		<pixiGraphics

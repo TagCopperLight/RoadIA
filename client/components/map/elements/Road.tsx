@@ -5,14 +5,13 @@ interface RoadProps {
 	start: MapNode;
 	end: MapNode;
 	selected?: boolean;
-	editMode?: boolean;
 	activeTool?: EditTool;
 	onSelect?: (e: FederatedPointerEvent) => void;
 }
 
-export function Road({ start, end, selected = false, editMode = false, activeTool, onSelect }: RoadProps) {
+export function Road({ start, end, selected = false, activeTool, onSelect }: RoadProps) {
 	const width = 15;
-	const isInteractive = editMode && activeTool === 'select';
+	const isInteractive = activeTool === 'select';
 
 	return (
 		<pixiGraphics

@@ -1,6 +1,6 @@
 export interface MapNode {
 	id: number;
-	kind: "Intersection" | "Habitation" | "Workplace";
+	kind: "Intersection" | "Habitation" | "Workplace" | "RoundAbout" | "TrafficLight";
 	name: string;
 	x: number;
 	y: number;
@@ -15,6 +15,7 @@ export interface MapEdge {
 	speed_limit: number;
 	is_blocked: boolean;
 	can_overtake: boolean;
+	intersection_type?: 'Priority' | 'Yield' | 'Stop';
 }
 
 export interface MapData {
@@ -32,4 +33,4 @@ export interface VehicleData {
     speed?: number;
 }
 
-export type EditTool = "select" | "addNode" | "addRoad";
+export type EditTool = "select" | "addNode" | "addRoad" | "pan";

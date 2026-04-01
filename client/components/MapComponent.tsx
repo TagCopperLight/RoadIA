@@ -4,28 +4,16 @@ import Image from "next/image";
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { sendConnectionToken, useWebSocket, wsClient } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData, EditTool } from './map/types';
+import { MapData, VehicleData } from './map/types';
 import PropertiesPanel from './PropertiesPanel';
+import { useMapEditor } from '@/context/MapEditorContext';
 
 interface MapComponentProps {
 	uuid: string;
-	editMode: boolean;
-	activeTool: EditTool;
-	selectedNodeId: number | null;
-	setSelectedNodeId: (id: number | null) => void;
-	selectedEdgeId: number | null;
-	setSelectedEdgeId: (id: number | null) => void;
 }
 
-export default function MapComponent({
-	uuid,
-	editMode,
-	activeTool,
-	selectedNodeId,
-	setSelectedNodeId,
-	selectedEdgeId,
-	setSelectedEdgeId,
-}: MapComponentProps) {
+export default function MapComponent({ uuid }: MapComponentProps) {
+	const { selectedNodeId, setSelectedNodeId, selectedEdgeId, setSelectedEdgeId, addToast } = useMapEditor();
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
@@ -97,29 +85,32 @@ export default function MapComponent({
 					resizeTo={container}
 					mapData={mapData}
 					vehicles={vehicles}
-					editMode={editMode}
-					activeTool={activeTool}
-					selectedNodeId={selectedNodeId}
-					setSelectedNodeId={setSelectedNodeId}
-					selectedEdgeId={selectedEdgeId}
-					setSelectedEdgeId={setSelectedEdgeId}
 					sendPacket={sendPacket}
+					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean, intersection_type?: string) =>
+						sendPacket('updateRoad', { id, lane_count, speed_limit, is_blocked, can_overtake, intersection_type })
+					}
+					onDeleteEdge={(id: number) => {
+						sendPacket('deleteRoad', { id });
+						setSelectedEdgeId(null);
+					}}
 				/>
 			)}
 
-			{editMode && (selectedNode || selectedEdge) && (
+			{(selectedNode || selectedEdge) && (
 				<PropertiesPanel
 					selectedNode={selectedNode}
 					selectedEdge={selectedEdge}
-					onUpdateNode={(id, kind, name) => sendPacket('updateNode', { id, kind, name })}
-					onDeleteNode={(id) => {
+					onUpdateNode={(id: number, kind: string, name: string) =>
+						sendPacket('updateNode', { id, kind, name })
+					}
+					onDeleteNode={(id: number) => {
 						sendPacket('deleteNode', { id });
 						setSelectedNodeId(null);
 					}}
-					onUpdateEdge={(id, lane_count, speed_limit, is_blocked, can_overtake) =>
-						sendPacket('updateRoad', { id, lane_count, speed_limit, is_blocked, can_overtake })
+					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean, intersection_type?: string) =>
+						sendPacket('updateRoad', { id, lane_count, speed_limit, is_blocked, can_overtake, intersection_type })
 					}
-					onDeleteEdge={(id) => {
+					onDeleteEdge={(id: number) => {
 						sendPacket('deleteRoad', { id });
 						setSelectedEdgeId(null);
 					}}

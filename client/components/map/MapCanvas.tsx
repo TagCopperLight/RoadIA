@@ -2,27 +2,30 @@ import { useApplication } from '@pixi/react';
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { FederatedPointerEvent } from 'pixi.js';
 import { CustomViewport } from './CustomViewport';
-import { MapData, VehicleData, EditTool, MapNode, MapEdge } from './types';
+import { MapData, VehicleData, MapNode, MapEdge } from './types';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
 import { Vehicle } from './elements/Vehicle';
+import { useMapEditor } from '@/context/MapEditorContext';
+import { MAP_CONFIG } from '@/lib/constants';
+import { ToastType } from '@/hooks/useToast';
+import {
+	validateNodeCreation,
+	validateDifferentNodes,
+	ValidationError,
+} from '@/lib/validators';
 
 interface MapCanvasProps {
 	data: MapData;
 	vehicles: VehicleData[];
-	editMode: boolean;
-	activeTool: EditTool;
-	selectedNodeId: number | null;
-	setSelectedNodeId: (id: number | null) => void;
-	selectedEdgeId: number | null;
-	setSelectedEdgeId: (id: number | null) => void;
 	sendPacket: (packetId: string, data: object) => void;
+	onToast: (message: string, type: ToastType, duration?: number) => void;
 }
 
 function hitTestNode(worldX: number, worldY: number, node: MapNode): boolean {
 	const dx = worldX - node.x;
 	const dy = worldY - node.y;
-	return dx * dx + dy * dy <= 16 * 16; // radius 10 + glow ring 6
+	return dx * dx + dy * dy <= MAP_CONFIG.NODE_HIT_RADIUS ** 2;
 }
 
 function hitTestEdge(worldX: number, worldY: number, edge: MapEdge, nodes: MapNode[]): boolean {
@@ -37,22 +40,17 @@ function hitTestEdge(worldX: number, worldY: number, edge: MapEdge, nodes: MapNo
 	const projX = startNode.x + t * dx;
 	const projY = startNode.y + t * dy;
 	const distSq = (worldX - projX) ** 2 + (worldY - projY) ** 2;
-	return distSq <= 7.5 * 7.5; // road half-width
+	return distSq <= MAP_CONFIG.ROAD_HIT_RADIUS ** 2;
 }
 
-export function MapCanvas({
-	data,
-	vehicles,
-	editMode,
-	activeTool,
-	selectedNodeId,
-	setSelectedNodeId,
-	selectedEdgeId,
-	setSelectedEdgeId,
-	sendPacket,
-}: MapCanvasProps) {
+export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProps) {
+	const { activeTool, selectedNodeId, setSelectedNodeId, selectedEdgeId, setSelectedEdgeId } = useMapEditor();
 	const { app } = useApplication();
 	const viewportRef = useRef<CustomViewport | null>(null);
+
+	// Pan tracking
+	const panStartRef = useRef<{ x: number; y: number } | null>(null);
+	const panLastRef = useRef<{ x: number; y: number } | null>(null);
 
 	// Add Road: source node waiting for destination.
 	const [addRoadSource, setAddRoadSource] = useState<number | null>(null);
@@ -62,8 +60,9 @@ export function MapCanvas({
 		setAddRoadSource(id);
 	}, []);
 
-	// Rubber-band pointer position (in world coords)
-	const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(null);
+	// Pointer position tracking - use ref to avoid excessive re-renders
+	const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
+	const [, setPointerPosState] = useState(0); // Force re-render when needed
 	// Node dragging state
 	const [draggingNodeId, setDraggingNodeId] = useState<number | null>(null);
 	const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
@@ -83,28 +82,69 @@ export function MapCanvas({
 		return { x: screenX, y: screenY };
 	}, []);
 
-	// Reset transient state when leaving edit mode or switching tools.
+	// Reset transient state when switching tools.
 	useEffect(() => {
-		if (!editMode) {
-			setAddRoadSourceSync(null);
-			setPointerPos(null);
-			setDraggingNodeId(null);
-			setDragPos(null);
-		} else {
-			setAddRoadSourceSync(null);
-			setPointerPos(null);
+		setAddRoadSourceSync(null);
+		pointerPosRef.current = null;
+		// Reset pan state when leaving pan tool
+		if (activeTool !== 'pan') {
+			panStartRef.current = null;
+			panLastRef.current = null;
 		}
-	}, [editMode, activeTool, setAddRoadSourceSync]);
+	}, [activeTool, setAddRoadSourceSync]);
+
+	// Manual pan handler (only active when tool is 'pan')
+	useEffect(() => {
+		if (activeTool !== 'pan') return;
+
+		const onPointerDown = (e: FederatedPointerEvent) => {
+			panStartRef.current = { x: e.global.x, y: e.global.y };
+			panLastRef.current = { x: e.global.x, y: e.global.y };
+		};
+
+		const onPointerMove = (e: FederatedPointerEvent) => {
+			if (!panStartRef.current || !panLastRef.current) return;
+
+			const dx = e.global.x - panLastRef.current.x;
+			const dy = e.global.y - panLastRef.current.y;
+
+			if (viewportRef.current) {
+				viewportRef.current.x += dx;
+				viewportRef.current.y += dy;
+			}
+
+			panLastRef.current = { x: e.global.x, y: e.global.y };
+		};
+
+		const onPointerUp = () => {
+			panStartRef.current = null;
+			panLastRef.current = null;
+		};
+
+		app.stage.on('pointerdown', onPointerDown);
+		app.stage.on('pointermove', onPointerMove);
+		app.stage.on('pointerup', onPointerUp);
+		app.stage.on('pointerupoutside', onPointerUp);
+
+		return () => {
+			app.stage.off('pointerdown', onPointerDown);
+			app.stage.off('pointermove', onPointerMove);
+			app.stage.off('pointerup', onPointerUp);
+			app.stage.off('pointerupoutside', onPointerUp);
+		};
+	}, [activeTool, app.stage]);
 
 	// All stage-level pointer and click handlers.
 	// Using a single stage-level click handler with hit-testing avoids all
 	// event-propagation ordering issues with pixi-viewport.
 	useEffect(() => {
-		if (!editMode) return;
-
 		const onMove = (e: FederatedPointerEvent) => {
 			const worldPos = toWorld(e.global.x, e.global.y);
-			setPointerPos(worldPos);
+			pointerPosRef.current = worldPos;
+			// Only trigger re-render when dragging (for preview purposes)
+			if (activeTool === 'addNode' || (activeTool === 'addRoad' && addRoadSourceRef.current !== null)) {
+				setPointerPosState(prev => prev + 1);
+			}
 			if (draggingNodeId !== null) {
 				hasDraggedRef.current = true;
 				setDragPos(worldPos);
@@ -114,6 +154,7 @@ export function MapCanvas({
 		const onUp = () => {
 			if (draggingNodeId !== null && hasDraggedRef.current && dragPos) {
 				sendPacket('moveNode', { id: draggingNodeId, x: Math.round(dragPos.x), y: Math.round(dragPos.y) });
+				onToast('Node moved', 'success');
 			}
 			setDraggingNodeId(null);
 			setDragPos(null);
@@ -135,9 +176,20 @@ export function MapCanvas({
 					const source = addRoadSourceRef.current;
 					if (source === null) {
 						setAddRoadSourceSync(clickedNode.id);
+						onToast('Select destination node', 'info');
 					} else if (source !== clickedNode.id) {
-						sendPacket('addRoad', { from_id: source, to_id: clickedNode.id, lane_count: 1, speed_limit: 40.0 });
-						setAddRoadSourceSync(null);
+						try {
+							validateDifferentNodes(source, clickedNode.id);
+							sendPacket('addRoad', { from_id: source, to_id: clickedNode.id, lane_count: MAP_CONFIG.DEFAULT_LANE_COUNT, speed_limit: MAP_CONFIG.DEFAULT_SPEED_LIMIT });
+							onToast('Road added', 'success');
+							setAddRoadSourceSync(null);
+						} catch (err) {
+							if (err instanceof ValidationError) {
+								onToast(err.message, 'error');
+							}
+						}
+					} else {
+						onToast('Cannot create road to the same node', 'error');
 					}
 				}
 				return;
@@ -157,7 +209,15 @@ export function MapCanvas({
 
 			// Empty space click.
 			if (tool === 'addNode') {
-				sendPacket('addNode', { x: Math.round(worldPos.x), y: Math.round(worldPos.y), kind: 'Intersection', name: 'New Node' });
+				try {
+					validateNodeCreation(worldPos.x, worldPos.y, 'New Node', 'Intersection');
+					sendPacket('addNode', { x: Math.round(worldPos.x), y: Math.round(worldPos.y), kind: 'Intersection', name: 'New Node' });
+					onToast('Node added', 'success');
+				} catch (err) {
+					if (err instanceof ValidationError) {
+						onToast(err.message, 'error');
+					}
+				}
 			} else if (tool === 'select') {
 				setSelectedNodeId(null);
 				setSelectedEdgeId(null);
@@ -177,21 +237,21 @@ export function MapCanvas({
 			app.stage.off('pointerupoutside', onUp);
 			app.stage.off('click', onClick);
 		};
-	}, [editMode, draggingNodeId, dragPos, sendPacket, app.stage, toWorld, setAddRoadSourceSync, setSelectedNodeId, setSelectedEdgeId]);
+	}, [draggingNodeId, dragPos, sendPacket, app.stage, toWorld, setAddRoadSourceSync, setSelectedNodeId, setSelectedEdgeId, onToast]);
 
 	// Make stage interactive so it receives pointer events.
 	useEffect(() => {
-		app.stage.eventMode = editMode ? 'static' : 'passive';
-	}, [editMode, app.stage]);
+		app.stage.eventMode = 'static';
+	}, [app.stage]);
 
 	// Drag initiation: onPointerDown on the intersection identifies which node to drag.
 	const handleNodePointerDown = useCallback((nodeId: number, e: FederatedPointerEvent) => {
-		if (!editMode || activeTool !== 'select') return;
+		if (activeTool !== 'select') return;
 		e.stopPropagation(); // prevent viewport from starting a pan drag
 		hasDraggedRef.current = false;
 		setDraggingNodeId(nodeId);
 		setDragPos(toWorld(e.global.x, e.global.y));
-	}, [editMode, activeTool, toWorld]);
+	}, [activeTool, toWorld]);
 
 	// Source node coordinates for rubber-band line.
 	const sourceNode = addRoadSource !== null ? data.nodes.find(n => n.id === addRoadSource) : null;
@@ -206,7 +266,6 @@ export function MapCanvas({
 		<pixiCustomViewport
 			ref={viewportRef}
 			events={app.renderer.events}
-			drag={!editMode}
 			pinch
 			wheel={{ trackpadPinch: true, percent: 2 }}
 			passiveWheel={false}
@@ -224,7 +283,6 @@ export function MapCanvas({
 							start={{ ...startNode, x: startPos.x, y: startPos.y }}
 							end={{ ...endNode, x: endPos.x, y: endPos.y }}
 							selected={selectedEdgeId === edge.id}
-							editMode={editMode}
 							activeTool={activeTool}
 						/>
 					);
@@ -237,7 +295,6 @@ export function MapCanvas({
 							node={{ ...node, x: pos.x, y: pos.y }}
 							selected={selectedNodeId === node.id}
 							isAddRoadSource={addRoadSource === node.id}
-							editMode={editMode}
 							activeTool={activeTool}
 							isDragging={draggingNodeId === node.id}
 							onDragStart={(e) => handleNodePointerDown(node.id, e)}
@@ -249,18 +306,25 @@ export function MapCanvas({
 				))}
 
 				{/* Rubber-band line when adding a road */}
-				{editMode && activeTool === 'addRoad' && sourceNode && pointerPos && (
+				{activeTool === 'addRoad' && sourceNode && pointerPosRef.current && (
 					<pixiGraphics
 						draw={(g) => {
 							g.clear();
 							const src = getNodePos(sourceNode);
-							g.setStrokeStyle({ color: 0xffff00, width: 2, alpha: 0.8 });
-							g.moveTo(src.x, src.y);
-							g.lineTo(pointerPos.x, pointerPos.y);
-							g.stroke();
-						}}
-					/>
-				)}
+						const currentPos = pointerPosRef.current;
+						g.setStrokeStyle({
+							color: MAP_CONFIG.RUBBER_BAND_COLOR,
+							width: MAP_CONFIG.RUBBER_BAND_WIDTH,
+							alpha: MAP_CONFIG.RUBBER_BAND_ALPHA,
+						});
+						g.moveTo(src.x, src.y);
+						if (currentPos) {
+							g.lineTo(currentPos.x, currentPos.y);
+						}
+						g.stroke();
+					}}
+				/>
+			)}
 			</pixiContainer>
 		</pixiCustomViewport>
 	);
