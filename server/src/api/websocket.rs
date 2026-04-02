@@ -400,7 +400,8 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
                 "y": n.center_coordinates.y,
-                "has_traffic_light": has_traffic_light
+                "has_traffic_light": has_traffic_light,
+                "radius": n.radius
             })
         })
         .collect();
@@ -419,6 +420,7 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "from": map.graph[a].id,
                 "to": map.graph[b].id,
                 "lane_count": r.lanes.len(),
+                "lane_width": r.lane_width,
                 "length": r.length,
                 "speed_limit": r.speed_limit,
             })
