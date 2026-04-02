@@ -10,6 +10,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serializ
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::api::runner::map_generator::{create_connected_map, create_random_vehicles};
+use crate::scoring::Score;
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -102,6 +103,22 @@ pub async fn run() -> io::Result<()> {
                 let elapsed = start.elapsed();
                 if elapsed < Duration::from_millis(10) {
                     sleep(Duration::from_millis(10) - elapsed).await;
+                }
+
+                let engine = engine.lock().await;
+                if engine.all_vehicles_arrived {
+                    // show score here
+                    let score:Score = engine.get_score();
+                    let packet = ServerPacket::Score {
+                        score : score.score,
+                        total_trip_time: score.total_trip_time,
+                        total_emitted_co2: score.total_emitted_co2,
+                        network_length: score.network_length,
+                        success_rate: score.success_rate,
+                    };
+                    websocket_service.send(packet);
+                    controller.stop();
+                    println!("Simulation finished");
                 }
             }
         }
