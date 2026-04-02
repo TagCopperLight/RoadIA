@@ -71,30 +71,36 @@ jobs:
       - name: Execute deployment commands via SSH
         uses: appleboy/ssh-action@v1.0.3
         env:
-          # Explicitly pass the output from the prep job into the step environment
+          # Explicitly pass variables into the step environment
           REPO_OWNER: ${{ needs.prep.outputs.owner }}
           REPO_FULL_NAME: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: REPO_OWNER, REPO_FULL_NAME
+          envs: REPO_OWNER, REPO_FULL_NAME, BRANCH_NAME, GH_TOKEN
           script: |
             # Create app directory if it doesn't exist
             mkdir -p ~/roadia
             cd ~/roadia
             
-            # Pull the latest docker-compose.yml
-            # We use REPO_FULL_NAME here because GitHub URLs are case-sensitive and match the repo name
-            curl -O https://raw.githubusercontent.com/$REPO_FULL_NAME/dev/docker-compose.yml
+            # Pull the latest docker-compose.yml using GH_TOKEN for private repo access
+            # We use -f to fail fast if the file is not found (prevents saving 404 text)
+            # We use $BRANCH_NAME instead of hardcoded 'dev'
+            curl -fsSL -H "Authorization: token $GH_TOKEN" \
+                 -O "https://raw.githubusercontent.com/$REPO_FULL_NAME/$BRANCH_NAME/docker-compose.yml"
             
-            # Login to GHCR
-            echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Login to GHCR with sudo
+            echo ${{ secrets.GHCR_PAT }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Export the lowercase owner for docker-compose
             export GITHUB_REPOSITORY_OWNER=$REPO_OWNER
             
-            # Pull and restart
-            docker compose pull
-            docker compose up -d
-            docker image prune -f
+            # Pull and restart with sudo
+            sudo -E docker compose pull
+            sudo -E docker compose up -d
+            
+            # Clean up old unused images with sudo
+            sudo docker image prune -f
