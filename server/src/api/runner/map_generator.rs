@@ -265,3 +265,26 @@ pub fn create_roundabout_test_map() -> Map {
     roundabout::finalize_roundabout_links(&mut map, &handle);
     map
 }
+
+pub fn create_multilane_test_map() -> Map {
+    let mut map = Map::new();
+
+    let h1 = map.add_intersection(IntersectionKind::Habitation,     0.0,   500.0);
+    let h2 = map.add_intersection(IntersectionKind::Habitation,   400.0,     0.0);
+    let h3 = map.add_intersection(IntersectionKind::Habitation,   400.0,  -400.0);
+    let i1 = map.add_intersection(IntersectionKind::Intersection, 500.0,   500.0);
+    let i2 = map.add_intersection(IntersectionKind::Intersection, 1000.0,  500.0);
+    let w1 = map.add_intersection(IntersectionKind::Workplace,    1500.0,  500.0);
+    let w2 = map.add_intersection(IntersectionKind::Workplace,    1000.0,    0.0);
+
+    map.add_two_way_road(h1, i1, 3, 50.0, 500.0);
+    map.add_two_way_road(i1, i2, 3, 50.0, 500.0);
+    map.add_two_way_road(i2, w1, 3, 50.0, 500.0);
+
+    map.add_two_way_road(h2, i1, 2, 30.0, 500.0);
+    map.add_two_way_road(h3, h2, 2, 30.0, 400.0);
+    map.add_two_way_road(i2, w2, 2, 30.0, 500.0);
+
+    intersection::build_intersections(&mut map);
+    map
+}
