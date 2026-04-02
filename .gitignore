@@ -3,3 +3,4 @@ server/target/
 server/static/
 server/src/main.rs
 data/
+server/.env
