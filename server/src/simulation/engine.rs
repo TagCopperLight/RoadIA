@@ -601,7 +601,6 @@ impl SimulationEngine {
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
             return;
         }
-
         self.vehicles[vidx].position_on_lane -= road_len;
 
         let entry = match self.vehicles[vidx].drive_plan.first().cloned() {
@@ -617,72 +616,11 @@ impl SimulationEngine {
         let junction_id = self.config.map.graph[junction_node].id;
         let to_lane = LaneId::Internal(junction_id, entry.via_internal_lane_id);
 
-        // If the internal lane is empty we can enter without checking space.
-        // Otherwise verify there is sufficient gap to both any leader and follower
-        // already present in that internal lane before committing the transfer.
-        let allow_entry = match self.vehicles_by_lane.get(&to_lane) {
-            None => true,
-            Some(vec) if vec.is_empty() => true,
-            Some(lst) => {
-                let entering_pos = self.vehicles[vidx].position_on_lane;
-                let min_gap = self.config.minimum_gap;
-
-                // Find nearest leader (smallest pos > entering_pos)
-                let mut leader_idx: Option<usize> = None;
-                for &i in lst.iter() {
-                    let p = self.vehicles[i].position_on_lane;
-                    if p > entering_pos {
-                        match leader_idx {
-                            None => leader_idx = Some(i),
-                            Some(prev) => {
-                                if p < self.vehicles[prev].position_on_lane {
-                                    leader_idx = Some(i);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let leader_ok = match leader_idx {
-                    None => true,
-                    Some(li) => {
-                        let leader = &self.vehicles[li];
-                        let gap = leader.position_on_lane - leader.spec.length - entering_pos;
-                        gap >= min_gap
-                    }
-                };
-
-                if !leader_ok {
-                    false
-                } else {
-                    // Find nearest follower (largest pos < entering_pos)
-                    let mut follower_idx: Option<usize> = None;
-                    for &i in lst.iter() {
-                        let p = self.vehicles[i].position_on_lane;
-                        if p < entering_pos {
-                            match follower_idx {
-                                None => follower_idx = Some(i),
-                                Some(prev) => {
-                                    if p > self.vehicles[prev].position_on_lane {
-                                        follower_idx = Some(i);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    match follower_idx {
-                        None => true,
-                        Some(fi) => {
-                            let follower = &self.vehicles[fi];
-                            let gap = entering_pos - self.vehicles[vidx].spec.length - follower.position_on_lane;
-                            gap >= min_gap
-                        }
-                    }
-                }
-            }
-        };
-
-        if !allow_entry {
+        // Decide whether we can enter the internal lane:
+        // - if the internal lane is empty -> allow immediately
+        // - otherwise check gaps to nearest leader and follower against `minimum_gap`
+        let entering_pos = self.vehicles[vidx].position_on_lane;
+        if !self.can_enter_internal_lane(to_lane, entering_pos, vidx) {
             // Not enough space to enter the internal lane: stay at end of current road.
             self.vehicles[vidx].position_on_lane = road_len;
             self.vehicles[vidx].velocity = 0.0;
@@ -692,6 +630,77 @@ impl SimulationEngine {
         self.vehicles[vidx].current_lane = Some(to_lane);
         self.vehicles[vidx].drive_plan.remove(0);
         self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(to_lane) });
+    }
+
+    // Helper: returns true if the internal lane has no vehicles registered.
+    fn internal_lane_is_empty(&self, lane: &LaneId) -> bool {
+        match self.vehicles_by_lane.get(lane) {
+            None => true,
+            Some(v) => v.is_empty(),
+        }
+    }
+
+    // Helper: find nearest leader (smallest position > entering_pos) and nearest follower (largest position < entering_pos)
+    // in the given lane. Returns (leader_idx_opt, follower_idx_opt).
+    fn nearest_leader_and_follower(&self, lane: &LaneId, entering_pos: f32) -> (Option<usize>, Option<usize>) {
+        let mut leader: Option<usize> = None;
+        let mut follower: Option<usize> = None;
+        if let Some(lst) = self.vehicles_by_lane.get(lane) {
+            for &i in lst.iter() {
+                let p = self.vehicles[i].position_on_lane;
+                if p > entering_pos {
+                    match leader {
+                        None => leader = Some(i),
+                        Some(prev) => {
+                            if p < self.vehicles[prev].position_on_lane {
+                                leader = Some(i);
+                            }
+                        }
+                    }
+                } else if p < entering_pos {
+                    match follower {
+                        None => follower = Some(i),
+                        Some(prev) => {
+                            if p > self.vehicles[prev].position_on_lane {
+                                follower = Some(i);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        (leader, follower)
+    }
+
+    // Check whether the vehicle `vidx` at `entering_pos` can enter `to_lane` respecting `minimum_gap`.
+    fn can_enter_internal_lane(&self, to_lane: LaneId, entering_pos: f32, vidx: usize) -> bool {
+        if self.internal_lane_is_empty(&to_lane) {
+            return true;
+        }
+
+        let min_gap = self.config.minimum_gap;
+
+        let (leader_opt, follower_opt) = self.nearest_leader_and_follower(&to_lane, entering_pos);
+
+        // Check leader gap: leader.position_on_lane - leader.length - entering_pos >= min_gap
+        if let Some(li) = leader_opt {
+            let leader = &self.vehicles[li];
+            let gap = leader.position_on_lane - leader.spec.length - entering_pos;
+            if gap < min_gap {
+                return false;
+            }
+        }
+
+        // Check follower gap: entering_pos - entering_vehicle.length - follower.position_on_lane >= min_gap
+        if let Some(fi) = follower_opt {
+            let follower = &self.vehicles[fi];
+            let gap = entering_pos - self.vehicles[vidx].spec.length - follower.position_on_lane;
+            if gap < min_gap {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
