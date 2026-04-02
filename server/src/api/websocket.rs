@@ -37,6 +37,7 @@ pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
     VehicleUpdate { vehicles: Vec<Value> },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
+    Score { score: f32, total_trip_time: f32, total_emitted_co2: f32, network_length: f32, success_rate: f32, },
 }
 
 pub struct WebSocketService {

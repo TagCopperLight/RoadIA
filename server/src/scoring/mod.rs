@@ -190,7 +190,15 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
     (3.0_f64.sqrt() / 2.0) * mst_length(&points)
 }
 
-pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> f32 {
+pub struct Score {
+    pub score: f32,
+    pub total_trip_time: f32,
+    pub total_emitted_co2: f32,
+    pub network_length: f32,
+    pub success_rate: f32,
+}
+
+pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
     let nb_arrived = vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
     let success_rate = if vehicles.is_empty() { 0.0 } else { nb_arrived as f32 / vehicles.len() as f32 };
 
@@ -244,8 +252,16 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> f32 {
         0.0
     };
 
-    TIME_WEIGHT * time_term
+    let score = TIME_WEIGHT * time_term
         + SUCCESS_WEIGHT * success_rate
         + POLLUTION_WEIGHT * pollution_term
-        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length)
+        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length);
+
+    Score {
+        score,
+        total_trip_time,
+        total_emitted_co2,
+        network_length,
+        success_rate,
+    }
 }

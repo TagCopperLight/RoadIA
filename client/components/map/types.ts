@@ -28,3 +28,11 @@ export interface VehicleData {
     heading?: number;
     speed?: number;
 }
+
+export interface ScoreData {
+	score: number;
+	total_trip_time: number;
+	total_emitted_co2: number;
+	network_length: number;
+	success_rate: number;
+}

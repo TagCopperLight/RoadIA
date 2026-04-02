@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useState, useEffect, useRef } from 'react';
 import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData } from './map/types';
+import { MapData, VehicleData, ScoreData } from './map/types';
 
 interface MapComponentProps {
 	uuid: string;
@@ -14,6 +14,8 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const [score, setScore] = useState<ScoreData | null>(null);
+	const [showScore, setShowScore] = useState(false);
 	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
@@ -67,12 +69,68 @@ export default function MapComponent({ uuid }: MapComponentProps) {
         }
 	});
 
+	useWebSocket("score", (data) => {
+		setScore(data as ScoreData);
+		setShowScore(true);
+	})
+
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
 			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} />}
 			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>
+
+			{showScore && score && (
+				<div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
+					<div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4 transform transition-all animate-in fade-in zoom-in duration-300">
+						<div className="flex justify-between items-start mb-6">
+							<h2 className="text-3xl font-bold text-gray-800">Simulation Terminée</h2>
+							<button 
+								onClick={() => setShowScore(false)}
+								className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+							>
+								<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+								</svg>
+							</button>
+						</div>
+						
+						<div className="space-y-4">
+							<div className="bg-blue-50 p-4 rounded-xl flex justify-between items-center">
+								<span className="text-blue-700 font-semibold text-lg">Score Final</span>
+								<span className="text-3xl font-black text-blue-900">{score.score.toFixed(1)}</span>
+							</div>
+							
+							<div className="grid grid-cols-2 gap-4">
+								<div className="bg-gray-50 p-3 rounded-lg">
+									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Taux de réussite</p>
+									<p className="text-xl font-bold text-gray-800">{(score.success_rate * 100).toFixed(0)}%</p>
+								</div>
+								<div className="bg-gray-50 p-3 rounded-lg">
+									<p className="text-xs text-gray-500 uppercase font-bold mb-1">CO2 Émis</p>
+									<p className="text-xl font-bold text-gray-800">{score.total_emitted_co2.toFixed(1)}kg</p>
+								</div>
+								<div className="bg-gray-50 p-3 rounded-lg">
+									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Temps total</p>
+									<p className="text-xl font-bold text-gray-800">{score.total_trip_time.toFixed(0)}s</p>
+								</div>
+								<div className="bg-gray-50 p-3 rounded-lg">
+									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Longueur du réseau</p>
+									<p className="text-xl font-bold text-gray-800">{score.network_length.toFixed(0)}m</p>
+								</div>
+							</div>
+						</div>
+
+						<button 
+							onClick={() => setShowScore(false)}
+							className="mt-8 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-blue-200 cursor-pointer"
+						>
+							Fermer
+						</button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }
