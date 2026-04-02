@@ -1,6 +1,7 @@
 use petgraph::graph::NodeIndex;
+use std::f32::consts::FRAC_PI_2;
 
-use crate::map::intersection::IntersectionKind;
+use crate::map::intersection::{InternalLane, IntersectionKind};
 use crate::map::model::Map;
 use crate::simulation::vehicle::{fastest_path, LaneId, Vehicle, VehicleState};
 use crate::test::{make_minimal_straight_map, make_standard_spec, make_vehicle};
@@ -225,4 +226,101 @@ fn get_coordinates_on_road_interpolates() {
     // with lane_idx=0, offset = 0.5 * 7.5 = 3.75 in the perpendicular direction
     // road is horizontal so perp is vertical → coords.x ≈ 250
     assert!((coords.x - 250.0).abs() < 1.0, "x={}", coords.x);
+}
+
+// ---- Vehicle::get_heading ----
+
+/// Path shorter than 2 nodes → always returns 0.0.
+#[test]
+fn heading_short_path_returns_zero() {
+    let map = Map::new();
+    let dummy = NodeIndex::new(0);
+    let mut v = make_vehicle(0, dummy, dummy);
+    v.path = vec![dummy];
+    assert_eq!(v.get_heading(&map), 0.0);
+}
+
+/// WaitingToDepart, nodes on the X axis → heading east = 0.0 rad.
+#[test]
+fn heading_waiting_to_depart_east() {
+    let mut map = Map::new();
+    let a = map.add_intersection(IntersectionKind::Intersection, 0.0, 0.0);
+    let b = map.add_intersection(IntersectionKind::Intersection, 100.0, 0.0);
+    map.add_road(a, b, 1, 40.0, 100.0);
+
+    let na = map.find_node(a).unwrap();
+    let nb = map.find_node(b).unwrap();
+    let mut v = make_vehicle(0, na, nb);
+    v.path = vec![na, nb];
+    v.state = VehicleState::WaitingToDepart;
+
+    assert!((v.get_heading(&map) - 0.0).abs() < 1e-5);
+}
+
+/// WaitingToDepart, nodes on the Y axis → heading north = π/2 rad.
+#[test]
+fn heading_waiting_to_depart_north() {
+    let mut map = Map::new();
+    let a = map.add_intersection(IntersectionKind::Intersection, 0.0, 0.0);
+    let b = map.add_intersection(IntersectionKind::Intersection, 0.0, 100.0);
+    map.add_road(a, b, 1, 40.0, 100.0);
+
+    let na = map.find_node(a).unwrap();
+    let nb = map.find_node(b).unwrap();
+    let mut v = make_vehicle(0, na, nb);
+    v.path = vec![na, nb];
+    v.state = VehicleState::WaitingToDepart;
+
+    assert!((v.get_heading(&map) - FRAC_PI_2).abs() < 1e-5);
+}
+
+/// OnRoad with a normal lane, heading south → -π/2 rad.
+#[test]
+fn heading_on_road_normal_lane_south() {
+    let mut map = Map::new();
+    let a = map.add_intersection(IntersectionKind::Intersection, 0.0, 0.0);
+    let b = map.add_intersection(IntersectionKind::Intersection, 0.0, -100.0);
+    map.add_road(a, b, 1, 40.0, 100.0);
+
+    let na = map.find_node(a).unwrap();
+    let nb = map.find_node(b).unwrap();
+    let edge = map.graph.find_edge(na, nb).unwrap();
+
+    let mut v = make_vehicle(0, na, nb);
+    v.path = vec![na, nb];
+    v.path_index = 0;
+    v.state = VehicleState::OnRoad;
+    v.current_lane = Some(LaneId::Normal(edge, 0));
+
+    assert!((v.get_heading(&map) - (-FRAC_PI_2)).abs() < 1e-5);
+}
+
+/// OnRoad on an internal lane whose entry→exit is diagonal → π/4 rad.
+#[test]
+fn heading_on_road_internal_lane_diagonal() {
+    let mut map = Map::new();
+    let junction_id = map.add_intersection(IntersectionKind::Intersection, 0.0, 0.0);
+    let junction_idx = map.find_node(junction_id).unwrap();
+
+    map.graph[junction_idx].internal_lanes.push(InternalLane {
+        id: 0,
+        from_lane_id: 0,
+        to_lane_id: 1,
+        length: 10.0,
+        speed_limit: 30.0,
+        entry: (0.0, 0.0),
+        exit: (1.0, 1.0), // 45° diagonal
+    });
+
+    // Need a second node so path.len() >= 2.
+    let other_id = map.add_intersection(IntersectionKind::Intersection, 50.0, 0.0);
+    let other_idx = map.find_node(other_id).unwrap();
+
+    let mut v = make_vehicle(0, junction_idx, other_idx);
+    v.path = vec![junction_idx, other_idx];
+    v.state = VehicleState::OnRoad;
+    v.current_lane = Some(LaneId::Internal(junction_id, 0));
+
+    let expected = 1.0_f32.atan2(1.0); // π/4
+    assert!((v.get_heading(&map) - expected).abs() < 1e-5);
 }
