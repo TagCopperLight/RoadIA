@@ -27,13 +27,18 @@ jobs:
 
       - name: Build and run on VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: ALLOWED_ORIGINS
           script: |
             cd ~/roadia
+            printf 'ALLOWED_ORIGINS=%s\n' "$ALLOWED_ORIGINS" > .env
+            set -a && . .env && set +a
             # Build and start natively on the VPS
-            sudo docker compose up -d --build
+            sudo -E docker compose up -d --build
             # Cleanup old unused containers and images
             sudo docker system prune -f

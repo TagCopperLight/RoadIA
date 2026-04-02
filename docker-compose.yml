@@ -19,4 +19,5 @@ services:
       - "8080:8080"
     environment:
       - RUST_LOG=info
+      - ALLOWED_ORIGINS
     restart: unless-stopped
