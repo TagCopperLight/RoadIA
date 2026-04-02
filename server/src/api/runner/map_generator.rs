@@ -1,4 +1,5 @@
 use petgraph::graph::NodeIndex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::map::intersection::{IntersectionKind, IntersectionRules, IntersectionType};
 use crate::map::model::Map;
@@ -198,4 +199,59 @@ pub fn create_intersection_test_map() -> Map {
     }
 
     map
+}
+
+/// Generate a unique vehicle ID
+fn generate_vehicle_id() -> u64 {
+    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+    NEXT_ID.fetch_add(1, Ordering::SeqCst)
+}
+
+/// Create a vehicle from a specified origin node
+/// - If origin is Habitation → find random Workplace as destination
+/// - If origin is Workplace → find random Habitation as destination
+/// - If origin is Intersection → return None (cannot start trips from intersections)
+pub fn create_vehicle_from_node(map: &Map, origin_id: u32) -> Option<Vehicle> {
+    let origin_idx = map.node_index_map.get(&origin_id)?;
+    let origin_kind = &map.graph[*origin_idx].kind;
+    
+    // Determine destination type based on origin type and collect destinations
+    let destinations: Vec<NodeIndex> = match origin_kind {
+        IntersectionKind::Habitation => {
+            map.graph.node_indices()
+                .filter(|&idx| matches!(map.graph[idx].kind, IntersectionKind::Workplace))
+                .collect()
+        }
+        IntersectionKind::Workplace => {
+            map.graph.node_indices()
+                .filter(|&idx| matches!(map.graph[idx].kind, IntersectionKind::Habitation))
+                .collect()
+        }
+        _ => return None, // Cannot start trips from regular intersections
+    };
+    
+    if destinations.is_empty() {
+        return None;
+    }
+    
+    // Pick a random destination
+    let destination = destinations[rand::random_range(0..destinations.len())];
+    
+    let spec = VehicleSpec {
+        kind: VehicleKind::Car,
+        max_speed: 40.0, // m/s
+        max_acceleration: 4.0,
+        comfortable_deceleration: 3.0,
+        reaction_time: 1.0,
+        length: 10.0,
+    };
+    
+    let trip = TripRequest {
+        origin: *origin_idx,
+        destination,
+        departure_time: 0,
+        return_time: None,
+    };
+    
+    Some(Vehicle::new(generate_vehicle_id(), spec, trip))
 }

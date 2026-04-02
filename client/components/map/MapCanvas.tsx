@@ -15,19 +15,53 @@ import {
 	ValidationError,
 } from '@/lib/validators';
 
+/**
+ * @typedef {Object} MapCanvasProps
+ * @property {MapData} data - État complet de la map (nœuds et routes)
+ * @property {VehicleData[]} vehicles - Liste des véhicules à afficher
+ * @property {Function} sendPacket - Envoie un paquet au serveur via WebSocket
+ * @property {Function} onToast - Affiche une notification
+ * @property {boolean} isSimulating - Est-ce en simulation? (bloque l'édition)
+ */
 interface MapCanvasProps {
 	data: MapData;
 	vehicles: VehicleData[];
 	sendPacket: (packetId: string, data: object) => void;
 	onToast: (message: string, type: ToastType, duration?: number) => void;
+	isSimulating: boolean;
 }
 
+/**
+ * hitTestNode - Détecte si un point est à l'intérieur d'un nœud
+ * 
+ * Utilise une collision circulaire:
+ * Distance(point, node.center) <= NODE_HIT_RADIUS
+ * 
+ * @param {number} worldX - Position X en coordonnées monde
+ * @param {number} worldY - Position Y en coordonnées monde
+ * @param {MapNode} node - Le nœud à tester
+ * @returns {boolean} true si le point est dans le nœud
+ */
 function hitTestNode(worldX: number, worldY: number, node: MapNode): boolean {
 	const dx = worldX - node.x;
 	const dy = worldY - node.y;
 	return dx * dx + dy * dy <= MAP_CONFIG.NODE_HIT_RADIUS ** 2;
 }
 
+/**
+ * hitTestEdge - Détecte si un point est proche d'une route (ligne)
+ * 
+ * Utilise projection perpendiculaire:
+ * 1. Projette le point sur la ligne
+ * 2. Calcule la distance perpendiculaire
+ * 3. Retourne true si distance <= ROAD_HIT_RADIUS
+ * 
+ * @param {number} worldX - Position X en coordonnées monde
+ * @param {number} worldY - Position Y en coordonnées monde
+ * @param {MapEdge} edge - La route à tester
+ * @param {MapNode[]} nodes - Liste des nœuds (pour récupérer les positions)
+ * @returns {boolean} true si le point est proche de la route
+ */
 function hitTestEdge(worldX: number, worldY: number, edge: MapEdge, nodes: MapNode[]): boolean {
 	const startNode = nodes.find(n => n.id === edge.from);
 	const endNode = nodes.find(n => n.id === edge.to);
@@ -36,6 +70,7 @@ function hitTestEdge(worldX: number, worldY: number, edge: MapEdge, nodes: MapNo
 	const dy = endNode.y - startNode.y;
 	const lenSq = dx * dx + dy * dy;
 	if (lenSq === 0) return false;
+	// Paramètre de projection (0 = start, 1 = end)
 	const t = Math.max(0, Math.min(1, ((worldX - startNode.x) * dx + (worldY - startNode.y) * dy) / lenSq));
 	const projX = startNode.x + t * dx;
 	const projY = startNode.y + t * dy;
@@ -43,7 +78,61 @@ function hitTestEdge(worldX: number, worldY: number, edge: MapEdge, nodes: MapNo
 	return distSq <= MAP_CONFIG.ROAD_HIT_RADIUS ** 2;
 }
 
-export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProps) {
+/**
+ * MapCanvas - Composant principal du rendu et de l'interaction Pixi.js
+ * 
+ * **Responsabilités principales:**
+ * 1. **Rendu (Pixi.js)**:
+ *    - Affiche nœuds (Road.tsx)
+ *    - Affiche routes (Intersection.tsx)
+ *    - Affiche véhicules (Vehicle.tsx)
+ *    - Gère le viewport (zoom/pan)
+ * 
+ * 2. **Interaction**:
+ *    - Hit-testing pour détecter clicks sur nœuds/routes
+ *    - Sélection (select tool)
+ *    - Création de nœuds (addNode tool)
+ *    - Création de routes (addRoad tool)
+ *    - Déplacement de nœuds (drag nœud)
+ *    - Pan/zoom du viewport
+ * 
+ * 3. **Communication**:
+ *    - Envoie des paquets WebSocket (addNode, updateNode, deleteNode, etc.)
+ *    - Valide avant d'envoyer (ValidationError)
+ *    - Affiche des toasts pour feedback
+ * 
+ * **État local:**
+ * - `panStartRef`, `panLastRef` : Tracking du pan du viewport
+ * - `addRoadSource` : ID du nœud source lors de la création d'une route
+ * - `draggingNodeId` : ID du nœud actuellement dragué
+ * - `dragPos` : Position actuelle du nœud en cours de drag
+ * - `nextNodeNumberRef` : Compteur local pour auto-numérotage des nœuds
+ * - `pointerPosRef` : Position du curseur (pour la ligne rubber-band)
+ * 
+ * **Arch flux click:**
+ * ```
+ * User click
+ *  └─ stage.on('click', onClick)
+ *     ├─ toWorld(screenX, screenY)
+ *     ├─ hitTestNode(worldX, worldY) → clickedNode?
+ *     │  ├─ tool='select' → setSelectedNodeId(clickedNode.id)
+ *     │  └─ tool='addRoad' → setAddRoadSource(clickedNode.id) or sendPacket('addRoad')
+ *     ├─ hitTestEdge(...) → clickedEdge?
+ *     │  └─ tool='select' → setSelectedEdgeId(clickedEdge.id)
+ *     └─ empty space
+ *        ├─ tool='addNode' → sendPacket('addNode')
+ *        └─ tool='select' → setSelectedNodeId(null)
+ * ```
+ * 
+ * **Auto-numérotage des nœuds:**
+ * Au lieu d'attendre le serveur pour connaître le prochain numéro,
+ * on utilise un compteur local `nextNodeNumberRef` qui:
+ * 1. S'initialise au montage: max(existing nodes) + 1
+ * 2. S'incrémente à chaque création (même si le serveur n'a pas répondu)
+ * 3. Évite la race condition et accélère le feedback UX
+ */
+export function MapCanvas({ data, vehicles, sendPacket, onToast, isSimulating }: MapCanvasProps) {
+	// Récupère l'état global du contexte
 	const { activeTool, selectedNodeId, setSelectedNodeId, selectedEdgeId, setSelectedEdgeId } = useMapEditor();
 	const { app } = useApplication();
 	const viewportRef = useRef<CustomViewport | null>(null);
@@ -68,11 +157,16 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 	const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
 	const hasDraggedRef = useRef(false);
 
+	// Auto-incrementing node number counter (local state, not dependent on server response)
+	const nextNodeNumberRef = useRef<number>(1);
+
 	// Always-fresh refs for use inside event handler closures.
 	const activeToolRef = useRef(activeTool);
 	activeToolRef.current = activeTool;
 	const dataRef = useRef(data);
 	dataRef.current = data;
+	const isSimulatingRef = useRef(isSimulating);
+	isSimulatingRef.current = isSimulating;
 
 	// Convert screen coordinates to viewport world coordinates.
 	const toWorld = useCallback((screenX: number, screenY: number) => {
@@ -82,20 +176,37 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 		return { x: screenX, y: screenY };
 	}, []);
 
+	// Sync local node counter with server state
+	useEffect(() => {
+		if (data.nodes.length > 0) {
+			// Extract the maximum node number from existing nodes
+			const maxNodeNumber = data.nodes.reduce((max, node) => {
+				const match = node.name.match(/node_(\d+)/);
+				if (match) {
+					const num = parseInt(match[1], 10);
+					return Math.max(max, num);
+				}
+				return max;
+			}, 0);
+			// Set next number to be one more than the max
+			nextNodeNumberRef.current = maxNodeNumber + 1;
+		}
+	}, [data.nodes]);
+
 	// Reset transient state when switching tools.
 	useEffect(() => {
 		setAddRoadSourceSync(null);
 		pointerPosRef.current = null;
-		// Reset pan state when leaving pan tool
-		if (activeTool !== 'pan') {
+	// Reset navigate state when leaving navigate tool
+	if (activeTool !== 'navigate') {
 			panStartRef.current = null;
 			panLastRef.current = null;
 		}
 	}, [activeTool, setAddRoadSourceSync]);
 
-	// Manual pan handler (only active when tool is 'pan')
+	// Manual navigate handler (only active when tool is 'navigate')
 	useEffect(() => {
-		if (activeTool !== 'pan') return;
+		if (activeTool !== 'navigate' || !app?.stage) return;
 
 		const onPointerDown = (e: FederatedPointerEvent) => {
 			panStartRef.current = { x: e.global.x, y: e.global.y };
@@ -138,6 +249,7 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 	// Using a single stage-level click handler with hit-testing avoids all
 	// event-propagation ordering issues with pixi-viewport.
 	useEffect(() => {
+		if (!app?.stage) return;
 		const onMove = (e: FederatedPointerEvent) => {
 			const worldPos = toWorld(e.global.x, e.global.y);
 			pointerPosRef.current = worldPos;
@@ -154,7 +266,7 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 		const onUp = () => {
 			if (draggingNodeId !== null && hasDraggedRef.current && dragPos) {
 				sendPacket('moveNode', { id: draggingNodeId, x: Math.round(dragPos.x), y: Math.round(dragPos.y) });
-				onToast('Node moved', 'success');
+			onToast('Nœud déplacé', 'success');
 			}
 			setDraggingNodeId(null);
 			setDragPos(null);
@@ -173,15 +285,19 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 					setSelectedNodeId(clickedNode.id);
 					setSelectedEdgeId(null);
 				} else if (tool === 'addRoad') {
+					if (isSimulatingRef.current) {
+						onToast('Arrêtez la simulation pour éditer la carte', 'warning');
+						return;
+					}
 					const source = addRoadSourceRef.current;
 					if (source === null) {
 						setAddRoadSourceSync(clickedNode.id);
-						onToast('Select destination node', 'info');
+						onToast('Sélectionnez un nœud destination', 'info');
 					} else if (source !== clickedNode.id) {
 						try {
 							validateDifferentNodes(source, clickedNode.id);
 							sendPacket('addRoad', { from_id: source, to_id: clickedNode.id, lane_count: MAP_CONFIG.DEFAULT_LANE_COUNT, speed_limit: MAP_CONFIG.DEFAULT_SPEED_LIMIT });
-							onToast('Road added', 'success');
+							onToast('Route ajoutée', 'success');
 							setAddRoadSourceSync(null);
 						} catch (err) {
 							if (err instanceof ValidationError) {
@@ -189,7 +305,7 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 							}
 						}
 					} else {
-						onToast('Cannot create road to the same node', 'error');
+						onToast('Impossible de créer une route vers le même nœud', 'error');
 					}
 				}
 				return;
@@ -209,10 +325,18 @@ export function MapCanvas({ data, vehicles, sendPacket, onToast }: MapCanvasProp
 
 			// Empty space click.
 			if (tool === 'addNode') {
+				if (isSimulatingRef.current) {
+					onToast('Arrêtez la simulation pour éditer la carte', 'warning');
+					return;
+				}
 				try {
-					validateNodeCreation(worldPos.x, worldPos.y, 'New Node', 'Intersection');
-					sendPacket('addNode', { x: Math.round(worldPos.x), y: Math.round(worldPos.y), kind: 'Intersection', name: 'New Node' });
-					onToast('Node added', 'success');
+					// Generate node name using local counter (not dependent on server response)
+					const generatedName = `node_${nextNodeNumberRef.current}`;
+					nextNodeNumberRef.current += 1;
+					
+					validateNodeCreation(worldPos.x, worldPos.y, generatedName, 'Intersection');
+					sendPacket('addNode', { x: Math.round(worldPos.x), y: Math.round(worldPos.y), kind: 'Intersection', name: generatedName });
+					onToast('Nœud ajouté', 'success');
 				} catch (err) {
 					if (err instanceof ValidationError) {
 						onToast(err.message, 'error');

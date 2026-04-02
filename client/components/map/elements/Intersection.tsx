@@ -49,6 +49,7 @@ export function Intersection({
 				g.circle(0, 0, radius);
 				g.fill();
 			}}
+			title={node.name}
 		/>
 	);
 }

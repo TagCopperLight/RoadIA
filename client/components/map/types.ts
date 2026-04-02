@@ -33,4 +33,4 @@ export interface VehicleData {
     speed?: number;
 }
 
-export type EditTool = "select" | "addNode" | "addRoad" | "pan";
+export type EditTool = "select" | "addNode" | "addRoad" | "navigate";

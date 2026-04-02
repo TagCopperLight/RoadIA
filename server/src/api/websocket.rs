@@ -12,6 +12,7 @@ use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::AppState;
+use crate::api::runner::map_generator::create_vehicle_from_node;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "id", content = "data")]
@@ -28,6 +29,7 @@ pub enum ClientPacket {
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, intersection_type: Option<String> },
+    CreateVehicle { origin_id: u32 },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -200,12 +202,15 @@ async fn handle_client_packet(
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
+            println!("[AddNode] Received: name='{}', kind='{}', x={}, y={}", name, kind, x, y);
             let kind = match serialize_intersection_kind(&kind) {
                 Ok(k) => k,
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
             let mut eng = state.engine.lock().await;
-            editor::add_node(&mut eng.config.map, x, y, kind, name);
+            let node_id = editor::add_node(&mut eng.config.map, x, y, kind.clone(), name);
+            println!("[AddNode] Created node with id={}", node_id);
+            
             let (nodes, edges) = serialize_map(&eng.config.map);
             drop(eng);
             broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -271,8 +276,63 @@ async fn handle_client_packet(
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
             let mut eng = state.engine.lock().await;
-            match editor::update_node(&mut eng.config.map, id, kind, name) {
+            match editor::update_node(&mut eng.config.map, id, kind.clone(), name) {
                 Ok(()) => {
+                    // After updating a node, ensure all Habitation/Workplace nodes have vehicles
+                    println!("[UpdateNode] Node {} changed to {:?}, ensuring vehicle coverage...", id, kind);
+                    
+                    // Collect all Habitation and Workplace node IDs
+                    let habitations: Vec<u32> = eng.config.map.graph.node_indices()
+                        .filter(|&idx| matches!(eng.config.map.graph[idx].kind, IntersectionKind::Habitation))
+                        .map(|idx| eng.config.map.graph[idx].id)
+                        .collect();
+                    
+                    let workplaces: Vec<u32> = eng.config.map.graph.node_indices()
+                        .filter(|&idx| matches!(eng.config.map.graph[idx].kind, IntersectionKind::Workplace))
+                        .map(|idx| eng.config.map.graph[idx].id)
+                        .collect();
+                    
+                    // Try to create vehicles for all Habitation nodes that don't have one
+                    for hab_id in &habitations {
+                        let already_has_vehicle = eng.vehicles.iter()
+                            .any(|v| v.trip.origin == eng.config.map.node_index_map[hab_id]);
+                        
+                        if !already_has_vehicle {
+                            match create_vehicle_from_node(&eng.config.map, *hab_id) {
+                                Some(mut vehicle) => {
+                                    vehicle.update_path(&eng.config.map);
+                                    if vehicle.path.len() >= 2 {
+                                        println!("[UpdateNode] ✓ Created vehicle #{}: Habitation (id={}) → Workplace", 
+                                                 vehicle.id, hab_id);
+                                        eng.vehicles.push(vehicle);
+                                    }
+                                }
+                                None => {}
+                            }
+                        }
+                    }
+                    
+                    // Try to create vehicles for all Workplace nodes that don't have one
+                    for wk_id in &workplaces {
+                        let already_has_vehicle = eng.vehicles.iter()
+                            .any(|v| v.trip.origin == eng.config.map.node_index_map[wk_id]);
+                        
+                        if !already_has_vehicle {
+                            match create_vehicle_from_node(&eng.config.map, *wk_id) {
+                                Some(mut vehicle) => {
+                                    vehicle.update_path(&eng.config.map);
+                                    if vehicle.path.len() >= 2 {
+                                        println!("[UpdateNode] ✓ Created vehicle #{}: Workplace (id={}) → Habitation", 
+                                                 vehicle.id, wk_id);
+                                        eng.vehicles.push(vehicle);
+                                    }
+                                }
+                                None => {}
+                            }
+                        }
+                    }
+                    
+                    println!("[UpdateNode] Total vehicles: {}", eng.vehicles.len());
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&state.websocket_service, nodes, edges);
@@ -292,7 +352,14 @@ async fn handle_client_packet(
             let mut eng = state.engine.lock().await;
             match editor::add_road(&mut eng.config.map, from_id, to_id, lane_count, speed_limit) {
                 Ok(_road_id) => {
-                    // Recalculate paths for all vehicles since a new road is available
+                    // Automatically create reverse road for bidirectional traffic
+                    if let Err(e) = editor::add_road(&mut eng.config.map, to_id, from_id, lane_count, speed_limit) {
+                        println!("[AddRoad] Warning: Failed to create reverse road {}->{}: {}", to_id, from_id, e);
+                    } else {
+                        println!("[AddRoad] ✓ Created bidirectional routes: {}<->{}", from_id, to_id);
+                    }
+                    
+                    // Recalculate paths for all vehicles since new roads are available
                     let map_snapshot = eng.config.map.clone();
                     for vehicle in &mut eng.vehicles {
                         vehicle.update_path(&map_snapshot);
@@ -350,6 +417,20 @@ async fn handle_client_packet(
                     drop(eng);
                     send_edit_error(socket, &e).await;
                 }
+            }
+        }
+
+        ClientPacket::CreateVehicle { origin_id } => {
+            let mut eng = state.engine.lock().await;
+            
+            if let Some(mut vehicle) = create_vehicle_from_node(&eng.config.map, origin_id) {
+                // Calculate initial path
+                vehicle.update_path(&eng.config.map);
+                println!("Vehicle #{} created from node {}", vehicle.id, origin_id);
+                eng.vehicles.push(vehicle);
+            } else {
+                drop(eng);
+                send_edit_error(socket, "Cannot create vehicle: missing destination node type or no habitation/workplace connection").await;
             }
         }
     }

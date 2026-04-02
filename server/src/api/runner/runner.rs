@@ -9,7 +9,6 @@ use axum::{Router, routing::get};
 use crate::api::websocket::{ws_handler, ServerPacket, WebSocketService, serialize_vehicle};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_connected_map, create_random_vehicles};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -43,8 +42,9 @@ pub struct AppState {
 }
 
 pub async fn run() -> io::Result<()> {
-    let map = create_connected_map(200, 1500.0, 1500.0);
-    let vehicles = create_random_vehicles(&map, 50);
+    // Start with an empty map that users can build via the frontend
+    let map = crate::map::model::Map::new();
+    let vehicles = Vec::new();
 
     let config = SimulationConfig {
         start_time: 0.0,
@@ -84,10 +84,17 @@ pub async fn run() -> io::Result<()> {
                     let mut engine = engine.lock().await;
                     engine.step();
                     engine.current_time += engine.config.time_step;
-                    engine.vehicles
+                    let vehicles_count = engine.vehicles.len();
+                    let serialized: Vec<_> = engine.vehicles
                         .iter()
                         .map(|v| serialize_vehicle(v, &engine.config.map))
-                        .collect::<Vec<_>>()
+                        .collect();
+                    
+                    if vehicles_count > 0 && engine.current_time as u32 % 100 == 0 {
+                        println!("[Runner] Step at time={:.1}s, {} vehicles", engine.current_time, vehicles_count);
+                    }
+                    
+                    serialized
                 };
 
                 let packet = ServerPacket::VehicleUpdate { vehicles: vehicles_data };

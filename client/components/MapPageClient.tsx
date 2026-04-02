@@ -14,9 +14,10 @@ interface MapPageClientProps {
 }
 
 export default function MapPageClient({ uuid }: MapPageClientProps) {
-	const [activeTool, setActiveTool] = useState<EditTool>('pan');
+	const [activeTool, setActiveTool] = useState<EditTool>('navigate');
 	const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
 	const [selectedEdgeId, setSelectedEdgeId] = useState<number | null>(null);
+	const [isSimulating, setIsSimulating] = useState(false);
 	const { toasts, addToast, removeToast } = useToast();
 
 	// Refs to latest values for use in keydown handler without stale closures.
@@ -56,6 +57,8 @@ export default function MapPageClient({ uuid }: MapPageClientProps) {
 			setSelectedNodeId={setSelectedNodeId}
 			selectedEdgeId={selectedEdgeId}
 			setSelectedEdgeId={setSelectedEdgeId}
+			isSimulating={isSimulating}
+			setIsSimulating={setIsSimulating}
 			addToast={addToast}
 		>
 			<>
