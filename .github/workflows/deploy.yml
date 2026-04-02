@@ -1,111 +1,38 @@
-name: Deploy to VPS
+name: Deploy to VPS (Native Build)
 
 on:
   push:
     branches:
       - dev
-      - infra/docker
-
-env:
-  REGISTRY: ghcr.io
 
 jobs:
-  # This job prepares variables to be used in other jobs
-  prep:
+  deploy:
+    name: Sync and Build on VPS
     runs-on: ubuntu-latest
-    outputs:
-      owner: ${{ steps.vars.outputs.owner }}
-    steps:
-      - name: Set lower case owner
-        id: vars
-        run: echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
-        env:
-          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
-
-  build-and-push:
-    name: Build and Push Docker Images
-    needs: prep
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push Client Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./client
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ env.REGISTRY }}/${{ needs.prep.outputs.owner }}/roadia-client:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push Server Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./server
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ env.REGISTRY }}/${{ needs.prep.outputs.owner }}/roadia-server:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy to VPS
-    needs: [prep, build-and-push]
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Execute deployment commands via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          # Explicitly pass variables into the step environment
-          REPO_OWNER: ${{ needs.prep.outputs.owner }}
-          REPO_FULL_NAME: ${{ github.repository }}
-          BRANCH_NAME: ${{ github.ref_name }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Copy files to VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: REPO_OWNER, REPO_FULL_NAME, BRANCH_NAME, GH_TOKEN
+          source: "."
+          target: "~/roadia"
+          rm: true # Clean old files before syncing
+
+      - name: Build and run on VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # Create app directory if it doesn't exist
-            mkdir -p ~/roadia
             cd ~/roadia
-            
-            # Pull the latest docker-compose.yml using GH_TOKEN for private repo access
-            # We use -f to fail fast if the file is not found (prevents saving 404 text)
-            # We use $BRANCH_NAME instead of hardcoded 'dev'
-            curl -fsSL -H "Authorization: token $GH_TOKEN" \
-                 -O "https://raw.githubusercontent.com/$REPO_FULL_NAME/$BRANCH_NAME/docker-compose.yml"
-            
-            # Login to GHCR with sudo
-            echo ${{ secrets.GHCR_PAT }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Export the lowercase owner for docker-compose
-            export GITHUB_REPOSITORY_OWNER=$REPO_OWNER
-            
-            # Pull and restart with sudo
-            sudo -E docker compose pull
-            sudo -E docker compose up -d
-            
-            # Clean up old unused images with sudo
-            sudo docker image prune -f
+            # Build and start natively on the VPS
+            sudo docker compose up -d --build
+            # Cleanup old unused containers and images
+            sudo docker system prune -f
