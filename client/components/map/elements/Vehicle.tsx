@@ -5,7 +5,7 @@ interface VehicleProps {
 }
 
 export function Vehicle({ data }: VehicleProps) {
-    if (data.state === 'Arrived') {
+    if (data.state === 'Arrived' || data.state === 'Waiting') {
         return null;
     }
 
@@ -21,7 +21,7 @@ export function Vehicle({ data }: VehicleProps) {
             graphics.rotation = data.heading ?? 0;
             
             graphics.setFillStyle({ color: 'purple' });
-            graphics.rect(-10, -3, 10, 6);
+            graphics.rect(-10, -2, 8, 5);
             graphics.fill();
         }} />
     );

@@ -56,7 +56,9 @@ pub fn move_node(map: &mut Map, id: u32, x: f32, y: f32) -> Result<(), String> {
         let by = map.graph[b].center_coordinates.y;
         let dx = bx - ax;
         let dy = by - ay;
-        map.graph[edge_idx].length = (dx * dx + dy * dy).sqrt();
+        let ra = map.graph[a].radius;
+        let rb = map.graph[b].radius;
+        map.graph[edge_idx].length = ((dx * dx + dy * dy).sqrt() - ra - rb).max(1.0);
     }
 
     Ok(())
@@ -106,7 +108,9 @@ pub fn add_road(
     let by = map.graph[to_idx].center_coordinates.y;
     let dx = bx - ax;
     let dy = by - ay;
-    let length = (dx * dx + dy * dy).sqrt();
+    let from_radius = map.graph[from_idx].radius;
+    let to_radius = map.graph[to_idx].radius;
+    let length = ((dx * dx + dy * dy).sqrt() - from_radius - to_radius).max(1.0);
 
     let road_id = map.add_road(from_id, to_id, lane_count, speed_limit, length);
 
