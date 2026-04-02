@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - dev
+      - infra/docker
 
 jobs:
   deploy:
