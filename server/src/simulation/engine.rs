@@ -340,10 +340,10 @@ impl SimulationEngine {
             }
 
             let current_phase = &controller.phases[state.phase_index];
-            if state.time_in_phase < current_phase.green_duration {
-                let ids: Vec<u32> = current_phase.green_link_ids.iter().copied().collect();
-                self.green_links.extend(ids);
-            }
+            // Treat yellow as green: include green link ids for the whole phase
+            // (green + yellow). This makes vehicles continue through orange.
+            let ids: Vec<u32> = current_phase.green_link_ids.iter().copied().collect();
+            self.green_links.extend(ids);
         }
     }
 }
@@ -388,12 +388,68 @@ impl SimulationEngine {
             desired = speed_limit.min(safe_speed);
         }
 
-        let accel = self.vehicles[vidx].compute_acceleration(
+        let lane_obj = match lane_id {
+            LaneId::Normal(edge, lid) => {
+                self.config.map.graph[edge].lanes[lid as usize].clone()
+            }
+            LaneId::Internal(jid, ilid) => {
+                let il_len = self
+                    .config
+                    .map
+                    .node_index_map
+                    .get(&jid)
+                    .and_then(|&ni| {
+                        self.config.map.graph[ni]
+                            .internal_lanes
+                            .iter()
+                            .find(|il| il.id == ilid)
+                            .map(|il| il.length)
+                    })
+                    .unwrap_or(0.0);
+                crate::map::road::Lane { id: ilid, road_id: jid, length: il_len, speed_limit: self.lane_speed_limit(vidx), links: Vec::new() }
+            }
+        };
+
+        // Determine whether the upcoming link (from drive_plan) is currently in yellow
+        let mut is_yellow = false;
+        if let Some(entry) = self.vehicles[vidx].drive_plan.first() {
+            for (&ctrl_id, state) in &self.traffic_light_states {
+                if let Some(controller) = self.config.map.traffic_lights.get(&ctrl_id) {
+                    if controller.phases.is_empty() {
+                        continue;
+                    }
+                    let phase = &controller.phases[state.phase_index];
+                    if phase.green_link_ids.contains(&entry.link_id) {
+                        let green_d = phase.green_duration;
+                        let total_d = phase.green_duration + phase.yellow_duration;
+                        if state.time_in_phase >= green_d && state.time_in_phase < total_d {
+                            is_yellow = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut accel = self.vehicles[vidx].compute_acceleration(
             desired,
             self.config.minimum_gap,
             ahead_dist,
-            ahead_vel,
+            ahead_vel
         );
+
+        let road_distance_left = (lane_obj.length - self.vehicles[vidx].position_on_lane).max(0.0);
+        let break_distance = 0.5*self.vehicles[vidx].velocity.powf(2.0) / self.vehicles[vidx].spec.comfortable_deceleration;
+        
+        if is_yellow && road_distance_left > break_distance {
+            let traffic_light_acceleration = self.vehicles[vidx].compute_acceleration(
+                desired,
+                self.config.minimum_gap,
+                road_distance_left,
+                0.0
+            );
+            accel = accel.min(traffic_light_acceleration);
+        }
 
         {
             let v = &mut self.vehicles[vidx];

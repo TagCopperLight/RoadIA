@@ -1,0 +1,8 @@
+{
+  "name": "roadia-root",
+  "private": true,
+  "scripts": {
+    "client:install": "cd client && npm install",
+    "client:dev": "cd client && npm run dev"
+  }
+}
