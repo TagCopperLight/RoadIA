@@ -1,7 +1,7 @@
 'use client';
 
 import Image from "next/image";
-import { useCallback, useState, useRef } from 'react';
+import { useCallback, useState } from 'react';
 import { usePacket } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData, TrafficLightData } from './map/types';
@@ -11,7 +11,6 @@ export default function MapComponent() {
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
-	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
@@ -25,36 +24,7 @@ export default function MapComponent() {
 	usePacket("vehicleUpdate", (data) => {
 		const update = data as { vehicles?: VehicleData[], traffic_lights?: TrafficLightData[] };
         if (update && Array.isArray(update.vehicles)) {
-			const newVehicles = update.vehicles as VehicleData[];
-			const processedVehicles = newVehicles.map(vehicle => {
-				const prevVehicle = prevVehiclesRef.current[vehicle.id];
-
-				if (prevVehicle) {
-					const dx = vehicle.x - prevVehicle.x;
-					const dy = vehicle.y - prevVehicle.y;
-					const dist = Math.sqrt(dx * dx + dy * dy);
-
-					if (dist > 0.01) {
-						vehicle.heading = Math.atan2(dy, dx);
-						vehicle.speed = dist;
-					} else {
-						vehicle.heading = prevVehicle.heading;
-						vehicle.speed = 0;
-					}
-				} else {
-                    vehicle.heading = undefined;
-                    vehicle.speed = 0;
-                }
-				return vehicle;
-			});
-
-			const newPrevVehicles: Record<number, VehicleData> = {};
-			processedVehicles.forEach(v => {
-				newPrevVehicles[v.id] = v;
-			});
-			prevVehiclesRef.current = newPrevVehicles;
-
-		    setVehicles(processedVehicles);
+			setVehicles(update.vehicles as VehicleData[]);
         }
 
 		if (update && Array.isArray(update.traffic_lights)) {
