@@ -71,7 +71,7 @@ pub async fn ws_handler(
 
     match instance {
         Some(instance) if instance.token == params.token => {
-            ws.on_upgrade(move |socket| ws_loop(socket, instance)).into_response()
+            ws.on_upgrade(move |socket| ws_loop(socket, instance, state, parsed_uuid)).into_response()
         }
         _ => {
             println!("Connection rejected: Invalid uuid or token. UUID={}", parsed_uuid);
@@ -85,7 +85,13 @@ pub async fn ws_handler(
     }
 }
 
-async fn ws_loop(mut socket: WebSocket, instance: Arc<SimulationInstance>) {
+async fn ws_loop(
+    mut socket: WebSocket,
+    instance: Arc<SimulationInstance>,
+    state: Arc<AppState>,
+    uuid: Uuid,
+) {
+    instance.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut rx = instance.broadcast.subscribe();
     println!("New WebSocket client connected");
 
@@ -122,6 +128,12 @@ async fn ws_loop(mut socket: WebSocket, instance: Arc<SimulationInstance>) {
                 }
             }
         }
+    }
+    if instance.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
+        // Last client disconnected — stop the simulation and remove the instance.
+        instance.controller.stop();
+        state.simulations.write().await.remove(&uuid);
+        println!("Last client disconnected, simulation {} removed", uuid);
     }
     println!("WebSocket loop ended");
 }
