@@ -1,6 +1,5 @@
 use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Query, State},
-    http::StatusCode,
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -18,7 +17,7 @@ use crate::api::runner::runner::{AppState, SimulationInstance};
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
-    pub uuid: Uuid,
+    pub uuid: String,
     pub token: String,
 }
 
@@ -52,16 +51,37 @@ pub async fn ws_handler(
     Query(params): Query<ConnectParams>,
     State(state): State<Arc<AppState>>,
 ) -> axum::response::Response {
+    let parsed_uuid = match Uuid::parse_str(&params.uuid) {
+        Ok(u) => u,
+        Err(_) => {
+            println!("Connection rejected: Invalid UUID format. UUID={}", params.uuid);
+            return ws.on_upgrade(|mut socket| async move {
+                let _ = socket.send(axum::extract::ws::Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 4001,
+                    reason: "Unauthorized".into(),
+                }))).await;
+            }).into_response();
+        }
+    };
+
     let instance = {
         let simulations = state.simulations.read().await;
-        simulations.get(&params.uuid).cloned()
+        simulations.get(&parsed_uuid).cloned()
     };
 
     match instance {
         Some(instance) if instance.token == params.token => {
             ws.on_upgrade(move |socket| ws_loop(socket, instance)).into_response()
         }
-        _ => (StatusCode::UNAUTHORIZED, "Invalid uuid or token").into_response(),
+        _ => {
+            println!("Connection rejected: Invalid uuid or token. UUID={}", parsed_uuid);
+            ws.on_upgrade(|mut socket| async move {
+                let _ = socket.send(axum::extract::ws::Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 4001,
+                    reason: "Unauthorized".into(),
+                }))).await;
+            }).into_response()
+        }
     }
 }
 
