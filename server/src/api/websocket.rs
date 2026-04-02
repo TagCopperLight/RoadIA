@@ -219,9 +219,9 @@ async fn handle_client_packet(
             }
 
             let map_snapshot = eng.config.map.clone();
-            eng.vehicles.retain_mut(|vehicle| {
-                vehicle.update_path(&map_snapshot)
-            });
+            for vehicle in eng.vehicles.iter_mut() {
+                let _ = vehicle.update_path(&map_snapshot);
+            }
         }
 
         ClientPacket::AddNode { x, y, kind } => {
