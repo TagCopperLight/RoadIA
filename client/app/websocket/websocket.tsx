@@ -28,13 +28,16 @@ class WebSocketClient {
             this.socket?.readyState === WebSocket.CONNECTING
         ) return;
 
-        this.socket = new WebSocket(this.url);
+        const ws = new WebSocket(this.url);
+        this.socket = ws;
 
-        this.socket.onopen = () => {
+        ws.onopen = () => {
+            if (this.socket !== ws) return;
             console.log(`[WS] Connected to ${this.url}`);
         };
 
-        this.socket.onmessage = (event: MessageEvent) => {
+        ws.onmessage = (event: MessageEvent) => {
+            if (this.socket !== ws) return;
             try {
                 const { id, data } = JSON.parse(event.data);
                 this.listeners.get(id)?.forEach(fn => fn(data));
@@ -43,15 +46,23 @@ class WebSocketClient {
             }
         };
 
-        this.socket.onclose = () => {
-            console.log('[WS] Disconnected');
+        ws.onclose = (event: CloseEvent) => {
+            if (this.socket !== ws) return;
+            console.log(`[WS] Disconnected. Code: ${event.code}`);
+            if (event.code === 4001) {
+                console.warn('[WS] Unauthorized or map not found. Redirecting to home...');
+                this.shouldReconnect = false;
+                window.location.href = '/';
+                return;
+            }
             if (this.shouldReconnect) {
                 this.reconnectTimeout = setTimeout(() => this.open(), 3000);
             }
         };
 
-        this.socket.onerror = () => {
-            this.socket?.close();
+        ws.onerror = () => {
+            if (this.socket !== ws) return;
+            ws.close();
         };
     }
 
