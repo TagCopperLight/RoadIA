@@ -430,10 +430,12 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
+    let heading = vehicle.get_heading(sim_map);
     json!({
         "id": vehicle.id,
         "x": coords.x,
         "y": coords.y,
+        "heading": heading,
         "kind": match vehicle.spec.kind {
                 VehicleKind::Car => "Car",
                 VehicleKind::Bus => "Bus",

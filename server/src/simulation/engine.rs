@@ -114,7 +114,6 @@ impl SimulationEngine {
                 }
             };
             let lane_id = LaneId::Normal(first_edge, 0);
-            let vlen = self.vehicles[vidx].spec.length;
 
             let space_ok = self
                 .vehicles_by_lane
@@ -122,14 +121,14 @@ impl SimulationEngine {
                 .and_then(|lst| lst.first().copied())
                 .is_none_or(|rear_idx| {
                     self.vehicles[rear_idx].position_on_lane - self.vehicles[rear_idx].spec.length
-                        >= vlen
+                        >= self.config.minimum_gap
                 });
 
             if !space_ok {
                 continue;
             }
 
-            self.vehicles[vidx].position_on_lane = vlen;
+            self.vehicles[vidx].position_on_lane = 0.0;
             self.vehicles[vidx].state = VehicleState::OnRoad;
             self.vehicles[vidx].current_lane = Some(lane_id);
             

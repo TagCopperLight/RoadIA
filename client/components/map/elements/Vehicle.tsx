@@ -5,7 +5,7 @@ interface VehicleProps {
 }
 
 export function Vehicle({ data }: VehicleProps) {
-    if (data.state === 'Arrived') {
+    if (data.state === 'Arrived' || data.state === 'Waiting') {
         return null;
     }
 
