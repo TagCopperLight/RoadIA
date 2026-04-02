@@ -27,7 +27,6 @@ export interface VehicleData {
     kind: string;
     state: string;
     heading?: number;
-    speed?: number;
 }
 
 export interface TrafficLightData {
