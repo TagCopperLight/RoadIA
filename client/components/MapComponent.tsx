@@ -99,7 +99,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 						<div className="space-y-4">
 							<div className="bg-blue-50 p-4 rounded-xl flex justify-between items-center">
 								<span className="text-blue-700 font-semibold text-lg">Score Final</span>
-								<span className="text-3xl font-black text-blue-900">{score.score.toFixed(1)}</span>
+								<span className="text-3xl font-black text-blue-900">{score.score.toFixed(3)}</span>
 							</div>
 							
 							<div className="grid grid-cols-2 gap-4">
@@ -109,7 +109,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 								</div>
 								<div className="bg-gray-50 p-3 rounded-lg">
 									<p className="text-xs text-gray-500 uppercase font-bold mb-1">CO2 Émis</p>
-									<p className="text-xl font-bold text-gray-800">{score.total_emitted_co2.toFixed(1)}kg</p>
+									<p className="text-xl font-bold text-gray-800">{score.total_emitted_co2.toFixed(0)}kg</p>
 								</div>
 								<div className="bg-gray-50 p-3 rounded-lg">
 									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Temps total</p>
