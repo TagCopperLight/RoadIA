@@ -1,0 +1,31 @@
+services:
+  client:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-roadia}/roadia-client:latest
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL
+    environment:
+      - NODE_ENV=production
+    networks:
+      - default
+      - web
+    restart: unless-stopped
+
+  server:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-roadia}/roadia-server:latest
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      - RUST_LOG=info
+      - ALLOWED_ORIGINS
+    networks:
+      - default
+      - web
+    restart: unless-stopped
+
+networks:
+  web:
+    external: true

@@ -1,10 +1,17 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApplication } from '@pixi/react';
 import { MapData, MapEdge, VehicleData, TrafficLightData } from './types';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
 import { Vehicle } from './elements/Vehicle';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
+
+function lerpAngle(a: number, b: number, t: number): number {
+	let diff = b - a;
+	while (diff > Math.PI) diff -= 2 * Math.PI;
+	while (diff < -Math.PI) diff += 2 * Math.PI;
+	return a + diff * t;
+}
 
 export function MapCanvas({
 	data,
@@ -16,6 +23,50 @@ export function MapCanvas({
 	trafficLights: Map<number, TrafficLightData>;
 }) {
 	const { app } = useApplication();
+
+	// Interpolation: targetRef holds raw WS positions, displayRef holds smoothed positions
+	const targetRef = useRef<Map<number, VehicleData>>(new Map());
+	const displayRef = useRef<Map<number, VehicleData>>(new Map());
+	const [displayVehicles, setDisplayVehicles] = useState<VehicleData[]>([]);
+
+	// Update targets when new WS data arrives
+	useEffect(() => {
+		const map = new Map<number, VehicleData>();
+		for (const v of vehicles) map.set(v.id, v);
+		targetRef.current = map;
+	}, [vehicles]);
+
+	// Lerp display vehicles toward targets on every Pixi frame
+	useEffect(() => {
+		const FACTOR = 0.2; // 0.1 = slow/smooth, 0.5 = fast/snappy
+		const tick = () => {
+			const targets = targetRef.current;
+			const display = displayRef.current;
+			let changed = false;
+
+			for (const [id, target] of targets) {
+				const curr = display.get(id);
+				if (!curr || target.state !== 'Moving') {
+					display.set(id, { ...target });
+					changed = true;
+				} else {
+					const nx = curr.x + (target.x - curr.x) * FACTOR;
+					const ny = curr.y + (target.y - curr.y) * FACTOR;
+					const nh = lerpAngle(curr.heading ?? 0, target.heading ?? 0, FACTOR);
+					display.set(id, { ...target, x: nx, y: ny, heading: nh });
+					changed = true;
+				}
+			}
+			for (const id of [...display.keys()]) {
+				if (!targets.has(id)) { display.delete(id); changed = true; }
+			}
+
+			if (changed) setDisplayVehicles([...display.values()]);
+		};
+
+		app.ticker.add(tick);
+		return () => { app.ticker.remove(tick); };
+	}, [app]);
 
 	const nodeMap = useMemo(
 		() => new Map(data.nodes.map(n => [n.id, n])),
@@ -85,8 +136,8 @@ export function MapCanvas({
 					);
 				})}
 
-				{/* Pass 4: Vehicles */}
-				{vehicles.map((vehicle) => (
+				{/* Pass 4: Vehicles (interpolated) */}
+				{displayVehicles.map((vehicle) => (
 					<Vehicle key={`vehicle-${vehicle.id}`} data={vehicle} />
 				))}
 			</pixiContainer>
