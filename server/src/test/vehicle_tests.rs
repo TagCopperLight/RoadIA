@@ -41,7 +41,7 @@ fn idm_free_road_at_desired_speed() {
     // no leader → interaction term = 0
     let mut v = make_vehicle_with_prev_velocity(20.0);
     v.spec = make_standard_spec(); // a=4, d=3, reaction=1
-    let accel = v.compute_acceleration(20.0, 2.0, f32::INFINITY, 0.0);
+    let accel = v.compute_acceleration(20.0, 2.0, f32::INFINITY, 0.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     assert!(accel.abs() < 0.01, "expected ~0, got {accel}");
 }
 
@@ -51,7 +51,7 @@ fn idm_free_road_from_rest() {
     // no leader → interaction = 0
     let mut v = make_vehicle_with_prev_velocity(0.0);
     v.spec = make_standard_spec();
-    let accel = v.compute_acceleration(20.0, 2.0, f32::INFINITY, 0.0);
+    let accel = v.compute_acceleration(20.0, 2.0, f32::INFINITY, 0.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     assert!((accel - 4.0).abs() < 0.01, "expected ~4.0, got {accel}");
 }
 
@@ -60,7 +60,7 @@ fn idm_braking_for_close_vehicle() {
     // Leader very close and stopped → strong deceleration
     let mut v = make_vehicle_with_prev_velocity(15.0);
     v.spec = make_standard_spec();
-    let accel = v.compute_acceleration(15.0, 2.0, 3.0, 0.0);
+    let accel = v.compute_acceleration(15.0, 2.0, 3.0, 0.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     assert!(accel < -1.0, "expected strong braking, got {accel}");
 }
 
@@ -69,7 +69,7 @@ fn idm_zero_ahead_distance_returns_max_decel() {
     // vehicle_ahead_distance <= 0 → emergency brake
     let mut v = make_vehicle_with_prev_velocity(15.0);
     v.spec = make_standard_spec();
-    let accel = v.compute_acceleration(15.0, 2.0, -1.0, 0.0);
+    let accel = v.compute_acceleration(15.0, 2.0, -1.0, 0.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     assert_eq!(accel, -v.spec.comfortable_deceleration);
 }
 
@@ -78,7 +78,7 @@ fn idm_zero_minimum_gap_no_panic() {
     // minimum_gap=0 should be clamped to 0.1 internally, not panic
     let mut v = make_vehicle_with_prev_velocity(10.0);
     v.spec = make_standard_spec();
-    let accel = v.compute_acceleration(20.0, 0.0, 50.0, 0.0);
+    let accel = v.compute_acceleration(20.0, 0.0, 50.0, 0.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     assert!(accel.is_finite());
 }
 
@@ -88,7 +88,7 @@ fn idm_following_at_safe_distance_small_positive_accel() {
     let mut v = make_vehicle_with_prev_velocity(10.0);
     v.spec = make_standard_spec();
     // s_desired ≈ 2 + 10*1 + 0 = 12m, add extra buffer → accel near 0
-    let accel = v.compute_acceleration(10.0, 2.0, 30.0, 10.0);
+    let accel = v.compute_acceleration(10.0, 2.0, 30.0, 10.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     // Should be moderate — not strongly braking, not strongly accelerating
     assert!(accel > -3.0 && accel < 4.0, "accel out of range: {accel}");
 }
@@ -98,7 +98,7 @@ fn idm_half_desired_speed_free_road() {
     // At v = 0.5 * v_des, free_road_acc = a_max * (1 - 0.5^4) = 4 * 0.9375 = 3.75
     let mut v = make_vehicle_with_prev_velocity(10.0);
     v.spec = make_standard_spec();
-    let accel = v.compute_acceleration(20.0, 2.0, f32::INFINITY, 0.0);
+    let accel = v.compute_acceleration(20.0, 2.0, f32::INFINITY, 0.0, crate::map::road::Lane { id: 0, road_id: 0, length: f32::INFINITY, speed_limit: 100.0, links: Vec::new() }, false);
     assert!((accel - 3.75).abs() < 0.01, "expected 3.75, got {accel}");
 }
 
