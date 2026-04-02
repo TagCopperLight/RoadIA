@@ -248,6 +248,48 @@ impl Vehicle {
         }
     }
 
+    pub fn get_heading(&self, map: &Map) -> f32 {
+        if self.path.len() < 2 {
+            return 0.0;
+        }
+        match self.state {
+            VehicleState::OnRoad => {
+                match self.current_lane {
+                    Some(LaneId::Internal(junction_id, internal_lane_id)) => {
+                        if let Some(&junction_node_idx) = map.node_index_map.get(&junction_id) {
+                            let junction = &map.graph[junction_node_idx];
+                            if let Some(il) = junction
+                                .internal_lanes
+                                .iter()
+                                .find(|il| il.id == internal_lane_id)
+                            {
+                                let dx = il.exit.0 - il.entry.0;
+                                let dy = il.exit.1 - il.entry.1;
+                                return dy.atan2(dx);
+                            }
+                        }
+                        0.0
+                    }
+                    _ => {
+                        let cur = map.graph.node_weight(self.get_current_node()).expect("node");
+                        let nxt = map.graph.node_weight(self.get_next_node()).expect("node");
+                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                        tdy.atan2(tdx)
+                    }
+                }
+            }
+            _ => {
+                // WaitingToDepart: use the direction of the first road segment
+                let cur = map.graph.node_weight(self.path[0]).expect("node");
+                let nxt = map.graph.node_weight(self.path[1]).expect("node");
+                let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                tdy.atan2(tdx)
+            }
+        }
+    }
+
     pub fn get_current_node(&self) -> NodeIndex {
         self.path[self.path_index]
     }
