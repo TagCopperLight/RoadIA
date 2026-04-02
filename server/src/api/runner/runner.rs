@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::io;
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, RwLock};
@@ -8,7 +8,8 @@ use tokio::sync::broadcast;
 use tokio::time::{sleep, Duration};
 use axum::{Router, routing::{get, post}, extract::State, Json};
 use uuid::Uuid;
-use tower_http::cors::CorsLayer;
+use axum::http::{HeaderValue, Method, header::CONTENT_TYPE};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
@@ -52,6 +53,7 @@ pub struct SimulationInstance {
     pub engine: Arc<Mutex<SimulationEngine>>,
     pub broadcast: broadcast::Sender<ServerPacket>,
     pub controller: SimulationController,
+    pub active_connections: AtomicUsize,
 }
 
 impl SimulationInstance {
@@ -75,13 +77,25 @@ impl SimulationInstance {
         let (broadcast, _) = broadcast::channel(100);
         let controller = SimulationController::new();
 
-        let instance = Arc::new(Self { token, engine, broadcast, controller });
+        let instance = Arc::new(Self {
+            token,
+            engine,
+            broadcast,
+            controller,
+            active_connections: AtomicUsize::new(0),
+        });
 
         tokio::spawn({
-            let instance = Arc::clone(&instance);
+            let weak = Arc::downgrade(&instance);
             async move {
                 loop {
+                    let instance = match weak.upgrade() {
+                        Some(i) => i,
+                        None => break, // instance was removed, exit the loop
+                    };
+
                     if !instance.controller.is_running() {
+                        drop(instance);
                         sleep(Duration::from_millis(100)).await;
                         continue;
                     }
@@ -107,8 +121,10 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    if elapsed < Duration::from_millis(10) {
-                        sleep(Duration::from_millis(10) - elapsed).await;
+                    let remaining = Duration::from_millis(10).saturating_sub(elapsed);
+                    drop(instance);
+                    if !remaining.is_zero() {
+                        sleep(remaining).await;
                     }
                 }
             }
@@ -152,7 +168,16 @@ pub async fn run() -> io::Result<()> {
         simulations: Arc::new(RwLock::new(HashMap::new())),
     });
 
-    let cors = CorsLayer::permissive();
+    let allowed_origins: Vec<HeaderValue> = std::env::var("ALLOWED_ORIGINS")
+        .expect("ALLOWED_ORIGINS must be set (comma-separated list, e.g. http://localhost:3000)")
+        .split(',')
+        .filter_map(|o| o.trim().parse().ok())
+        .collect();
+
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::list(allowed_origins))
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([CONTENT_TYPE]);
 
     let app = Router::new()
         .route("/ws", get(ws_handler))
