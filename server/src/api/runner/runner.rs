@@ -15,7 +15,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_random_vehicles, create_traffic_light_test_map};
+use crate::api::runner::map_generator::{create_random_vehicles, create_traffic_light_test_map, create_osm_map};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -57,8 +57,8 @@ pub struct SimulationInstance {
 }
 
 impl SimulationInstance {
-    pub fn new(map: crate::map::model::Map, vehicles: Vec<Vehicle>) -> Arc<Self> {
-        let token = generate_token();
+    pub fn new(map: crate::map::model::Map, vehicles: Vec<Vehicle>, custom_token: Option<String>) -> Arc<Self> {
+        let token = custom_token.unwrap_or_else(generate_token);
 
         let config = SimulationConfig {
             start_time: 0.0,
@@ -138,7 +138,7 @@ impl SimulationInstance {
         // let map = create_connected_map(200, 1500.0, 1500.0);
         let map = create_traffic_light_test_map();
         let vehicles = create_random_vehicles(&map, 50);
-        Self::new(map, vehicles)
+        Self::new(map, vehicles, None)
     }
 }
 
@@ -149,24 +149,39 @@ fn generate_token() -> String {
 }
 
 pub struct AppState {
-    pub simulations: Arc<RwLock<HashMap<Uuid, Arc<SimulationInstance>>>>,
+    pub simulations: Arc<RwLock<HashMap<String, Arc<SimulationInstance>>>>,
 }
 
 async fn create_simulation_handler(
     State(state): State<Arc<AppState>>,
 ) -> Json<serde_json::Value> {
-    let uuid = Uuid::new_v4();
+    let uuid = Uuid::new_v4().to_string();
     let instance = SimulationInstance::new_default();
     let token = instance.token.clone();
 
-    state.simulations.write().await.insert(uuid, instance);
+    state.simulations.write().await.insert(uuid.clone(), instance);
 
     Json(serde_json::json!({ "uuid": uuid, "token": token }))
 }
 
 pub async fn run() -> io::Result<()> {
+    let mut initial_simulations = HashMap::new();
+
+    let map_path = "../data/planet_-3.488,48.716_-3.416,48.749.osm.pbf";
+    match create_osm_map(map_path) {
+        Ok(map) => {
+            println!("Successfully loaded Lannion map from OSM!");
+            let vehicles = create_random_vehicles(&map, 200);
+            let instance = SimulationInstance::new(map, vehicles, Some("".to_string()));
+            initial_simulations.insert("lannion".to_string(), instance);
+        }
+        Err(e) => {
+            println!("Failed to load Lannion map: {:?}", e);
+        }
+    }
+
     let shared_state = Arc::new(AppState {
-        simulations: Arc::new(RwLock::new(HashMap::new())),
+        simulations: Arc::new(RwLock::new(initial_simulations)),
     });
 
     let allowed_origins: Vec<HeaderValue> = std::env::var("ALLOWED_ORIGINS")
