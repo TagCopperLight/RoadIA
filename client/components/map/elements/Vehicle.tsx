@@ -20,7 +20,7 @@ export function Vehicle({ data }: VehicleProps) {
             
             graphics.rotation = data.heading ?? 0;
             
-            graphics.setFillStyle({ color: 'purple' });
+            graphics.setFillStyle({ color: 0xFFFF00 });
             graphics.rect(-10, -2, 8, 5);
             graphics.fill();
         }} />
