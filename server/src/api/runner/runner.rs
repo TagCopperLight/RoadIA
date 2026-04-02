@@ -135,28 +135,9 @@ impl SimulationInstance {
     }
 
     pub fn new_default() -> Arc<Self> {
-        let default_pbf_path = format!("{}/../data/planet_-3.488,48.716_-3.416,48.749.osm.pbf", env!("CARGO_MANIFEST_DIR"));
-        let pbf_path = std::env::var("OSM_MAP_PATH").unwrap_or(default_pbf_path);
-        
-        let (map, vehicles) = if std::path::Path::new(&pbf_path).exists() {
-            match create_osm_map(&pbf_path) {
-                Ok(m) => {
-                    let v = create_random_vehicles(&m, 50);
-                    (m, v)
-                }
-                Err(e) => {
-                    println!("Failed to parse OSM map at '{}': {}. Falling back to default test map.", pbf_path, e);
-                    let m = create_traffic_light_test_map();
-                    let v = create_random_vehicles(&m, 30);
-                    (m, v)
-                }
-            }
-        } else {
-            println!("OSM map not found at '{}'. Falling back to default test map.", pbf_path);
-            let m = create_traffic_light_test_map();
-            let v = create_random_vehicles(&m, 30);
-            (m, v)
-        };
+        // let map = create_connected_map(200, 1500.0, 1500.0);
+        let map = create_traffic_light_test_map();
+        let vehicles = create_random_vehicles(&map, 50);
         Self::new(map, vehicles)
     }
 }
@@ -184,7 +165,6 @@ async fn create_simulation_handler(
 }
 
 pub async fn run() -> io::Result<()> {
-
     let shared_state = Arc::new(AppState {
         simulations: Arc::new(RwLock::new(HashMap::new())),
     });
