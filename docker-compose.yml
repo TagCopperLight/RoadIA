@@ -1,5 +1,5 @@
 services:
-  roadia-client:
+  client:
     image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-roadia}/roadia-client:latest
     build:
       context: ./client
@@ -13,7 +13,7 @@ services:
       - web
     restart: unless-stopped
 
-  roadia-server:
+  server:
     image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-roadia}/roadia-server:latest
     build:
       context: ./server
