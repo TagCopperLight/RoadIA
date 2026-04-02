@@ -121,6 +121,9 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
+                    if elapsed.as_millis() > 15 {
+                        eprintln!("[runner] slow frame: {}ms", elapsed.as_millis());
+                    }
                     let remaining = Duration::from_millis(10).saturating_sub(elapsed);
                     drop(instance);
                     if !remaining.is_zero() {
