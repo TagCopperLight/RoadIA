@@ -5,12 +5,14 @@ export interface MapNode {
 	x: number;
 	y: number;
 	has_traffic_light?: boolean;
+	radius: number;
 }
 
 export interface MapEdge {
 	from: number;
 	id: number;
 	lane_count: number;
+	lane_width: number;
 	length: number;
 	to: number;
 }
@@ -27,7 +29,6 @@ export interface VehicleData {
     kind: string;
     state: string;
     heading?: number;
-    speed?: number;
 }
 
 export interface TrafficLightData {

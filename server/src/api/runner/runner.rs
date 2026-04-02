@@ -15,7 +15,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_roundabout_test_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_traffic_light_test_map, create_random_vehicles};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -135,7 +135,7 @@ impl SimulationInstance {
 
     pub fn new_default() -> Arc<Self> {
         // let map = create_connected_map(200, 1500.0, 1500.0);
-        let map = create_roundabout_test_map();
+        let map = create_traffic_light_test_map();
         let vehicles = create_random_vehicles(&map, 50);
         Self::new(map, vehicles)
     }

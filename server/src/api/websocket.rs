@@ -400,7 +400,8 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
                 "y": n.center_coordinates.y,
-                "has_traffic_light": has_traffic_light
+                "has_traffic_light": has_traffic_light,
+                "radius": n.radius
             })
         })
         .collect();
@@ -419,6 +420,7 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "from": map.graph[a].id,
                 "to": map.graph[b].id,
                 "lane_count": r.lanes.len(),
+                "lane_width": r.lane_width,
                 "length": r.length,
                 "speed_limit": r.speed_limit,
             })
@@ -430,10 +432,12 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
+    let heading = vehicle.get_heading(sim_map);
     json!({
         "id": vehicle.id,
         "x": coords.x,
         "y": coords.y,
+        "heading": heading,
         "kind": match vehicle.spec.kind {
                 VehicleKind::Car => "Car",
                 VehicleKind::Bus => "Bus",
