@@ -40,7 +40,6 @@ class WebSocketClient {
             if (this.socket !== ws) return;
             try {
                 const { id, data } = JSON.parse(event.data);
-                if (id === 'vehicleUpdate') console.debug('[WS] packet', id, Date.now());
                 this.listeners.get(id)?.forEach(fn => fn(data));
             } catch (e) {
                 console.error('[WS] Parse error:', e);
