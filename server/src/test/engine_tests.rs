@@ -97,7 +97,7 @@ fn make_engine_with_one_vehicle() -> SimulationEngine {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     let config = make_sim_config(map, 300.0);
     SimulationEngine::new(config, vec![v])
 }
@@ -166,9 +166,9 @@ fn step_two_vehicles_maintain_gap() {
     let work = map.find_node(2).unwrap();
 
     let mut v0 = make_vehicle(0, hab, work);
-    v0.update_path(&map);
+    assert!(v0.update_path(&map));
     let mut v1 = make_vehicle(1, hab, work);
-    v1.update_path(&map);
+    assert!(v1.update_path(&map));
 
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v0, v1]);
@@ -218,7 +218,7 @@ fn step_impatience_grows_when_waiting() {
 
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
 
@@ -241,7 +241,7 @@ fn step_impatience_resets_after_moving() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
 

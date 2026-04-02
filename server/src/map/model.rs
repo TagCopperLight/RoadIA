@@ -182,37 +182,14 @@ impl Map {
         );
 
         // ── Rebuild the graph with only the largest component ───────
-        let mut new_map = Map::new();
-        let mut old_to_new: HashMap<NodeIndex, u32> = HashMap::new();
-
-        // Re-add nodes
-        for &old_idx in &largest {
-            let node = &self.graph[old_idx];
-            let new_id = new_map.add_intersection(
-                node.kind.clone(),
-                node.center_coordinates.x,
-                node.center_coordinates.y,
-            );
-            old_to_new.insert(old_idx, new_id);
+        self.graph.retain_nodes(|_, n| largest.contains(&n));
+        
+        // Rebuild node_index_map since NodeIndex values shift during retain_nodes
+        self.node_index_map.clear();
+        for node_idx in self.graph.node_indices() {
+            let id = self.graph[node_idx].id;
+            self.node_index_map.insert(id, node_idx);
         }
-
-        // Re-add edges
-        for edge in self.graph.edge_indices() {
-            if let Some((a, b)) = self.graph.edge_endpoints(edge) {
-                if let (Some(&new_a), Some(&new_b)) = (old_to_new.get(&a), old_to_new.get(&b)) {
-                    let road = &self.graph[edge];
-                    new_map.add_road(
-                        new_a,
-                        new_b,
-                        road.lanes.len() as u8,
-                        road.speed_limit,
-                        road.length,
-                    );
-                }
-            }
-        }
-
-        *self = new_map;
     }
 
 }

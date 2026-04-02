@@ -11,8 +11,8 @@ use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec}
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
-pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Map {
-    let mut map = osm_parser::parse_osm_pbf(path).expect("Failed to parse OSM PBF file");
+pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmParseError> {
+    let mut map = osm_parser::parse_osm_pbf(path)?;
 
     // Remove disconnected fragments — keep only the largest connected component.
     map.retain_largest_component();
@@ -35,7 +35,7 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Map {
             map.graph[*idx].kind = IntersectionKind::Habitation;
         } else {
             // Alternate between Habitation and Workplace for dead-end / degree-2 nodes
-            if idx.index() % 2 == 0 {
+            if map.graph[*idx].id % 2 == 0 {
                 map.graph[*idx].kind = IntersectionKind::Habitation;
             } else {
                 map.graph[*idx].kind = IntersectionKind::Workplace;
@@ -50,7 +50,7 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Map {
     );
 
     intersection::build_intersections(&mut map);
-    map
+    Ok(map)
 }
 
 

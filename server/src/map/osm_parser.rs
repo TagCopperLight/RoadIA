@@ -271,16 +271,28 @@ fn build_map(
             let start_osm_id = way.node_refs[segment_start_idx];
             let end_osm_id = way.node_refs[i];
 
-            // Ensure both endpoints have intersection entries.
+            let coord_start = match node_coords.get(&start_osm_id) {
+                Some(c) => c,
+                None => {
+                    segment_start_idx = i;
+                    continue;
+                }
+            };
+            let coord_end = match node_coords.get(&end_osm_id) {
+                Some(c) => c,
+                None => {
+                    segment_start_idx = i;
+                    continue;
+                }
+            };
+
             let from_id = *node_index_map.entry(start_osm_id).or_insert_with(|| {
-                let coord = node_coords.get(&start_osm_id).unwrap();
-                let (x, y) = project_coords(coord.lat, coord.lon, center_lat, center_lon);
+                let (x, y) = project_coords(coord_start.lat, coord_start.lon, center_lat, center_lon);
                 map.add_intersection(IntersectionKind::Habitation, x, y)
             });
 
             let to_id = *node_index_map.entry(end_osm_id).or_insert_with(|| {
-                let coord = node_coords.get(&end_osm_id).unwrap();
-                let (x, y) = project_coords(coord.lat, coord.lon, center_lat, center_lon);
+                let (x, y) = project_coords(coord_end.lat, coord_end.lon, center_lat, center_lon);
                 map.add_intersection(IntersectionKind::Habitation, x, y)
             });
 

@@ -160,7 +160,7 @@ fn update_path_populates_path() {
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
     assert!(v.path.is_empty());
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     assert!(!v.path.is_empty());
     assert_eq!(v.path_index, 0);
     assert_eq!(v.path[0], hab);
@@ -175,7 +175,7 @@ fn get_current_node_returns_path_at_index() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     assert_eq!(v.get_current_node(), v.path[0]);
 }
 
@@ -185,7 +185,7 @@ fn get_next_node_returns_path_at_index_plus_one() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     assert_eq!(v.get_next_node(), v.path[1]);
 }
 
@@ -197,7 +197,7 @@ fn get_coordinates_waiting_to_depart_returns_origin_coords() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     // WaitingToDepart → should return origin intersection coords
     let coords = v.get_coordinates(&map);
     // hab is at (0, 0)
@@ -214,7 +214,7 @@ fn get_coordinates_on_road_interpolates() {
     let edge = map.graph.find_edge(hab, jct).unwrap();
 
     let mut v = make_vehicle(0, hab, work);
-    v.update_path(&map);
+    assert!(v.update_path(&map));
     v.state = VehicleState::OnRoad;
     v.current_lane = Some(LaneId::Normal(edge, 0));
     v.position_on_lane = 250.0; // midpoint of 500m road
