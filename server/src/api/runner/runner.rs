@@ -107,8 +107,6 @@ impl SimulationInstance {
                         let mut eng = instance.engine.lock().await;
                         eng.step();
                         eng.current_time += eng.config.time_step;
-                        eng.step();
-                        eng.current_time += eng.config.time_step;
                         let vehicles = eng.vehicles
                             .iter()
                             .map(|v| serialize_vehicle(v, &eng.config.map))
@@ -126,7 +124,6 @@ impl SimulationInstance {
 
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step);
-                    println!("Elapsed: {:?}, Step duration: {:?}", elapsed, step_duration);
                   
                     {
                         let engine = instance.engine.lock().await;
