@@ -14,7 +14,7 @@ fn single_vehicle_arrives() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
     engine.run();
@@ -31,7 +31,7 @@ fn single_vehicle_arrives_at_correct_destination() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let destination = v.trip.destination;
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
@@ -77,7 +77,7 @@ fn congestion_map_all_vehicles_arrive() {
         make_vehicle(3, h2, w1),
     ];
     for v in &mut vehicles {
-        assert!(v.update_path(&map));
+        v.update_path(&map);
     }
     let config = make_sim_config(map, 600.0);
     let mut engine = SimulationEngine::new(config, vehicles);
@@ -104,7 +104,7 @@ fn congestion_map_no_vehicle_overlap() {
         make_vehicle(1, h1, w1),
     ];
     for v in &mut vehicles {
-        assert!(v.update_path(&map));
+        v.update_path(&map);
     }
 
     let end_time = 300.0f32;
@@ -143,7 +143,7 @@ fn four_way_north_to_south_arrives() {
     let north = map.find_node(1).unwrap();
     let south = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, north, south);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
     engine.run();
@@ -156,7 +156,7 @@ fn four_way_east_to_west_arrives() {
     let east = map.find_node(3).unwrap();
     let west = map.find_node(4).unwrap();
     let mut v = make_vehicle(0, east, west);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
     engine.run();
@@ -174,9 +174,9 @@ fn four_way_conflict_both_vehicles_arrive() {
     let west  = map.find_node(4).unwrap();
 
     let mut v0 = make_vehicle(0, north, south);
-    assert!(v0.update_path(&map));
+    v0.update_path(&map);
     let mut v1 = make_vehicle(1, east, west);
-    assert!(v1.update_path(&map));
+    v1.update_path(&map);
 
     let config = make_sim_config(map, 400.0);
     let mut engine = SimulationEngine::new(config, vec![v0, v1]);
@@ -206,7 +206,7 @@ fn four_way_four_vehicles_no_deadlock() {
         make_vehicle(3, west, east),
     ];
     for v in &mut vehicles {
-        assert!(v.update_path(&map));
+        v.update_path(&map);
     }
 
     let config = make_sim_config(map, 600.0);
@@ -238,7 +238,7 @@ fn stop_sign_causes_vehicle_to_wait() {
     }
 
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
 
@@ -266,7 +266,7 @@ fn roundabout_single_vehicle_north_to_east_arrives() {
     let north = map.find_node(0).unwrap();
     let east = map.find_node(1).unwrap();
     let mut v = make_vehicle(0, north, east);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
     engine.run();
@@ -280,7 +280,7 @@ fn roundabout_single_vehicle_south_to_west_arrives() {
     let south = map.find_node(2).unwrap();
     let west = map.find_node(3).unwrap();
     let mut v = make_vehicle(0, south, west);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
     engine.run();
@@ -297,9 +297,9 @@ fn roundabout_two_vehicles_no_deadlock() {
     let west = map.find_node(3).unwrap();
 
     let mut v0 = make_vehicle(0, north, east);
-    assert!(v0.update_path(&map));
+    v0.update_path(&map);
     let mut v1 = make_vehicle(1, south, west);
-    assert!(v1.update_path(&map));
+    v1.update_path(&map);
 
     let config = make_sim_config(map, 400.0);
     let mut engine = SimulationEngine::new(config, vec![v0, v1]);
@@ -327,7 +327,7 @@ fn traffic_light_map_vehicles_arrive() {
         make_vehicle(1, east, west),
     ];
     for v in &mut vehicles {
-        assert!(v.update_path(&map));
+        v.update_path(&map);
     }
     let config = make_sim_config(map, 600.0);
     let mut engine = SimulationEngine::new(config, vehicles);
@@ -346,7 +346,7 @@ fn traffic_light_map_vehicle_waits_at_red() {
     let west = map.find_node(4).unwrap();
 
     let mut v = make_vehicle(0, east, west);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 600.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
 
@@ -376,7 +376,7 @@ fn vehicle_on_opposite_direction_road_arrives() {
 
     // From jct back to hab (reverse direction)
     let mut v = make_vehicle(0, jct, hab);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     let config = make_sim_config(map, 300.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
     engine.run();

@@ -60,7 +60,9 @@ impl Simulation for SimulationEngine {
     }
 
     fn run(&mut self) {
-        self.vehicles.retain_mut(|v| v.update_path(&self.config.map));
+        for v in &mut self.vehicles {
+            v.update_path(&self.config.map);
+        }
         while self.current_time < self.config.end_time {
             self.step();
             self.current_time += self.config.time_step;

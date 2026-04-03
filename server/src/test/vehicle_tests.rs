@@ -109,7 +109,7 @@ fn fastest_path_direct_route() {
     let map = make_minimal_straight_map();
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
-    let path = fastest_path(&map, hab, work).expect("path should exist");
+    let path = fastest_path(&map, hab, work);
     assert_eq!(path.len(), 3);
     assert_eq!(path[0], hab);
     assert_eq!(path[2], work);
@@ -133,7 +133,7 @@ fn fastest_path_prefers_high_speed_road() {
     let dest = map.find_node(dest_id).unwrap();
     let waypoint = map.find_node(waypoint_id).unwrap();
 
-    let path = fastest_path(&map, origin, dest).expect("path should exist");
+    let path = fastest_path(&map, origin, dest);
     assert!(
         path.contains(&waypoint),
         "expected route via waypoint (faster), got path of len {}",
@@ -142,14 +142,15 @@ fn fastest_path_prefers_high_speed_road() {
 }
 
 #[test]
-fn fastest_path_no_path_returns_none() {
+#[should_panic]
+fn fastest_path_no_path_panics() {
     let mut map = Map::new();
     let a_id = map.add_intersection(IntersectionKind::Habitation, 0.0, 0.0);
     let b_id = map.add_intersection(IntersectionKind::Workplace, 100.0, 0.0);
     // No road between them
     let a = map.find_node(a_id).unwrap();
     let b = map.find_node(b_id).unwrap();
-    assert!(fastest_path(&map, a, b).is_none());
+    fastest_path(&map, a, b); // Should panic
 }
 
 // ---- Vehicle::update_path ----
@@ -161,7 +162,7 @@ fn update_path_populates_path() {
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
     assert!(v.path.is_empty());
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     assert!(!v.path.is_empty());
     assert_eq!(v.path_index, 0);
     assert_eq!(v.path[0], hab);
@@ -176,7 +177,7 @@ fn get_current_node_returns_path_at_index() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     assert_eq!(v.get_current_node(), v.path[0]);
 }
 
@@ -186,7 +187,7 @@ fn get_next_node_returns_path_at_index_plus_one() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     assert_eq!(v.get_next_node(), v.path[1]);
 }
 
@@ -198,7 +199,7 @@ fn get_coordinates_waiting_to_depart_returns_origin_coords() {
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     // WaitingToDepart → should return origin intersection coords
     let coords = v.get_coordinates(&map);
     // hab is at (0, 0)
@@ -215,7 +216,7 @@ fn get_coordinates_on_road_interpolates() {
     let edge = map.graph.find_edge(hab, jct).unwrap();
 
     let mut v = make_vehicle(0, hab, work);
-    assert!(v.update_path(&map));
+    v.update_path(&map);
     v.state = VehicleState::OnRoad;
     v.current_lane = Some(LaneId::Normal(edge, 0));
     v.position_on_lane = 250.0; // midpoint of 500m road

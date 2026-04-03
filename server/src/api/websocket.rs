@@ -4,6 +4,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use uuid::Uuid;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -50,19 +51,30 @@ pub async fn ws_handler(
     Query(params): Query<ConnectParams>,
     State(state): State<Arc<AppState>>,
 ) -> axum::response::Response {
-    let simulation_id = params.uuid.clone();
+    let parsed_uuid = match Uuid::parse_str(&params.uuid) {
+        Ok(u) => u,
+        Err(_) => {
+            println!("Connection rejected: Invalid UUID format. UUID={}", params.uuid);
+            return ws.on_upgrade(|mut socket| async move {
+                let _ = socket.send(axum::extract::ws::Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 4001,
+                    reason: "Unauthorized".into(),
+                }))).await;
+            }).into_response();
+        }
+    };
 
     let instance = {
         let simulations = state.simulations.read().await;
-        simulations.get(&simulation_id).cloned()
+        simulations.get(&parsed_uuid).cloned()
     };
 
     match instance {
-        Some(instance) if instance.token == params.token || simulation_id == "lannion" => {
-            ws.on_upgrade(move |socket| ws_loop(socket, instance, state, simulation_id)).into_response()
+        Some(instance) if instance.token == params.token => {
+            ws.on_upgrade(move |socket| ws_loop(socket, instance, state, parsed_uuid)).into_response()
         }
         _ => {
-            println!("Connection rejected: Invalid uuid or token. UUID={}", simulation_id);
+            println!("Connection rejected: Invalid uuid or token. UUID={}", parsed_uuid);
             ws.on_upgrade(|mut socket| async move {
                 let _ = socket.send(axum::extract::ws::Message::Close(Some(axum::extract::ws::CloseFrame {
                     code: 4001,
@@ -77,7 +89,7 @@ async fn ws_loop(
     mut socket: WebSocket,
     instance: Arc<SimulationInstance>,
     state: Arc<AppState>,
-    uuid: String,
+    uuid: Uuid,
 ) {
     instance.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut rx = instance.broadcast.subscribe();
@@ -118,14 +130,10 @@ async fn ws_loop(
         }
     }
     if instance.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
-        // Last client disconnected
+        // Last client disconnected, stop the simulation and remove the instance.
         instance.controller.stop();
-        if uuid != "lannion" {
-            state.simulations.write().await.remove(&uuid);
-            println!("Last client disconnected, simulation {} removed", uuid);
-        } else {
-            println!("Last client disconnected from lannion, keeping map active in memory.");
-        }
+        state.simulations.write().await.remove(&uuid);
+        println!("Last client disconnected, simulation {} removed", uuid);
     }
     println!("WebSocket loop ended");
 }
