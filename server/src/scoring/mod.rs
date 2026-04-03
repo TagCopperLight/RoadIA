@@ -11,7 +11,7 @@ const VEHICLE_MASS: f32 = 1680.0; // kg
 const ENGINE_THERMAL_EFFICIENCY: f32 = 0.35;
 const DRIVE_TRAIN_EFFICIENCY: f32 = 0.9;
 const IDLE_POWER: f32 = 2500.0; // W
-const LOWER_HEATING_VALUE_FOR_FUEL: f32 = 43200.0; // kJ/kg
+const LOWER_HEATING_VALUE_FOR_FUEL: f32 = 43_200_000.0; // J/kg
 const AERODYNAMIC_DRAG_COEFFICIENT: f32 = 0.3;
 const FRONT_AREA: f32 = 2.0; // m²
 const ROLLING_RESISTANCE_COEFFICIENT: f32 = 0.01;
@@ -190,11 +190,25 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
     (3.0_f64.sqrt() / 2.0) * mst_length(&points)
 }
 
-pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> f32 {
+pub struct Score {
+    pub score: f32,
+    pub total_trip_time: f32,
+    pub total_emitted_co2: f32,
+    pub network_length: f32,
+    pub total_distance_traveled: f32,
+    pub success_rate: f32,
+}
+
+pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
     let nb_arrived = vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
     let success_rate = if vehicles.is_empty() { 0.0 } else { nb_arrived as f32 / vehicles.len() as f32 };
 
     let total_trip_time: f32 = vehicles
+        .iter()
+        .filter(|v| matches!(v.state, VehicleState::Arrived))
+        .filter_map(|v| v.arrived_at.map(|a| a - v.trip.departure_time))
+        .fold(0.0_f32, f32::max);
+    let sum_trip_time: f32 = vehicles
         .iter()
         .filter(|v| matches!(v.state, VehicleState::Arrived))
         .filter_map(|v| v.arrived_at.map(|a| a - v.trip.departure_time))
@@ -232,8 +246,8 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> f32 {
         })
         .sum();
 
-    let time_term = if total_trip_time > 0.0 {
-        total_ref_trip_time / total_trip_time
+    let time_term = if sum_trip_time > 0.0 {
+        total_ref_trip_time / sum_trip_time
     } else {
         0.0
     };
@@ -244,8 +258,23 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> f32 {
         0.0
     };
 
-    TIME_WEIGHT * time_term
+    let score = TIME_WEIGHT * time_term
         + SUCCESS_WEIGHT * success_rate
         + POLLUTION_WEIGHT * pollution_term
-        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length)
+        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length);
+
+    let total_distance_traveled: f32 = vehicles
+        .iter()
+        .filter(|v| matches!(v.state, VehicleState::Arrived))
+        .map(|v| v.distance_traveled)
+        .sum();
+
+    Score {
+        score,
+        total_trip_time,
+        total_emitted_co2,
+        network_length,
+        total_distance_traveled,
+        success_rate,
+    }
 }

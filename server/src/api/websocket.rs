@@ -1,9 +1,10 @@
 use axum::{
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, State},
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, Query, State},
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use uuid::Uuid;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
@@ -12,13 +13,18 @@ use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
-use crate::api::runner::runner::AppState;
+use crate::api::runner::runner::{AppState, SimulationInstance};
+
+#[derive(Debug, Deserialize)]
+pub struct ConnectParams {
+    pub uuid: String,
+    pub token: String,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "id", content = "data")]
 #[serde(rename_all = "camelCase")]
 pub enum ClientPacket {
-    Connect { token: String },
     StartSimulation {},
     StopSimulation {},
     ResetSimulation {},
@@ -38,48 +44,76 @@ pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
     VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value> },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
-}
-
-pub struct WebSocketService {
-    sender: broadcast::Sender<ServerPacket>,
-}
-
-impl Default for WebSocketService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl WebSocketService {
-    pub fn new() -> Self {
-        let (sender, _) = broadcast::channel(100);
-        Self { sender }
-    }
-
-    pub fn send(&self, packet: ServerPacket) {
-        let _ = self.sender.send(packet);
-    }
-
-    pub fn subscribe(&self) -> broadcast::Receiver<ServerPacket> {
-        self.sender.subscribe()
-    }
+    Score { score: f32, total_trip_time: f32, total_emitted_co2: f32, network_length: f32, total_distance_traveled: f32, success_rate: f32, },
 }
 
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
+    Query(params): Query<ConnectParams>,
     State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| ws_loop(socket, state))
+) -> axum::response::Response {
+    let parsed_uuid = match Uuid::parse_str(&params.uuid) {
+        Ok(u) => u,
+        Err(_) => {
+            println!("Connection rejected: Invalid UUID format. UUID={}", params.uuid);
+            return ws.on_upgrade(|mut socket| async move {
+                let _ = socket.send(axum::extract::ws::Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 4001,
+                    reason: "Unauthorized".into(),
+                }))).await;
+            }).into_response();
+        }
+    };
+
+    let instance = {
+        let simulations = state.simulations.read().await;
+        simulations.get(&parsed_uuid).cloned()
+    };
+
+    match instance {
+        Some(instance) if instance.token == params.token => {
+            ws.on_upgrade(move |socket| ws_loop(socket, instance, state, parsed_uuid)).into_response()
+        }
+        _ => {
+            println!("Connection rejected: Invalid uuid or token. UUID={}", parsed_uuid);
+            ws.on_upgrade(|mut socket| async move {
+                let _ = socket.send(axum::extract::ws::Message::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 4001,
+                    reason: "Unauthorized".into(),
+                }))).await;
+            }).into_response()
+        }
+    }
 }
 
-async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
-    let mut rx = state.websocket_service.subscribe();
+async fn ws_loop(
+    mut socket: WebSocket,
+    instance: Arc<SimulationInstance>,
+    state: Arc<AppState>,
+    uuid: Uuid,
+) {
+    instance.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut rx = instance.broadcast.subscribe();
     println!("New WebSocket client connected");
+
+    // Send initial map state immediately on connect
+    {
+        let eng = instance.engine.lock().await;
+        let (nodes, edges) = serialize_map(&eng.config.map);
+        drop(eng);
+        let packet = ServerPacket::Map { nodes, edges };
+        if let Ok(text) = serde_json::to_string(&packet) {
+            if let Err(e) = socket.send(Message::Text(text)).await {
+                println!("Failed to send initial map: {}", e);
+                return;
+            }
+        }
+    }
 
     loop {
         tokio::select! {
             msg = socket.recv() => {
-                if !process_incoming_msg(msg, &mut socket, &state).await {
+                if !process_incoming_msg(msg, &mut socket, &instance).await {
                     break;
                 }
             }
@@ -96,19 +130,25 @@ async fn ws_loop(mut socket: WebSocket, state: Arc<AppState>) {
             }
         }
     }
+    if instance.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
+        // Last client disconnected, stop the simulation and remove the instance.
+        instance.controller.stop();
+        state.simulations.write().await.remove(&uuid);
+        println!("Last client disconnected, simulation {} removed", uuid);
+    }
     println!("WebSocket loop ended");
 }
 
 async fn process_incoming_msg(
     msg: Option<Result<Message, axum::Error>>,
     socket: &mut WebSocket,
-    state: &Arc<AppState>,
+    instance: &Arc<SimulationInstance>,
 ) -> bool {
     match msg {
         Some(Ok(msg)) => match msg {
             Message::Text(text) => {
                 match serde_json::from_str::<ClientPacket>(&text) {
-                    Ok(packet) => handle_client_packet(packet, socket, state).await,
+                    Ok(packet) => handle_client_packet(packet, socket, instance).await,
                     Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
                 }
                 true
@@ -143,42 +183,28 @@ async fn process_broadcast_msg(packet: ServerPacket, socket: &mut WebSocket) -> 
 async fn handle_client_packet(
     packet: ClientPacket,
     socket: &mut WebSocket,
-    state: &Arc<AppState>,
+    instance: &Arc<SimulationInstance>,
 ) {
     println!("Received Packet: {:?}", packet);
     match packet {
-        ClientPacket::Connect { token } => {
-            println!("Client connected with token: {}", token);
-            let eng = state.engine.lock().await;
-            let (nodes, edges) = serialize_map(&eng.config.map);
-            drop(eng);
-            let response = ServerPacket::Map { nodes, edges };
-            if let Ok(text) = serde_json::to_string(&response) {
-                if let Err(e) = socket.send(Message::Text(text)).await {
-                    println!("Failed to send initial map: {}", e);
-                }
-            }
-        }
-
         ClientPacket::StartSimulation {} => {
             println!("Client started simulation");
-            state.simulation.start();
+            instance.controller.start();
         }
 
         ClientPacket::StopSimulation {} => {
             println!("Client stopped simulation");
-            state.simulation.stop();
+            instance.controller.stop();
         }
 
         ClientPacket::ResetSimulation {} => {
             println!("Client reset simulation");
-            state.simulation.stop();
-            let mut eng = state.engine.lock().await;
+            instance.controller.stop();
+            let mut eng = instance.engine.lock().await;
             eng.current_time = 0.0;
             eng.vehicles_by_lane.clear();
             eng.link_states.clear();
 
-            // Reset each vehicle to its initial state.
             for vehicle in &mut eng.vehicles {
                 vehicle.state = VehicleState::WaitingToDepart;
                 vehicle.position_on_lane = 0.0;
@@ -193,16 +219,14 @@ async fn handle_client_packet(
                 vehicle.impatience = 0.0;
             }
 
-            // Re-initialize paths with current map.
             let map_snapshot = eng.config.map.clone();
-            for vehicle in &mut eng.vehicles {
-                vehicle.update_path(&map_snapshot);
+            for vehicle in eng.vehicles.iter_mut() {
+                let _ = vehicle.update_path(&map_snapshot);
             }
         }
 
-        // Map editing packets — require simulation to be stopped.
         ClientPacket::AddNode { x, y, kind } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
@@ -210,24 +234,24 @@ async fn handle_client_packet(
                 Ok(k) => k,
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             editor::add_node(&mut eng.config.map, x, y, kind);
             let (nodes, edges) = serialize_map(&eng.config.map);
             drop(eng);
-            broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+            broadcast_map_edit_success(&instance.broadcast, nodes, edges);
         }
 
         ClientPacket::DeleteNode { id } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             match editor::delete_node(&mut eng.config.map, id) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
-                    broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
                 }
                 Err(e) => {
                     drop(eng);
@@ -237,16 +261,16 @@ async fn handle_client_packet(
         }
 
         ClientPacket::MoveNode { id, x, y } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             match editor::move_node(&mut eng.config.map, id, x, y) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
-                    broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
                 }
                 Err(e) => {
                     drop(eng);
@@ -256,7 +280,7 @@ async fn handle_client_packet(
         }
 
         ClientPacket::UpdateNode { id, kind } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
@@ -264,12 +288,12 @@ async fn handle_client_packet(
                 Ok(k) => k,
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             match editor::update_node(&mut eng.config.map, id, kind) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
-                    broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
                 }
                 Err(e) => {
                     drop(eng);
@@ -279,16 +303,16 @@ async fn handle_client_packet(
         }
 
         ClientPacket::AddRoad { from_id, to_id, lane_count, speed_limit } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             match editor::add_road(&mut eng.config.map, from_id, to_id, lane_count, speed_limit) {
                 Ok(_road_id) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
-                    broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
                 }
                 Err(e) => {
                     drop(eng);
@@ -298,16 +322,16 @@ async fn handle_client_packet(
         }
 
         ClientPacket::DeleteRoad { id } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             match editor::delete_road(&mut eng.config.map, id) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
-                    broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
                 }
                 Err(e) => {
                     drop(eng);
@@ -317,16 +341,16 @@ async fn handle_client_packet(
         }
 
         ClientPacket::UpdateRoad { id, speed_limit } => {
-            if state.simulation.is_running() {
+            if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = state.engine.lock().await;
+            let mut eng = instance.engine.lock().await;
             match editor::update_road(&mut eng.config.map, id, speed_limit) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
-                    broadcast_map_edit_success(&state.websocket_service, nodes, edges);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
                 }
                 Err(e) => {
                     drop(eng);
@@ -350,7 +374,7 @@ async fn send_edit_error(socket: &mut WebSocket, error: &str) {
 }
 
 fn broadcast_map_edit_success(
-    ws_service: &WebSocketService,
+    broadcast: &broadcast::Sender<ServerPacket>,
     nodes: Vec<Value>,
     edges: Vec<Value>,
 ) {
@@ -360,7 +384,7 @@ fn broadcast_map_edit_success(
         nodes,
         edges,
     };
-    ws_service.send(packet);
+    let _ = broadcast.send(packet);
 }
 
 pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
@@ -377,7 +401,8 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
                 "y": n.center_coordinates.y,
-                "has_traffic_light": has_traffic_light
+                "has_traffic_light": has_traffic_light,
+                "radius": n.radius
             })
         })
         .collect();
@@ -396,6 +421,7 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 "from": map.graph[a].id,
                 "to": map.graph[b].id,
                 "lane_count": r.lanes.len(),
+                "lane_width": r.lane_width,
                 "length": r.length,
                 "speed_limit": r.speed_limit,
             })
@@ -407,10 +433,12 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
+    let heading = vehicle.get_heading(sim_map);
     json!({
         "id": vehicle.id,
         "x": coords.x,
         "y": coords.y,
+        "heading": heading,
         "kind": match vehicle.spec.kind {
                 VehicleKind::Car => "Car",
                 VehicleKind::Bus => "Bus",
