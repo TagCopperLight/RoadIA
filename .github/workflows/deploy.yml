@@ -39,7 +39,8 @@ jobs:
             cd ~/roadia
             printf 'ALLOWED_ORIGINS=%s\nNEXT_PUBLIC_API_URL=%s\n' "$ALLOWED_ORIGINS" "$NEXT_PUBLIC_API_URL" > .env
             set -a && . .env && set +a
-            # Build and start natively on the VPS
-            sudo -E docker compose up -d --build
+            # Build first so failures are caught before starting services
+            sudo -E docker compose build
+            sudo -E docker compose up -d
             # Cleanup old unused containers and images
             sudo docker system prune -f
