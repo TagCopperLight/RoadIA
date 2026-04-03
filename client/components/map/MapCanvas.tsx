@@ -6,12 +6,6 @@ import { Intersection } from './elements/Intersection';
 import { Vehicle } from './elements/Vehicle';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
 
-function lerpAngle(a: number, b: number, t: number): number {
-	let diff = b - a;
-	while (diff > Math.PI) diff -= 2 * Math.PI;
-	while (diff < -Math.PI) diff += 2 * Math.PI;
-	return a + diff * t;
-}
 
 export function MapCanvas({
 	data,
@@ -38,7 +32,7 @@ export function MapCanvas({
 
 	// Lerp display vehicles toward targets on every Pixi frame
 	useEffect(() => {
-		const FACTOR = 0.2; // 0.1 = slow/smooth, 0.5 = fast/snappy
+		const FACTOR = 0.2;
 		const tick = () => {
 			const targets = targetRef.current;
 			const display = displayRef.current;
@@ -52,7 +46,7 @@ export function MapCanvas({
 				} else {
 					const nx = curr.x + (target.x - curr.x) * FACTOR;
 					const ny = curr.y + (target.y - curr.y) * FACTOR;
-					const nh = lerpAngle(curr.heading ?? 0, target.heading ?? 0, FACTOR);
+					const nh = target.heading ?? 0;
 					display.set(id, { ...target, x: nx, y: ny, heading: nh });
 					changed = true;
 				}
