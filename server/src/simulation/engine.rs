@@ -63,6 +63,9 @@ impl Simulation for SimulationEngine {
         for v in &mut self.vehicles {
             v.update_path(&self.config.map);
         }
+        let no_path = self.vehicles.iter().filter(|v| v.path.is_empty()).count();
+        let total = self.vehicles.len();
+        println!("{}/{} vehicles found a path", total - no_path, total);
         while self.current_time < self.config.end_time {
             self.step();
             self.current_time += self.config.time_step;

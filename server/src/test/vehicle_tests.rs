@@ -109,7 +109,7 @@ fn fastest_path_direct_route() {
     let map = make_minimal_straight_map();
     let hab = map.find_node(0).unwrap();
     let work = map.find_node(2).unwrap();
-    let path = fastest_path(&map, hab, work);
+    let path = fastest_path(&map, hab, work).expect("path should exist");
     assert_eq!(path.len(), 3);
     assert_eq!(path[0], hab);
     assert_eq!(path[2], work);
@@ -133,7 +133,7 @@ fn fastest_path_prefers_high_speed_road() {
     let dest = map.find_node(dest_id).unwrap();
     let waypoint = map.find_node(waypoint_id).unwrap();
 
-    let path = fastest_path(&map, origin, dest);
+    let path = fastest_path(&map, origin, dest).expect("path should exist");
     assert!(
         path.contains(&waypoint),
         "expected route via waypoint (faster), got path of len {}",
@@ -142,15 +142,14 @@ fn fastest_path_prefers_high_speed_road() {
 }
 
 #[test]
-#[should_panic]
-fn fastest_path_no_path_panics() {
+fn fastest_path_returns_none_when_no_path() {
     let mut map = Map::new();
     let a_id = map.add_intersection(IntersectionKind::Habitation, 0.0, 0.0);
     let b_id = map.add_intersection(IntersectionKind::Workplace, 100.0, 0.0);
     // No road between them
     let a = map.find_node(a_id).unwrap();
     let b = map.find_node(b_id).unwrap();
-    fastest_path(&map, a, b); // should panic
+    assert!(fastest_path(&map, a, b).is_none());
 }
 
 // ---- Vehicle::update_path ----

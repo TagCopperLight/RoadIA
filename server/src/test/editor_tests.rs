@@ -96,14 +96,14 @@ fn move_node_recalculates_connected_road_length() {
     // Initial length: dist((0,0),(300,400)) = 500.0
     add_road(&mut map, a, b, 1, 30.0).unwrap();
 
-    // Move b to (0, 100) → center-to-center = 100, boundary-to-boundary = 80 (two radii of 10)
+    // Move b to (0, 100) → center-to-center = 100, boundary-to-boundary = 98 (two radii of 1)
     move_node(&mut map, b, 0.0, 100.0).unwrap();
 
     let ni_a = map.find_node(a).unwrap();
     let ni_b = map.find_node(b).unwrap();
     let edge = map.graph.find_edge(ni_a, ni_b).unwrap();
     let new_length = map.graph[edge].length;
-    assert!((new_length - 80.0).abs() < 0.5, "expected ~80, got {new_length}");
+    assert!((new_length - 98.0).abs() < 0.5, "expected ~98, got {new_length}");
 }
 
 #[test]
@@ -134,11 +134,11 @@ fn update_node_missing_returns_err() {
 #[test]
 fn add_road_calculates_euclidean_length() {
     let (mut map, a, b) = make_two_node_map();
-    // a=(0,0), b=(300,400) → center-to-center=500, boundary-to-boundary=480 (two radii of 10)
+    // a=(0,0), b=(300,400) → center-to-center=500, boundary-to-boundary=498 (two radii of 1)
     let road_id = add_road(&mut map, a, b, 1, 30.0).unwrap();
     let edge = map.find_edge(road_id).unwrap();
     let length = map.graph[edge].length;
-    assert!((length - 480.0).abs() < 0.5, "expected 480, got {length}");
+    assert!((length - 498.0).abs() < 0.5, "expected 498, got {length}");
 }
 
 #[test]

@@ -15,7 +15,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_traffic_light_test_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -63,7 +63,7 @@ impl SimulationInstance {
         let config = SimulationConfig {
             start_time: 0.0,
             end_time: f32::MAX,
-            time_step: 0.05,
+            time_step: 0.25,
             minimum_gap: 2.0,
             map,
         };
@@ -121,7 +121,7 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    let remaining = Duration::from_millis(10).saturating_sub(elapsed);
+                    let remaining = Duration::from_millis(50).saturating_sub(elapsed);
                     drop(instance);
                     if !remaining.is_zero() {
                         sleep(remaining).await;
@@ -135,9 +135,20 @@ impl SimulationInstance {
 
     pub fn new_default() -> Arc<Self> {
         // let map = create_connected_map(200, 1500.0, 1500.0);
-        let map = create_traffic_light_test_map();
-        let vehicles = create_random_vehicles(&map, 50);
-        Self::new(map, vehicles)
+        // let map = create_traffic_light_test_map();
+
+        let map_path = "data/planet_-3.488,48.716_-3.416,48.749.osm.pbf";
+        match create_osm_map(map_path) {
+            Ok(map) => {
+                println!("Successfully loaded Lannion map from OSM!");
+                let vehicles = create_random_vehicles(&map, 50);
+                Self::new(map, vehicles)
+            }
+            Err(e) => {
+                println!("Failed to load Lannion map: {:?}", e);
+                panic!("Failed to load Lannion map: {:?}", e);
+            }
+        }
     }
 }
 
