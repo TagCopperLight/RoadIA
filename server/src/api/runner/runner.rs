@@ -165,7 +165,7 @@ impl SimulationInstance {
         match create_osm_map(map_path) {
             Ok(map) => {
                 println!("Successfully loaded Lannion map from OSM!");
-                let vehicles = create_random_vehicles(&map, 50);
+                let vehicles = create_random_vehicles(&map, 500);
                 Self::new(map, vehicles)
             }
             Err(e) => {
