@@ -92,7 +92,7 @@ pub struct Vehicle {
     pub arrived_at: Option<f32>,
 }
 
-pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
+pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
     let result = petgraph::algo::astar(
         &map.graph,
         source,
@@ -100,7 +100,10 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Opt
         |e| e.weight().length / e.weight().speed_limit,
         |n| map.intersections_euclidean_distance(n, destination) / MAX_SPEED,
     );
-    result.map(|(_cost, path)| path)
+    match result {
+        Some((_cost, path)) => path,
+        None => panic!("No path found between {:?} and {:?}", source, destination),
+    }
 }
 
 impl Vehicle {
@@ -125,14 +128,9 @@ impl Vehicle {
         }
     }
 
-    pub fn update_path(&mut self, map: &Map) -> bool {
-        if let Some(path) = fastest_path(map, self.trip.origin, self.trip.destination) {
-            self.path = path;
-            self.path_index = 0;
-            true
-        } else {
-            false
-        }
+    pub fn update_path(&mut self, map: &Map) {
+        self.path = fastest_path(map, self.trip.origin, self.trip.destination);
+        self.path_index = 0;
     }
 
     pub fn compute_acceleration(
