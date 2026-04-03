@@ -8,12 +8,13 @@ use crate::map::intersection::{ApproachData, LinkState, is_link_open};
 use crate::simulation::kinematics;
 use crate::simulation::vehicle::{DrivePlanEntry, LaneId, Vehicle, VehicleState};
 use petgraph::graph::{EdgeIndex, NodeIndex};
+use crate::scoring::Score;
 
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
     fn run(&mut self);
     fn step(&mut self);
-    fn get_score(&self) -> f32;
+    fn get_score(&self) -> Score;
 }
 
 struct PendingTransfer {
@@ -33,6 +34,7 @@ pub struct SimulationEngine {
     pub current_time: f32,
     pub vehicles_by_lane: HashMap<LaneId, Vec<usize>>, // Sorted by position_on_lane (back → front = index 0 first).
     pub link_states: HashMap<u32, LinkState>,
+    pub all_vehicles_arrived: bool,
     pub green_links: HashSet<u32>,
     pending_transfers: Vec<PendingTransfer>,
     traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
@@ -55,10 +57,12 @@ impl Simulation for SimulationEngine {
             link_states: HashMap::new(),
             green_links: HashSet::new(),
             pending_transfers: Vec::new(),
+            all_vehicles_arrived: false,
             traffic_light_states,
         }
     }
 
+    // Code possiblement mort à supprimer (la fonction run n'est jamais appelée)
     fn run(&mut self) {
         for v in &mut self.vehicles {
             v.update_path(&self.config.map);
@@ -72,7 +76,7 @@ impl Simulation for SimulationEngine {
         }
     }
   
-    fn get_score(&self) -> f32 {
+    fn get_score(&self) -> Score {
         scoring::compute_score(&self.vehicles, &self.config)
     }
 
@@ -402,6 +406,7 @@ impl SimulationEngine {
             let v = &mut self.vehicles[vidx];
             v.velocity = (v.velocity + accel * dt).max(0.0);
             v.position_on_lane += v.velocity * dt;
+            v.distance_traveled += v.velocity * dt;
 
             if v.velocity < 0.1 && !v.drive_plan.is_empty() {
                 v.waiting_time += dt;
@@ -564,6 +569,7 @@ impl SimulationEngine {
         if pi + 1 >= self.vehicles[vidx].path.len() {
             self.vehicles[vidx].state = VehicleState::Arrived;
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+            self.check_if_all_vehicles_arrived();
             return;
         }
 
@@ -602,6 +608,7 @@ impl SimulationEngine {
             self.vehicles[vidx].position_on_lane = road_len;
             self.vehicles[vidx].state = VehicleState::Arrived;
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+            self.check_if_all_vehicles_arrived();
             return;
         }
 
@@ -623,6 +630,11 @@ impl SimulationEngine {
         self.vehicles[vidx].current_lane = Some(to_lane);
         self.vehicles[vidx].drive_plan.remove(0);
         self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(to_lane) });
+    }
+
+    fn check_if_all_vehicles_arrived(&mut self) {
+        let nb_arrived = self.vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
+        self.all_vehicles_arrived = nb_arrived == self.vehicles.len();
     }
 }
 

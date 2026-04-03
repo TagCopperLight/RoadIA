@@ -35,3 +35,12 @@ export interface TrafficLightData {
     id: number;            // intersection_id
     green_road_ids: number[];  // road IDs with a green approach into this intersection
 }
+
+export interface ScoreData {
+	score: number;
+	total_trip_time: number;
+	total_emitted_co2: number;
+	network_length: number;
+	total_distance_traveled: number;
+	success_rate: number;
+}
