@@ -36,7 +36,7 @@ export default function Home() {
 
   return (
     <div>
-      <div className="fixed inset-0 bg-white">
+      <div className="fixed inset-0 bg-white" style={{ position: 'fixed' }}>
         <Image src="/home/map.png" alt="Map Background" fill />
       </div>
       <div className="flex flex-col h-screen w-screen justify-center items-center z-10">

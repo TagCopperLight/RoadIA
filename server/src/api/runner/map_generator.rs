@@ -288,3 +288,41 @@ pub fn create_multilane_test_map() -> Map {
     intersection::build_intersections(&mut map);
     map
 }
+
+pub fn create_three_branch_map() -> Map {
+    let mut map = Map::new();
+
+    // Center intersection
+    let center = map.add_intersection(IntersectionKind::Intersection, 500.0, 500.0);
+
+    // Parameters: habitation distance from center, workplace further out such that
+    // distance(habitation, workplace) < distance(habitation, center)
+    let hab_dist = 300.0_f32; // distance from center to habitation
+    let work_dist = 450.0_f32; // distance from center to workplace (further out)
+
+    for i in 0..3 {
+        let angle = (i as f32) * (2.0 * std::f32::consts::PI / 3.0);
+        let hx = 500.0 + hab_dist * angle.cos();
+        let hy = 500.0 + hab_dist * angle.sin();
+        let wx = 500.0 + work_dist * angle.cos();
+        let wy = 500.0 + work_dist * angle.sin();
+
+        let hab = map.add_intersection(IntersectionKind::Habitation, hx, hy);
+        let work = map.add_intersection(IntersectionKind::Workplace, wx, wy);
+
+        // Add two-way roads: center <-> habitation, habitation <-> workplace
+        // Lengths use euclidean distances so that hab<->work is shorter than hab<->center
+        let center_idx = map.find_node(center).unwrap();
+        let hab_idx = map.find_node(hab).unwrap();
+        let work_idx = map.find_node(work).unwrap();
+
+        let d_center_hab = map.intersections_euclidean_distance(center_idx, hab_idx);
+        let d_hab_work = map.intersections_euclidean_distance(hab_idx, work_idx);
+
+        map.add_two_way_road(center, hab, 1, 40.0, d_center_hab);
+        map.add_two_way_road(hab, work, 1, 40.0, d_hab_work);
+    }
+
+    intersection::build_intersections(&mut map);
+    map
+}

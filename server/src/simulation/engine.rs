@@ -5,9 +5,11 @@ use crate::simulation::config::{
     SimulationConfig, IMPATIENCE_RATE, LOOK_AHEAD, MIN_CREEP_SPEED, STOP_DWELL_TIME,
 };
 use crate::map::intersection::{ApproachData, LinkState, is_link_open};
+use crate::map::road::LinkType;
 use crate::simulation::kinematics;
 use crate::simulation::vehicle::{DrivePlanEntry, LaneId, Vehicle, VehicleState};
 use petgraph::graph::{EdgeIndex, NodeIndex};
+use petgraph::visit::EdgeRef;
 
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
@@ -93,9 +95,13 @@ impl Simulation for SimulationEngine {
                 v.arrived_at = Some(t);
             }
         }
+
+        let _ = self.solve_interblocking();
+
         // Debug: log overlapping vehicles per lane at end of each step
         self.log_overlaps();
     }
+
 }
 
 // Departures
@@ -411,22 +417,26 @@ impl SimulationEngine {
     fn execute_vehicle(&mut self, vidx: usize, lane_id: LaneId) {
         let dt = self.config.time_step;
 
-        let (safe_speed, stop_dist) = self.determine_safe_speed(vidx);
+        let (safe_speed, _stop_dist) = self.determine_safe_speed(vidx);
 
-        let (mut ahead_dist, mut ahead_vel) = self.vehicle_ahead_info(vidx, lane_id);
+        let (ahead_dist, ahead_vel) = self.vehicle_ahead_info(vidx, lane_id);
         let speed_limit = self.lane_speed_limit(vidx);
         let desired;
 
-        // Use IDM for stopping, setting the speed to 0 isn't working
-        if let Some(dist) = stop_dist {
-            desired = speed_limit;
-            if dist < ahead_dist {
-                ahead_dist = dist;
-                ahead_vel = 0.0;
-            }
-        } else {
-            desired = speed_limit.min(safe_speed);
-        }
+        // Use IDM for stopping, but keep automatic braking disabled for now.
+        // The original braking logic that considered `stop_dist` is commented
+        // below for debugging and to avoid vehicles stopping slightly before
+        // junctions.
+        // if let Some(dist) = stop_dist {
+        //     desired = speed_limit;
+        //     if dist < ahead_dist {
+        //         ahead_dist = dist;
+        //         ahead_vel = 0.0;
+        //     }
+        // } else {
+        //     desired = speed_limit.min(safe_speed);
+        // }
+        desired = speed_limit.min(safe_speed);
 
         let accel = self.vehicles[vidx].compute_acceleration(
             desired,
@@ -856,4 +866,289 @@ pub(crate) fn lane_insert_sorted(
         vehicles[i].position_on_lane < vehicles[vehicle_idx].position_on_lane
     });
     list.insert(insert_at, vehicle_idx);
+}
+
+impl SimulationEngine {
+    /// Detect whether there is a priority-cycle at the given junction.
+    ///
+    /// We consider all `Link`s that target `junction_id` and that have at least
+    /// one approaching vehicle registered in `self.link_states`. For each such
+    /// link `L` we add directed edges `L -> F` for every foe `F` of `L` that
+    /// (a) has an approaching vehicle and (b) actually imposes a yield on `L`
+    /// according to the same rules used by `is_link_open` (including ignoring
+    /// foe traffic-lights that are not currently green). If the resulting
+    /// directed graph contains a cycle then we report `true`.
+    pub fn junction_has_priority_cycle(&self, junction_id: u32) -> bool {
+        use petgraph::Direction;
+
+        let junction_node = match self.config.map.node_index_map.get(&junction_id) {
+            Some(&ni) => ni,
+            None => return false,
+        };
+
+        // Collect all links incoming to this junction and mark which have approaching vehicles.
+        let mut links_map: HashMap<u32, crate::map::road::Link> = HashMap::new();
+        let mut active_links: HashSet<u32> = HashSet::new();
+
+        for edge in self.config.map.graph.edges_directed(junction_node, Direction::Incoming) {
+            for lane in &edge.weight().lanes {
+                for l in &lane.links {
+                    links_map.insert(l.id, l.clone());
+                    if self.link_states.get(&l.id).map_or(false, |s| !s.approaching.is_empty()) {
+                        active_links.insert(l.id);
+                    }
+                }
+            }
+        }
+
+        if active_links.is_empty() {
+            return false;
+        }
+
+        // Build adjacency list of "must yield to" relations among active links.
+        let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+        for &lid in &active_links {
+            if let Some(ego) = links_map.get(&lid) {
+                for foe in &ego.foe_links {
+                    // If the foe is a traffic light and is not green, it does not block.
+                    if foe.link_type == LinkType::TrafficLight && !self.green_links.contains(&foe.id) {
+                        continue;
+                    }
+
+                    // Consider only foes that are active (have approaching vehicles).
+                    if !active_links.contains(&foe.id) {
+                        continue;
+                    }
+
+                    let must_yield = match (&ego.link_type, &foe.link_type) {
+                        (LinkType::Priority, LinkType::Yield) | (LinkType::Priority, LinkType::Stop) => false,
+                        (LinkType::Yield, LinkType::Priority) | (LinkType::Stop, LinkType::Priority) => true,
+                        _ => crate::map::intersection::foe_is_to_the_right(ego, foe),
+                    };
+
+                    if must_yield {
+                        adj.entry(lid).or_default().push(foe.id);
+                    }
+                }
+            }
+        }
+
+        // Detect directed cycle in adj using DFS (white/gray/black).
+        #[derive(Copy, Clone, PartialEq, Eq)]
+        enum Color { White, Gray, Black }
+        let mut color: HashMap<u32, Color> = HashMap::new();
+        for &n in &active_links { color.insert(n, Color::White); }
+
+        fn dfs(u: u32, adj: &HashMap<u32, Vec<u32>>, color: &mut HashMap<u32, Color>) -> bool {
+            color.insert(u, Color::Gray);
+            if let Some(neis) = adj.get(&u) {
+                for &v in neis {
+                    match color.get(&v).copied().unwrap_or(Color::White) {
+                        Color::White => {
+                            if dfs(v, adj, color) { return true; }
+                        }
+                        Color::Gray => return true, // found cycle
+                        Color::Black => {}
+                    }
+                }
+            }
+            color.insert(u, Color::Black);
+            false
+        }
+
+        for &n in &active_links {
+            if color.get(&n) == Some(&Color::White) {
+                if dfs(n, &adj, &mut color) { return true; }
+            }
+        }
+
+        false
+    }
+
+    /// Scan all junctions and try to resolve priority-cycles by forcing a
+    /// vehicle into an internal lane when possible. Returns `true` if at
+    /// least one cycle was resolved.
+    pub fn solve_interblocking(&mut self) -> bool {
+        let mut resolved_any = false;
+        for node in self.config.map.graph.node_indices() {
+            let junction_id = self.config.map.graph[node].id;
+
+            // If this junction currently has a priority-cycle, increment
+            // its `interblocked_for` timer by the simulation timestep and
+            // only attempt resolution after it exceeds 1.0s. Otherwise
+            // reset the timer.
+            if self.junction_has_priority_cycle(junction_id) {
+                {
+                    let node_mut = &mut self.config.map.graph[node];
+                    node_mut.interblocked_for += self.config.time_step;
+                    if node_mut.interblocked_for <= 2.0 {
+                        continue;
+                    }
+                }
+            } else {
+                let node_mut = &mut self.config.map.graph[node];
+                node_mut.interblocked_for = 0.0;
+                continue;
+            }
+
+            // At this point the junction has been blocked for > 1s; proceed
+            // to attempt resolution. Use an immutable reference to the map
+            // for read-only access below.
+            let map = &self.config.map;
+
+            // logging suppressed: junction blocked info removed
+
+            // We'll decide per-candidate vehicle whether to attempt forcing
+            // insertion based on whether the target junction is already
+            // occupied. Build a set of junction ids that currently have
+            // vehicles in internal lanes; the per-vehicle check below will
+            // skip candidates whose junction is occupied.
+            let mut occupied_junctions: HashSet<u32> = HashSet::new();
+            for (lane, lst) in &self.vehicles_by_lane {
+                if let LaneId::Internal(jid, _) = lane {
+                    if !lst.is_empty() {
+                        occupied_junctions.insert(*jid);
+                    }
+                }
+            }
+
+            // Try to find a vehicle that can be inserted into an internal lane
+            // for this junction. Iterate only over vehicles that are on roads
+            // incoming to this junction using `vehicles_by_lane` to avoid
+            // scanning the whole fleet.
+            let mut inserted = false;
+            // collect candidate vehicle indices from incoming normal lanes
+            let mut candidates: HashSet<usize> = HashSet::new();
+            for edge_ref in map.graph.edges_directed(node, petgraph::Direction::Incoming) {
+                let eidx = edge_ref.id();
+                let lanes = &edge_ref.weight().lanes;
+                for (lid, _lane) in lanes.iter().enumerate() {
+                    let lane_id = LaneId::Normal(eidx, lid as u32);
+                    if let Some(lst) = self.vehicles_by_lane.get(&lane_id) {
+                        for &vidx in lst {
+                            candidates.insert(vidx);
+                        }
+                    }
+                }
+            }
+
+            // iterate over candidate vehicles
+            let mut cand_list: Vec<usize> = candidates.into_iter().collect();
+            cand_list.sort_unstable();
+            for vidx in cand_list {
+                // Prepare a set of eligibility checks and print them for
+                // debugging. We compute each boolean without early-continues
+                // so the developer can see which condition fails.
+                let v = &self.vehicles[vidx];
+
+                let on_road = v.state == VehicleState::OnRoad;
+                let current_lane = v.current_lane;
+                let not_internal = !matches!(current_lane, Some(LaneId::Internal(_, _)));
+
+                let from_edge_opt = match current_lane {
+                    Some(LaneId::Normal(edge, _)) => Some(edge),
+                    _ => None,
+                };
+
+                let has_entry = v.drive_plan.first().is_some();
+                let entry_opt = v.drive_plan.first().cloned();
+                // If the intended junction already contains vehicles, skip
+                // attempting to force insertion for this vehicle.
+                if let Some(ref e) = entry_opt {
+                    if occupied_junctions.contains(&e.junction_id) {
+                        continue;
+                    }
+                }
+                let entry_junction_match = entry_opt.as_ref().map_or(false, |e| e.junction_id == junction_id);
+
+                let lane_match = match (&entry_opt, from_edge_opt) {
+                    (Some(e), Some(fe)) => matches!(e.lane_id, LaneId::Normal(ei, _) if ei == fe),
+                    _ => false,
+                };
+
+                let link_opt = entry_opt.as_ref().and_then(|e| self.find_link(e.link_id));
+
+                let ego_opt = entry_opt.as_ref().map(|e| ApproachData {
+                    arrival_time: e.arrival_time,
+                    leave_time: e.leave_time,
+                    arrival_speed: e.arrival_speed,
+                    leave_speed: e.leave_speed,
+                    will_pass: true,
+                });
+
+                let link_open = match (&link_opt, &ego_opt) {
+                    (Some(link), Some(ego)) => is_link_open(
+                        &link,
+                        &self.vehicles[vidx],
+                        ego,
+                        &self.link_states,
+                        &self.vehicles_by_lane,
+                        &self.vehicles,
+                        junction_id,
+                        LOOK_AHEAD,
+                        STOP_DWELL_TIME,
+                        &self.green_links,
+                    ),
+                    _ => false,
+                };
+
+                let road_len_opt = from_edge_opt.map(|fe| map.graph[fe].length);
+                // Treat vehicles within 0.1m of the lane end as "at end" to
+                // tolerate small numerical differences when approaching the
+                // junction.
+                let at_end = match road_len_opt {
+                    Some(len) => self.vehicles[vidx].position_on_lane >= (len - 0.1),
+                    None => false,
+                };
+
+                let entering_pos_opt = road_len_opt.map(|len| self.vehicles[vidx].position_on_lane - len);
+                let to_lane_opt = entry_opt.as_ref().map(|e| LaneId::Internal(junction_id, e.via_internal_lane_id));
+                let can_enter = match (to_lane_opt, entering_pos_opt) {
+                    (Some(tl), Some(ent)) => self.can_enter_internal_lane(tl, ent, vidx),
+                    _ => false,
+                };
+
+                if !on_road || !not_internal || !has_entry || !entry_junction_match || !lane_match || !link_open || !at_end || !can_enter {
+                    continue;
+                }
+
+                // Safe to unwrap since we checked the options above.
+                let entry = entry_opt.unwrap();
+                let to_lane = to_lane_opt.unwrap();
+                let entering_pos = entering_pos_opt.unwrap();
+
+                // Force insertion: mimic `enter_junction_or_arrive`'s successful path.
+                self.vehicles[vidx].position_on_lane = entering_pos;
+                self.vehicles[vidx].current_lane = Some(to_lane);
+                // remove the drive plan entry for this junction
+                if !self.vehicles[vidx].drive_plan.is_empty() {
+                    self.vehicles[vidx].drive_plan.remove(0);
+                }
+
+                lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, vidx);
+
+                // Register a pending transfer to remove the vehicle from its
+                // previous lane and finalize the transfer in `flush_transfers`.
+                self.pending_transfers.push(PendingTransfer {
+                    vehicle_idx: vidx,
+                    from_lane: entry.lane_id,
+                    to_lane: Some(to_lane),
+                });
+
+                resolved_any = true;
+                inserted = true;
+                break;
+            }
+
+            if inserted {
+                // reset the timer for this junction since we resolved it
+                let node_mut = &mut self.config.map.graph[node];
+                node_mut.interblocked_for = 0.0;
+                // After resolving one insertion for this junction, move to next junction.
+                continue;
+            }
+        }
+
+        resolved_any
+    }
 }
