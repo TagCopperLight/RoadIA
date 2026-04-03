@@ -51,7 +51,7 @@ export function validateNodeName(name: string | null | undefined): void {
  * Validates node kind
  */
 export function validateNodeKind(kind: string): void {
-  const validKinds = ['Intersection', 'Habitation', 'Workplace', 'RoundAbout', 'TrafficLight'];
+  const validKinds = ['Intersection', 'Habitation', 'Workplace'];
   if (!validKinds.includes(kind)) {
     throw new ValidationError(`Node kind must be one of: ${validKinds.join(', ')}`);
   }

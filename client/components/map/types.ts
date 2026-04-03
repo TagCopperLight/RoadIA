@@ -1,6 +1,6 @@
 export interface MapNode {
 	id: number;
-	kind: "Intersection" | "Habitation" | "Workplace" | "RoundAbout" | "TrafficLight";
+	kind: "Intersection" | "Habitation" | "Workplace";
 	name: string;
 	x: number;
 	y: number;

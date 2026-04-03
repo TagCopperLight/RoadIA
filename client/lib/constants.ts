@@ -14,8 +14,6 @@ export const MAP_CONFIG = {
     Intersection: 0xaaaaaa,     // Gray
     Habitation: 0x3366ff,       // Blue
     Workplace: 0xff3333,        // Red
-    RoundAbout: 0x00cc00,       // Green
-    TrafficLight: 0xffff00,     // Yellow
   },
   
   // Road hit detection

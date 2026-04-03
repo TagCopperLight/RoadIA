@@ -114,12 +114,12 @@ export default function PropertiesPanel({
 	 * Formulaire pour éditer un nœud sélectionné
 	 * 
 	 * @state nodeName - Nom du nœud (ex: "node_1", "Home", "Office")
-	 * @state nodeKind - Type du nœud (Intersection, Habitation, Workplace, RoundAbout, TrafficLight)
+	 * @state nodeKind - Type du nœud (Intersection, Habitation, Workplace)
 	 * @state nameError - Message d'erreur de validation (si nom invalide)
 	 * @state hasNodeChanges - Y a-t-il des modifications non sauvegardées?
 	 */
 	const [nodeName, setNodeName] = useState('');
-	const [nodeKind, setNodeKind] = useState<'Intersection' | 'Habitation' | 'Workplace' | 'RoundAbout' | 'TrafficLight'>('Intersection');
+	const [nodeKind, setNodeKind] = useState<'Intersection' | 'Habitation' | 'Workplace'>('Intersection');
 	const [nameError, setNameError] = useState<string | null>(null);
 	const [hasNodeChanges, setHasNodeChanges] = useState(false);
 
@@ -382,8 +382,6 @@ export default function PropertiesPanel({
 							<option value="Intersection">Intersection</option>
 							<option value="Habitation">Habitation</option>
 							<option value="Workplace">Workplace</option>
-							<option value="RoundAbout">RoundAbout</option>
-							<option value="TrafficLight">TrafficLight</option>
 						</select>
 					</div>
 
