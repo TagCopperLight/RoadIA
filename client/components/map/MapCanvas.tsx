@@ -81,15 +81,9 @@ export function MapCanvas({
 		return map;
 	}, [data.edges]);
 
-	return (
-		<pixiCustomViewport
-			events={app.renderer.events}
-			drag
-			pinch
-			wheel={{ trackpadPinch: true, percent: 2 }}
-			passiveWheel={false}
-		>
-			<pixiContainer>
+	const staticMapElements = useMemo(() => {
+		return (
+			<>
 				{/* Pass 1: Roads */}
 				{Array.from(edgePairs.values()).map(({ canonical, reverse }) => {
 					const startNode = nodeMap.get(canonical.from);
@@ -129,6 +123,20 @@ export function MapCanvas({
 						/>
 					);
 				})}
+			</>
+		);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights]);
+
+	return (
+		<pixiCustomViewport
+			events={app.renderer.events}
+			drag
+			pinch
+			wheel={{ trackpadPinch: true, percent: 2 }}
+			passiveWheel={false}
+		>
+			<pixiContainer>
+				{staticMapElements}
 
 				{/* Pass 4: Vehicles (interpolated) */}
 				{displayVehicles.map((vehicle) => (
