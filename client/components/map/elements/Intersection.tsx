@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { MapNode } from '../types';
 
-export function Intersection({ node }: { node: MapNode }) {
+export const Intersection = memo(function Intersection({ node }: { node: MapNode }) {
 	return (
 		<pixiGraphics draw={(g) => {
 			g.clear();
@@ -18,4 +19,4 @@ export function Intersection({ node }: { node: MapNode }) {
 			g.stroke();
 		}} />
 	);
-}
+});

@@ -1,6 +1,7 @@
+import { memo } from 'react';
 import { MapNode, MapEdge } from '../types';
 
-export function TrafficLightIndicator({
+export const TrafficLightIndicator = memo(function TrafficLightIndicator({
 	start,
 	end,
 	edge,
@@ -40,4 +41,4 @@ export function TrafficLightIndicator({
 			}}
 		/>
 	);
-}
+});
