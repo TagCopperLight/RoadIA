@@ -161,7 +161,7 @@ impl SimulationInstance {
         // let map = create_connected_map(200, 1500.0, 1500.0);
         // let map = create_traffic_light_test_map();
 
-        let map_path = "data/planet_-3.488,48.716_-3.416,48.749.osm.pbf";
+        let map_path = "data/lannion.osm.pbf";
         match create_osm_map(map_path) {
             Ok(map) => {
                 println!("Successfully loaded Lannion map from OSM!");
