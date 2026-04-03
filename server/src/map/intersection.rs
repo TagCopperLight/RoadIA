@@ -145,7 +145,7 @@ fn build_intersection(map: &mut Map, junction: NodeIndex) {
                     let to_lane_id = map.graph[out_edge].lanes[out_lane_idx].id;
                     let exit = lane_boundary_point(base_exit, out_perp, out_lane_idx, out_lane_width);
 
-                    let length = dist(entry, exit).max(0.1);
+                    let length = dist(entry, exit).max(0.01);
                     let speed_limit = in_speed.min(out_speed);
                     let link_id = map.next_link_id;
                     map.next_link_id += 1;
