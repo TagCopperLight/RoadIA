@@ -31,7 +31,7 @@ interface AppProps {
 	mapData: MapData | null;
 	vehicles: VehicleData[];
 	sendPacket: (packetId: string, data: object) => void;
-	onUpdateEdge?: (id: number, lane_count: number, speed_limit: number, intersection_type?: string) => void;
+	onUpdateEdge?: (id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean) => void;
 	onDeleteEdge?: (id: number) => void;
 }
 

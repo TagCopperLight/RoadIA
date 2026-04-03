@@ -28,7 +28,7 @@ pub enum ClientPacket {
     UpdateNode { id: u32, kind: String, name: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
-    UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, intersection_type: Option<String> },
+    UpdateRoad { id: u32, lane_count: u8, speed_limit: f32, is_blocked: bool, can_overtake: bool },
     CreateVehicle { origin_id: u32 },
 }
 
@@ -401,13 +401,13 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::UpdateRoad { id, lane_count, speed_limit, .. } => {
+        ClientPacket::UpdateRoad { id, lane_count, speed_limit, is_blocked, can_overtake } => {
             if state.simulation.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
             let mut eng = state.engine.lock().await;
-            match editor::update_road(&mut eng.config.map, id, lane_count, speed_limit, false, false) {
+            match editor::update_road(&mut eng.config.map, id, lane_count, speed_limit, is_blocked, can_overtake) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);

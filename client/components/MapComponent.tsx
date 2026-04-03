@@ -92,11 +92,15 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 	 * 
 	 * @example
 	 * sendPacket('addNode', { x: 100, y: 200, kind: 'Intersection', name: 'node_1' })
-	 * sendPacket('updateRoad', { id: 5, lane_count: 3, speed_limit: 50 })
+	 * sendPacket('updateRoad', { id: 5, laneCount: 3, speedLimit: 50, isBlocked: false, canOvertake: true })
 	 */
 	const sendPacket = useCallback((packetId: string, data: object) => {
 		wsClient.send(packetId, data);
 	}, []);
+
+	const sendUpdateRoad = useCallback((id: number, laneCount: number, speedLimit: number, isBlocked: boolean, canOvertake: boolean) => {
+		sendPacket('updateRoad', { id, laneCount, speedLimit, isBlocked, canOvertake });
+	}, [sendPacket]);
 
 	/**
 	 * Au montage: établit la connexion WebSocket
@@ -271,9 +275,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 					vehicles={vehicles}
 					sendPacket={sendPacket}
 					// Quand user modifie une route via la properties panel
-					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, intersection_type?: string) =>
-						sendPacket('updateRoad', { id, lane_count, speed_limit, intersection_type })
-					}
+					onUpdateEdge={sendUpdateRoad}
 					// Quand user supprime une route via la properties panel
 					onDeleteEdge={(id: number) => {
 						sendPacket('deleteRoad', { id });
@@ -299,9 +301,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 						setSelectedNodeId(null);
 					}}
 					// Modifie la route
-					onUpdateEdge={(id: number, lane_count: number, speed_limit: number, intersection_type?: string) =>
-						sendPacket('updateRoad', { id, lane_count, speed_limit, intersection_type })
-					}
+					onUpdateEdge={sendUpdateRoad}
 					// Supprime la route et déselectionne
 					onDeleteEdge={(id: number) => {
 						sendPacket('deleteRoad', { id });

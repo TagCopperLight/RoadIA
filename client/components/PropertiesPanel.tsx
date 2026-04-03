@@ -20,7 +20,7 @@ interface PropertiesPanelProps {
 	selectedEdge: MapEdge | null;
 	onUpdateNode: (id: number, kind: string, name: string) => void;
 	onDeleteNode: (id: number) => void;
-	onUpdateEdge: (id: number, lane_count: number, speed_limit: number, intersection_type?: string) => void;
+	onUpdateEdge: (id: number, lane_count: number, speed_limit: number, is_blocked: boolean, can_overtake: boolean) => void;
 	onDeleteEdge: (id: number) => void;
 }
 
@@ -81,7 +81,7 @@ interface PropertiesPanelProps {
  * ```
  * 
  * **Flux de modification d'une route:**
- * Similaire au nœud, mais avec lane_count, speed_limit, intersection_type
+ * Similaire au nœud, mais avec lane_count, speed_limit, is_blocked, can_overtake
  * 
  * @example
  * // Utilisation dans MapComponent
@@ -129,12 +129,14 @@ export default function PropertiesPanel({
 	 * 
 	 * @state laneCount - Nombre de voies (1-6)
 	 * @state speedLimit - Limite de vitesse en m/s (1-42)
-	 * @state intersectionType - Type d'intersection aux extrémités (Priority, Yield, Stop)
+	 * @state isBlocked - La route est-elle bloquée?
+	 * @state canOvertake - Peut-on dépasser sur cette route?
 	 * @state hasEdgeChanges - Y a-t-il des modifications non sauvegardées?
 	 */
 	const [laneCount, setLaneCount] = useState(1);
 	const [speedLimit, setSpeedLimit] = useState(40);
-	const [intersectionType, setIntersectionType] = useState<'Priority' | 'Yield' | 'Stop'>('Priority');
+	const [isBlocked, setIsBlocked] = useState(false);
+	const [canOvertake, setCanOvertake] = useState(true);
 	const [hasEdgeChanges, setHasEdgeChanges] = useState(false);
 
 	/**
@@ -177,7 +179,8 @@ export default function PropertiesPanel({
 		if (selectedEdge) {
 			setLaneCount(selectedEdge.lane_count);
 			setSpeedLimit(selectedEdge.speed_limit ?? 40);
-			setIntersectionType(selectedEdge.intersection_type ?? 'Priority');
+			setIsBlocked(selectedEdge.is_blocked);
+			setCanOvertake(selectedEdge.can_overtake);
 			setHasEdgeChanges(false);
 		}
 	}, [selectedEdge]);
@@ -267,12 +270,12 @@ export default function PropertiesPanel({
 	 * 
 	 * Flux:
 	 * 1. Vérifie isSimulating = false
-	 * 2. Appelle onUpdateEdge(id, laneCount, speedLimit, intersectionType)
+	 * 2. Appelle onUpdateEdge(id, laneCount, speedLimit, isBlocked, canOvertake)
 	 * 3. Cache les boutons Apply/Cancel
 	 * 
 	 * @example
 	 * onClick={() => handleEdgeCommit()}
-	 * // → onUpdateEdge(selectedEdge.id, 3, 50, 'Priority')
+	 * // → onUpdateEdge(selectedEdge.id, 3, 50, false, true)
 	 * // → WebSocket au serveur
 	 */
 	const handleEdgeCommit = useCallback(() => {
@@ -281,10 +284,10 @@ export default function PropertiesPanel({
 				addToast('Arrêtez la simulation pour éditer la carte', 'warning');
 				return;
 			}
-			onUpdateEdge(selectedEdge.id, laneCount, speedLimit, intersectionType);
+			onUpdateEdge(selectedEdge.id, laneCount, speedLimit, isBlocked, canOvertake);
 			setHasEdgeChanges(false);
 		}
-	}, [selectedEdge, laneCount, speedLimit, intersectionType, onUpdateEdge, isSimulating, addToast]);
+	}, [selectedEdge, laneCount, speedLimit, isBlocked, canOvertake, onUpdateEdge, isSimulating, addToast]);
 
 	/**
 	 * HANDLER: Annule les modifications de la route
@@ -297,7 +300,8 @@ export default function PropertiesPanel({
 		if (selectedEdge) {
 			setLaneCount(selectedEdge.lane_count);
 			setSpeedLimit(selectedEdge.speed_limit ?? 40);
-			setIntersectionType(selectedEdge.intersection_type ?? 'Priority');
+			setIsBlocked(selectedEdge.is_blocked);
+			setCanOvertake(selectedEdge.can_overtake);
 			setHasEdgeChanges(false);
 		}
 	}, [selectedEdge]);
@@ -451,22 +455,38 @@ export default function PropertiesPanel({
 						/>
 					</div>
 
-					{/* Intersection type select */}
+					{/* Is blocked checkbox */}
 					<div>
-						<p className={labelClass}>Type</p>
-						<select
-							disabled={isSimulating}
-							className={`${inputClass} ${isSimulating ? 'opacity-50 cursor-not-allowed' : ''}`}
-							value={intersectionType}
-							onChange={e => {
-								setIntersectionType(e.target.value as 'Priority' | 'Yield' | 'Stop');
-								setHasEdgeChanges(true);  // Affiche Apply/Cancel
-							}}
-						>
-							<option value="Priority">Priority</option>
-							<option value="Yield">Yield</option>
-							<option value="Stop">Stop</option>
-						</select>
+						<label className="flex items-center gap-[8px] cursor-pointer">
+							<input
+								disabled={isSimulating}
+								type="checkbox"
+								className={`w-[14px] h-[14px] accent-yellow-400 ${isSimulating ? 'opacity-50 cursor-not-allowed' : ''}`}
+								checked={isBlocked}
+								onChange={e => {
+									setIsBlocked(e.target.checked);
+									setHasEdgeChanges(true);
+								}}
+							/>
+							<span className={`text-[12px] text-neutral-400 ${isSimulating ? 'opacity-50' : ''}`}>Bloquée</span>
+						</label>
+					</div>
+
+					{/* Can overtake checkbox */}
+					<div>
+						<label className="flex items-center gap-[8px] cursor-pointer">
+							<input
+								disabled={isSimulating}
+								type="checkbox"
+								className={`w-[14px] h-[14px] accent-yellow-400 ${isSimulating ? 'opacity-50 cursor-not-allowed' : ''}`}
+								checked={canOvertake}
+								onChange={e => {
+									setCanOvertake(e.target.checked);
+									setHasEdgeChanges(true);
+								}}
+							/>
+							<span className={`text-[12px] text-neutral-400 ${isSimulating ? 'opacity-50' : ''}`}>Dépassement autorisé</span>
+						</label>
 					</div>
 
 					{/* Boutons Apply/Cancel (affichés SEULEMENT si hasEdgeChanges = true) */}
