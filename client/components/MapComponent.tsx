@@ -1,72 +1,46 @@
 'use client';
 
 import Image from "next/image";
-import { useCallback, useState, useEffect, useRef } from 'react';
-import { sendConnectionToken, useWebSocket } from '@/app/websocket/websocket';
+import { useCallback, useState } from 'react';
+import { usePacket } from '@/app/websocket/websocket';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData, ScoreData } from './map/types';
+import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
 
-interface MapComponentProps {
-	uuid: string;
-}
-
-export default function MapComponent({ uuid }: MapComponentProps) {
+export default function MapComponent() {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [showScore, setShowScore] = useState(false);
 	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
+	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
 	}, []);
 
-	useEffect(() => {
-		sendConnectionToken("auth-token");
-	}, []);
-
-	useWebSocket("map", (data) => {
+	usePacket("map", (data) => {
 		console.log("Received map data:", data);
 		setMapData(data as MapData);
 	});
 
-
-	useWebSocket("vehicleUpdate", (data: any) => {
-        if (data && Array.isArray(data.vehicles)) {
-			const newVehicles = data.vehicles as VehicleData[];
-			const processedVehicles = newVehicles.map(vehicle => {
-				const prevVehicle = prevVehiclesRef.current[vehicle.id];
-				
-				if (prevVehicle) {
-					const dx = vehicle.x - prevVehicle.x;
-					const dy = vehicle.y - prevVehicle.y;
-					const dist = Math.sqrt(dx * dx + dy * dy);
-					
-					if (dist > 0.01) {
-						vehicle.heading = Math.atan2(dy, dx);
-						vehicle.speed = dist;
-					} else {
-						vehicle.heading = prevVehicle.heading;
-						vehicle.speed = 0;
-					}
-				} else {
-                    // Initial heading if unknown, maybe 0 or undefined
-                    vehicle.heading = undefined;
-                    vehicle.speed = 0;
-                }
-				return vehicle;
-			});
-
-			// Update ref for next frame
-			const newPrevVehicles: Record<number, VehicleData> = {};
-			processedVehicles.forEach(v => {
-				newPrevVehicles[v.id] = v;
-			});
-			prevVehiclesRef.current = newPrevVehicles;
-
-		    setVehicles(processedVehicles);
+	usePacket("vehicleUpdate", (data) => {
+		const update = data as { vehicles?: VehicleData[], traffic_lights?: TrafficLightData[] };
+        if (update && Array.isArray(update.vehicles)) {
+			setVehicles(update.vehicles as VehicleData[]);
         }
+
+		if (update && Array.isArray(update.traffic_lights)) {
+			setTrafficLights(prev => {
+				const next = new Map<number, TrafficLightData>();
+				(update.traffic_lights as TrafficLightData[]).forEach(tl => next.set(tl.id, tl));
+				// Skip re-render if green road sets haven't changed
+				const changed = [...next.entries()].some(([k, v]) =>
+					prev.get(k)?.green_road_ids.join() !== v.green_road_ids.join()
+				);
+				return changed ? next : prev;
+			});
+		}
 	});
 
 	useWebSocket("score", (data) => {
@@ -76,7 +50,7 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 
 	return (
 		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
-			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} />}
+			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} trafficLights={trafficLights} />}
 			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 			</div>

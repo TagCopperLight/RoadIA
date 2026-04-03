@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use petgraph::graph::NodeIndex;
 use petgraph::visit::EdgeRef;
@@ -309,6 +309,7 @@ pub fn is_link_open(
     junction_id: u32,
     look_ahead: f32,
     stop_dwell_time: f32,
+    green_links: &HashSet<u32>,
 ) -> bool {
     if matches!(vehicle.current_lane, Some(LaneId::Internal(_, _))) {
         return true;
@@ -318,7 +319,15 @@ pub fn is_link_open(
         return false;
     }
 
+    if link.link_type == LinkType::TrafficLight && !green_links.contains(&link.id) {
+        return false;
+    }
+
     for foe_link in &link.foe_links {
+        if foe_link.link_type == LinkType::TrafficLight && !green_links.contains(&foe_link.id) {
+            continue;
+        }
+
         let must_yield = match (&link.link_type, &foe_link.link_type) {
             (LinkType::Priority, LinkType::Yield) | (LinkType::Priority, LinkType::Stop) => false,
             (LinkType::Yield, LinkType::Priority) | (LinkType::Stop, LinkType::Priority) => true,

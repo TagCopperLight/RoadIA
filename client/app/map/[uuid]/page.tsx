@@ -1,14 +1,12 @@
 import Image from 'next/image';
-import MapComponent from '@/components/MapComponent';
-
-import Toolbar from '@/components/Toolbar';
+import MapShell from '@/components/MapShell';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
     return (
         <div className="flex items-center w-full p-[15px]">
-            <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} />
+            <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} loading='eager' />
             <div className='flex flex-col pl-[15px]'>
                 <p className='text-[17px]'>Lannion - 2025</p>
                 <div className='flex text-[15px] font-medium'>
@@ -33,11 +31,7 @@ export default async function MapPage({ params }: { params: Promise<{ uuid: stri
   return (
     <div className="flex flex-col h-screen w-screen items-center">
         <Header />
-        <Toolbar />
-
-        <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
-            <MapComponent uuid={uuid} />
-        </div>
+        <MapShell uuid={uuid} />
     </div>
   );
 }

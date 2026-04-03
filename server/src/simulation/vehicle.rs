@@ -93,7 +93,7 @@ pub struct Vehicle {
     pub arrived_at: Option<f32>,
 }
 
-pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
+pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
     let result = petgraph::algo::astar(
         &map.graph,
         source,
@@ -101,10 +101,7 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
         |e| e.weight().length / e.weight().speed_limit,
         |n| map.intersections_euclidean_distance(n, destination) / MAX_SPEED,
     );
-    match result {
-        Some((_cost, path)) => path,
-        None => panic!("No path found between {:?} and {:?}", source, destination),
-    }
+    result.map(|(_cost, path)| path)
 }
 
 impl Vehicle {
@@ -131,7 +128,13 @@ impl Vehicle {
     }
 
     pub fn update_path(&mut self, map: &Map) {
-        self.path = fastest_path(map, self.trip.origin, self.trip.destination);
+        match fastest_path(map, self.trip.origin, self.trip.destination) {
+            Some(path) => self.path = path,
+            None => eprintln!(
+                "Warning: no path found for vehicle {} ({:?} → {:?}), vehicle will not depart",
+                self.id, self.trip.origin, self.trip.destination
+            ),
+        }
         self.path_index = 0;
     }
 
@@ -198,17 +201,32 @@ impl Vehicle {
                                     .expect("edge"),
                             )
                             .expect("edge weight");
+                            
+                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                        let tlen = (tdx * tdx + tdy * tdy).sqrt();
+
+                        let (start_x, start_y) = if tlen > 1e-6 {
+                            (cur.center_coordinates.x + (tdx / tlen) * cur.radius, cur.center_coordinates.y + (tdy / tlen) * cur.radius)
+                        } else {
+                            (cur.center_coordinates.x, cur.center_coordinates.y)
+                        };
+
+                        let (end_x, end_y) = if tlen > 1e-6 {
+                            (nxt.center_coordinates.x - (tdx / tlen) * nxt.radius, nxt.center_coordinates.y - (tdy / tlen) * nxt.radius)
+                        } else {
+                            (nxt.center_coordinates.x, nxt.center_coordinates.y)
+                        };
+
                         let t = self.position_on_lane / road.length;
-                        let cx = cur.center_coordinates.x * (1.0 - t) + nxt.center_coordinates.x * t;
-                        let cy = cur.center_coordinates.y * (1.0 - t) + nxt.center_coordinates.y * t;
+                        let cx = start_x * (1.0 - t) + end_x * t;
+                        let cy = start_y * (1.0 - t) + end_y * t;
 
                         let lane_idx = match self.current_lane {
                             Some(LaneId::Normal(_, lid)) => lid as usize,
                             _ => 0,
                         };
-                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
-                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
-                        let tlen = (tdx * tdx + tdy * tdy).sqrt();
+                        
                         let (perp_x, perp_y) = if tlen > 1e-6 {
                             (-tdy / tlen, tdx / tlen)
                         } else {
@@ -223,14 +241,58 @@ impl Vehicle {
                 }
             }
             _ => {
-                let node = map
-                    .graph
-                    .node_weight(self.get_current_node())
-                    .expect("node");
+                let node_idx = if self.path.is_empty() {
+                    self.trip.origin
+                } else {
+                    self.get_current_node()
+                };
+                let node = map.graph.node_weight(node_idx).expect("node");
                 Coordinates {
                     x: node.center_coordinates.x,
                     y: node.center_coordinates.y,
                 }
+            }
+        }
+    }
+
+    pub fn get_heading(&self, map: &Map) -> f32 {
+        if self.path.len() < 2 {
+            return 0.0;
+        }
+        match self.state {
+            VehicleState::OnRoad => {
+                match self.current_lane {
+                    Some(LaneId::Internal(junction_id, internal_lane_id)) => {
+                        if let Some(&junction_node_idx) = map.node_index_map.get(&junction_id) {
+                            let junction = &map.graph[junction_node_idx];
+                            if let Some(il) = junction
+                                .internal_lanes
+                                .iter()
+                                .find(|il| il.id == internal_lane_id)
+                            {
+                                let dx = il.exit.0 - il.entry.0;
+                                let dy = il.exit.1 - il.entry.1;
+                                return dy.atan2(dx);
+                            }
+                        }
+                        0.0
+                    }
+                    _ => {
+                        let cur = map.graph.node_weight(self.get_current_node()).expect("node");
+                        let nxt = map.graph.node_weight(self.get_next_node()).expect("node");
+                        let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                        let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                        tdy.atan2(tdx)
+                    }
+                }
+            }
+            _ => {
+                // WaitingToDepart: use the direction of the first road segment
+                let cur = map.graph.node_weight(self.path[0]).expect("node");
+                let nxt = map.graph.node_weight(self.path[1]).expect("node");
+                let tdx = nxt.center_coordinates.x - cur.center_coordinates.x;
+                let tdy = nxt.center_coordinates.y - cur.center_coordinates.y;
+                tdy.atan2(tdx)
             }
         }
     }

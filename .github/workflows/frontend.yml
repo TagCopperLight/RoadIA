@@ -1,0 +1,43 @@
+name: Frontend CI
+
+on:
+  push:
+    paths:
+      - 'client/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'client/**'
+      - '.github/workflows/frontend.yml'
+
+jobs:
+  nextjs-checks:
+    name: Next.js Checks
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: ./client
+        
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 'latest' # You can specify a version like '20' if preferred
+          cache: 'npm'
+          cache-dependency-path: ./client/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Type Check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
