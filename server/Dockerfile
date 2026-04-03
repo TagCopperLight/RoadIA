@@ -9,5 +9,6 @@ FROM debian:bookworm-slim AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/target/release/server /usr/local/bin/server
+COPY data ./data
 EXPOSE 8080
 CMD ["server"]
