@@ -103,7 +103,7 @@ impl SimulationInstance {
 
                     let start = tokio::time::Instant::now();
 
-                    let (vehicles_data, traffic_lights_data) = {
+                    let (vehicles_data, traffic_lights_data, time_step) = {
                         let mut eng = instance.engine.lock().await;
                         for _ in 0..4 {
                             eng.step();
@@ -114,7 +114,8 @@ impl SimulationInstance {
                             .map(|v| serialize_vehicle(v, &eng.config.map))
                             .collect::<Vec<_>>();
                         let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
-                        (vehicles, tl)
+                        let ts = eng.config.time_step;
+                        (vehicles, tl, ts)
                     };
 
                     let packet = ServerPacket::VehicleUpdate {
@@ -126,20 +127,22 @@ impl SimulationInstance {
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step);
                   
-                    let engine = instance.engine.lock().await;
-                    if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
-                        let score:Score = engine.get_score();
-                        let packet = ServerPacket::Score {
-                            score : score.score,
-                            total_trip_time: score.total_trip_time,
-                            total_emitted_co2: score.total_emitted_co2,
-                            network_length: score.network_length,
-                            total_distance_traveled: score.total_distance_traveled,
-                            success_rate: score.success_rate,
-                        };
-                        websocket_service.send(packet);
-                        controller.stop();
-                        println!("Simulation finished");
+                    {
+                        let engine = instance.engine.lock().await;
+                        if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
+                            let score:Score = engine.get_score();
+                            let packet = ServerPacket::Score {
+                                score : score.score,
+                                total_trip_time: score.total_trip_time,
+                                total_emitted_co2: score.total_emitted_co2,
+                                network_length: score.network_length,
+                                total_distance_traveled: score.total_distance_traveled,
+                                success_rate: score.success_rate,
+                            };
+                            let _ = instance.broadcast.send(packet);
+                            instance.controller.stop();
+                            println!("Simulation finished");
+                        }
                     }
                   
                     drop(instance);

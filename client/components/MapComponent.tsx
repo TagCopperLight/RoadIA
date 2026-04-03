@@ -12,7 +12,6 @@ export default function MapComponent() {
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [showScore, setShowScore] = useState(false);
-	const prevVehiclesRef = useRef<Record<number, VehicleData>>({});
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
@@ -43,7 +42,7 @@ export default function MapComponent() {
 		}
 	});
 
-	useWebSocket("score", (data) => {
+	usePacket("score", (data) => {
 		setScore(data as ScoreData);
 		setShowScore(true);
 	})
