@@ -44,6 +44,7 @@ pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
     VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value> },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
+    Score { score: f32, total_trip_time: f32, total_emitted_co2: f32, network_length: f32, total_distance_traveled: f32, success_rate: f32, },
 }
 
 pub async fn ws_handler(

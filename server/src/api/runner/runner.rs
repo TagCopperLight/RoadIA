@@ -16,6 +16,7 @@ use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
 use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+use crate::scoring::Score;
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -62,8 +63,8 @@ impl SimulationInstance {
 
         let config = SimulationConfig {
             start_time: 0.0,
-            end_time: f32::MAX,
-            time_step: 0.25,
+            end_time: 600.0,
+            time_step: 0.05,
             minimum_gap: 2.0,
             map,
         };
@@ -102,16 +103,19 @@ impl SimulationInstance {
 
                     let start = tokio::time::Instant::now();
 
-                    let (vehicles_data, traffic_lights_data) = {
+                    let (vehicles_data, traffic_lights_data, time_step) = {
                         let mut eng = instance.engine.lock().await;
-                        eng.step();
-                        eng.current_time += eng.config.time_step;
+                        for _ in 0..4 {
+                            eng.step();
+                            eng.current_time += eng.config.time_step;
+                        }
                         let vehicles = eng.vehicles
                             .iter()
                             .map(|v| serialize_vehicle(v, &eng.config.map))
                             .collect::<Vec<_>>();
                         let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
-                        (vehicles, tl)
+                        let ts = eng.config.time_step;
+                        (vehicles, tl, ts)
                     };
 
                     let packet = ServerPacket::VehicleUpdate {
@@ -121,11 +125,31 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    let remaining = Duration::from_millis(50).saturating_sub(elapsed);
-                    drop(instance);
-                    if !remaining.is_zero() {
-                        sleep(remaining).await;
+                    let step_duration = Duration::from_secs_f32(time_step);
+                  
+                    {
+                        let engine = instance.engine.lock().await;
+                        if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
+                            let score:Score = engine.get_score();
+                            let packet = ServerPacket::Score {
+                                score : score.score,
+                                total_trip_time: score.total_trip_time,
+                                total_emitted_co2: score.total_emitted_co2,
+                                network_length: score.network_length,
+                                total_distance_traveled: score.total_distance_traveled,
+                                success_rate: score.success_rate,
+                            };
+                            let _ = instance.broadcast.send(packet);
+                            instance.controller.stop();
+                            println!("Simulation finished");
+                        }
                     }
+                  
+                    drop(instance);
+                    
+                    if elapsed < step_duration {
+                        sleep(step_duration - elapsed).await;
+                    }                  
                 }
             }
         });
