@@ -55,7 +55,7 @@ pub async fn run() -> io::Result<()> {
 
     let config = SimulationConfig {
         start_time: 0.0,
-        end_time: f32::MAX,
+        end_time: 600.0,
         time_step: 0.05,
         minimum_gap: 2.0,
         map,
@@ -87,26 +87,30 @@ pub async fn run() -> io::Result<()> {
 
                 let start = tokio::time::Instant::now();
 
-                let vehicles_data = {
+                let (vehicles_data, time_step) = {
                     let mut engine = engine.lock().await;
-                    engine.step();
-                    engine.current_time += engine.config.time_step;
-                    engine.vehicles
+                    for _ in 0..4 {
+                        engine.step();
+                        engine.current_time += engine.config.time_step;
+                    }
+                    let data = engine.vehicles
                         .iter()
                         .map(|v| serialize_vehicle(v, &engine.config.map))
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>();
+                    (data, engine.config.time_step)
                 };
 
                 let packet = ServerPacket::VehicleUpdate { vehicles: vehicles_data };
                 websocket_service.send(packet);
 
                 let elapsed = start.elapsed();
-                if elapsed < Duration::from_millis(10) {
-                    sleep(Duration::from_millis(10) - elapsed).await;
+                let step_duration = Duration::from_secs_f32(time_step);
+                if elapsed < step_duration {
+                    sleep(step_duration - elapsed).await;
                 }
 
                 let engine = engine.lock().await;
-                if engine.all_vehicles_arrived {
+                if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
                     // show score here
                     let score:Score = engine.get_score();
                     let packet = ServerPacket::Score {
@@ -114,6 +118,7 @@ pub async fn run() -> io::Result<()> {
                         total_trip_time: score.total_trip_time,
                         total_emitted_co2: score.total_emitted_co2,
                         network_length: score.network_length,
+                        total_distance_traveled: score.total_distance_traveled,
                         success_rate: score.success_rate,
                     };
                     websocket_service.send(packet);
