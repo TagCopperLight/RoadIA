@@ -97,9 +97,9 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 						</div>
 						
 						<div className="space-y-4">
-							<div className="bg-blue-50 p-4 rounded-xl flex justify-between items-center">
-								<span className="text-blue-700 font-semibold text-lg">Score Final</span>
-								<span className="text-3xl font-black text-blue-900">{score.score.toFixed(3)}</span>
+							<div className="bg-gray-50 p-4 rounded-xl flex justify-between items-center">
+								<span className="font-semibold text-lg">Score Final</span>
+								<span className="text-3xl font-black text-gray-900">{score.score.toFixed(3)}</span>
 							</div>
 							
 							<div className="grid grid-cols-2 gap-4">
@@ -109,22 +109,22 @@ export default function MapComponent({ uuid }: MapComponentProps) {
 								</div>
 								<div className="bg-gray-50 p-3 rounded-lg">
 									<p className="text-xs text-gray-500 uppercase font-bold mb-1">CO2 Émis</p>
-									<p className="text-xl font-bold text-gray-800">{score.total_emitted_co2.toFixed(0)}kg</p>
+									<p className="text-xl font-bold text-gray-800">{score.total_emitted_co2.toFixed(2)}kg</p>
 								</div>
 								<div className="bg-gray-50 p-3 rounded-lg">
 									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Temps total</p>
 									<p className="text-xl font-bold text-gray-800">{score.total_trip_time.toFixed(0)}s</p>
 								</div>
 								<div className="bg-gray-50 p-3 rounded-lg">
-									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Longueur du réseau</p>
-									<p className="text-xl font-bold text-gray-800">{score.network_length.toFixed(0)}m</p>
+									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Distance parcourue</p>
+									<p className="text-xl font-bold text-gray-800">{(score.total_distance_traveled / 1000).toFixed(2)}km</p>
 								</div>
 							</div>
 						</div>
 
 						<button 
 							onClick={() => setShowScore(false)}
-							className="mt-8 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors shadow-lg shadow-blue-200 cursor-pointer"
+							className="mt-8 w-full bg-black hover:bg-neutral-800 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer"
 						>
 							Fermer
 						</button>

@@ -354,6 +354,7 @@ impl SimulationEngine {
             let v = &mut self.vehicles[vidx];
             v.velocity = (v.velocity + accel * dt).max(0.0);
             v.position_on_lane += v.velocity * dt;
+            v.distance_traveled += v.velocity * dt;
 
             if v.velocity < 0.1 && !v.drive_plan.is_empty() {
                 v.waiting_time += dt;

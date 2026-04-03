@@ -34,5 +34,6 @@ export interface ScoreData {
 	total_trip_time: number;
 	total_emitted_co2: number;
 	network_length: number;
+	total_distance_traveled: number;
 	success_rate: number;
 }
