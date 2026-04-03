@@ -32,6 +32,7 @@ pub struct Intersection {
     pub center_coordinates: Coordinates,
     pub radius: f32,
     pub internal_lanes: Vec<InternalLane>,
+    pub interblocked_for: f32,
 }
 
 impl Intersection {
@@ -47,6 +48,7 @@ impl Intersection {
             center_coordinates,
             radius,
             internal_lanes: Vec::new(),
+            interblocked_for: 0.0,
         }
     }
 }

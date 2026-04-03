@@ -15,7 +15,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_connected_map, create_traffic_light_test_map, create_random_vehicles};
+use crate::api::runner::map_generator::{create_random_vehicles, create_three_branch_map};
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -134,10 +134,13 @@ impl SimulationInstance {
     }
 
     pub fn new_default() -> Arc<Self> {
-        // Use a randomly generated connected map for default instances.
-        let map = create_connected_map(200, 1500.0, 1500.0);
-        let vehicles = create_random_vehicles(&map, 1000);
-        Self::new(map, vehicles)
+        // For testing: use the three-branch map (smaller deterministic test map).
+        let map = create_three_branch_map();
+        let vehicles = create_random_vehicles(&map, 250);
+        let instance = Self::new(map, vehicles);
+        // Start the controller so the simulation runs immediately.
+        instance.controller.start();
+        instance
     }
 }
 

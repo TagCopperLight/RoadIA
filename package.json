@@ -1,0 +1,9 @@
+{
+  "name": "roadia-root",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "client:install": "node ./scripts/client-dev.js --install-only",
+    "client:dev": "node ./scripts/client-dev.js"
+  }
+}
