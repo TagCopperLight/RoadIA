@@ -28,11 +28,15 @@ export default function MapComponent() {
         }
 
 		if (update && Array.isArray(update.traffic_lights)) {
-			const tlMap = new Map<number, TrafficLightData>();
-			(update.traffic_lights as TrafficLightData[]).forEach(tl => {
-				tlMap.set(tl.id, tl);
+			setTrafficLights(prev => {
+				const next = new Map<number, TrafficLightData>();
+				(update.traffic_lights as TrafficLightData[]).forEach(tl => next.set(tl.id, tl));
+				// Skip re-render if green road sets haven't changed
+				const changed = [...next.entries()].some(([k, v]) =>
+					prev.get(k)?.green_road_ids.join() !== v.green_road_ids.join()
+				);
+				return changed ? next : prev;
 			});
-			setTrafficLights(tlMap);
 		}
 	});
 

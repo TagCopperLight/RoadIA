@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Graphics } from 'pixi.js';
 import { MapNode, MapEdge } from '../types';
 
@@ -38,7 +39,7 @@ function drawDashedLine(
 	}
 }
 
-export function Road({ canonicalEdge, reverseEdge, startNode, endNode }: RoadProps) {
+export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, endNode }: RoadProps) {
 	return (
 		<pixiGraphics draw={(g) => {
 			g.clear();
@@ -103,4 +104,4 @@ export function Road({ canonicalEdge, reverseEdge, startNode, endNode }: RoadPro
 			}
 		}} />
 	);
-}
+});

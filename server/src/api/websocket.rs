@@ -130,7 +130,7 @@ async fn ws_loop(
         }
     }
     if instance.active_connections.fetch_sub(1, std::sync::atomic::Ordering::Relaxed) == 1 {
-        // Last client disconnected — stop the simulation and remove the instance.
+        // Last client disconnected, stop the simulation and remove the instance.
         instance.controller.stop();
         state.simulations.write().await.remove(&uuid);
         println!("Last client disconnected, simulation {} removed", uuid);
@@ -219,8 +219,8 @@ async fn handle_client_packet(
             }
 
             let map_snapshot = eng.config.map.clone();
-            for vehicle in &mut eng.vehicles {
-                vehicle.update_path(&map_snapshot);
+            for vehicle in eng.vehicles.iter_mut() {
+                let _ = vehicle.update_path(&map_snapshot);
             }
         }
 

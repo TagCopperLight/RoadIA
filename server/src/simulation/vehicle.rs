@@ -92,7 +92,7 @@ pub struct Vehicle {
     pub arrived_at: Option<f32>,
 }
 
-pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec<NodeIndex> {
+pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
     let result = petgraph::algo::astar(
         &map.graph,
         source,
@@ -100,10 +100,7 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Vec
         |e| e.weight().length / e.weight().speed_limit,
         |n| map.intersections_euclidean_distance(n, destination) / MAX_SPEED,
     );
-    match result {
-        Some((_cost, path)) => path,
-        None => panic!("No path found between {:?} and {:?}", source, destination),
-    }
+    result.map(|(_cost, path)| path)
 }
 
 impl Vehicle {
@@ -129,7 +126,13 @@ impl Vehicle {
     }
 
     pub fn update_path(&mut self, map: &Map) {
-        self.path = fastest_path(map, self.trip.origin, self.trip.destination);
+        match fastest_path(map, self.trip.origin, self.trip.destination) {
+            Some(path) => self.path = path,
+            None => eprintln!(
+                "Warning: no path found for vehicle {} ({:?} → {:?}), vehicle will not depart",
+                self.id, self.trip.origin, self.trip.destination
+            ),
+        }
         self.path_index = 0;
     }
 
@@ -236,10 +239,12 @@ impl Vehicle {
                 }
             }
             _ => {
-                let node = map
-                    .graph
-                    .node_weight(self.get_current_node())
-                    .expect("node");
+                let node_idx = if self.path.is_empty() {
+                    self.trip.origin
+                } else {
+                    self.get_current_node()
+                };
+                let node = map.graph.node_weight(node_idx).expect("node");
                 Coordinates {
                     x: node.center_coordinates.x,
                     y: node.center_coordinates.y,
