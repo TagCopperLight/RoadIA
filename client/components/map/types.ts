@@ -1,3 +1,10 @@
+export interface InternalLane {
+	id: number;
+	entry: [number, number];
+	exit: [number, number];
+	link_type: "Priority" | "Yield" | "Stop" | "TrafficLight";
+}
+
 export interface MapNode {
 	id: number;
 	kind: "Intersection" | "Habitation" | "Workplace";
@@ -6,6 +13,7 @@ export interface MapNode {
 	y: number;
 	has_traffic_light?: boolean;
 	radius: number;
+	internal_lanes?: InternalLane[];
 }
 
 export interface MapEdge {
@@ -14,6 +22,7 @@ export interface MapEdge {
 	lane_count: number;
 	lane_width: number;
 	length: number;
+	speed_limit: number;
 	to: number;
 }
 

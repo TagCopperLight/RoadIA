@@ -34,7 +34,7 @@ pub enum ClientPacket {
     UpdateNode { id: u32, kind: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
-    UpdateRoad { id: u32, speed_limit: f32 },
+    UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -340,13 +340,13 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::UpdateRoad { id, speed_limit } => {
+        ClientPacket::UpdateRoad { id, speed_limit, lane_count } => {
             if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
             let mut eng = instance.engine.lock().await;
-            match editor::update_road(&mut eng.config.map, id, speed_limit) {
+            match editor::update_road(&mut eng.config.map, id, speed_limit, lane_count) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
@@ -396,13 +396,28 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
             let has_traffic_light = map.traffic_lights
                 .values()
                 .any(|c| c.intersection_id == n.id);
+            let internal_lanes: Vec<Value> = n.internal_lanes.iter().map(|lane| {
+                let link_type = map.graph.edge_indices()
+                    .flat_map(|e| map.graph[e].lanes.iter())
+                    .flat_map(|l| l.links.iter())
+                    .find(|link| link.via_internal_lane_id == lane.id)
+                    .map(|link| format!("{:?}", link.link_type))
+                    .unwrap_or_else(|| "Priority".to_string());
+                json!({
+                    "id": lane.id,
+                    "entry": [lane.entry.0, lane.entry.1],
+                    "exit": [lane.exit.0, lane.exit.1],
+                    "link_type": link_type,
+                })
+            }).collect();
             json!({
                 "id": n.id,
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
                 "y": n.center_coordinates.y,
                 "has_traffic_light": has_traffic_light,
-                "radius": n.radius
+                "radius": n.radius,
+                "internal_lanes": internal_lanes,
             })
         })
         .collect();
