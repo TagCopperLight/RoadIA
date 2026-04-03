@@ -93,11 +93,51 @@ impl Simulation for SimulationEngine {
                 v.arrived_at = Some(t);
             }
         }
+        // Debug: log overlapping vehicles per lane at end of each step
+        self.log_overlaps();
     }
 }
 
 // Departures
 impl SimulationEngine {
+    fn log_overlaps(&self) {
+        for (lane, lst) in &self.vehicles_by_lane {
+            if lst.len() < 2 {
+                // no possible overlap
+                continue;
+            }
+            let mut overlapped: HashSet<usize> = HashSet::new();
+            for pair in lst.windows(2) {
+                let rear_idx = pair[0];
+                let ahead_idx = pair[1];
+                let rear = &self.vehicles[rear_idx];
+                let ahead = &self.vehicles[ahead_idx];
+                let rear_front = rear.position_on_lane;
+                let ahead_back = ahead.position_on_lane - ahead.spec.length;
+                if rear_front > ahead_back {
+                    overlapped.insert(rear_idx);
+                    overlapped.insert(ahead_idx);
+                }
+            }
+            if !overlapped.is_empty() {
+                // collect details for printing
+                let mut details: Vec<String> = Vec::new();
+                for &i in &overlapped {
+                    let v = &self.vehicles[i];
+                    details.push(format!("id={} pos={:.2} len={:.2}", v.id, v.position_on_lane, v.spec.length));
+                }
+                let detail_str = details.join(", ");
+                match lane {
+                    LaneId::Internal(jid, ilid) => {
+                        println!("[overlap] Internal(junction={}, il={}) => {} vehicles overlapping: {}", jid, ilid, overlapped.len(), detail_str);
+                    }
+                    LaneId::Normal(edge, lid) => {
+                        println!("[overlap] Normal(edge={}, lane={}) => {} vehicles overlapping: {}", edge.index(), lid, overlapped.len(), detail_str);
+                    }
+                }
+            }
+        }
+    }
     fn handle_departures(&mut self) {
         let waiting: Vec<usize> = self
             .vehicles
@@ -554,18 +594,23 @@ impl SimulationEngine {
 
     fn exit_internal_lane(&mut self, vidx: usize, from_lane: LaneId) {
         let il_len = self.lane_length(vidx);
-        self.vehicles[vidx].position_on_lane -= il_len;
-        self.vehicles[vidx].path_index += 1;
+        let original_pos = self.vehicles[vidx].position_on_lane;
+        let entering_pos = original_pos - il_len;
 
-        let pi = self.vehicles[vidx].path_index;
-        if pi + 1 >= self.vehicles[vidx].path.len() {
+        // Compute the indices we'd use if we were to advance the path index.
+        let pi_next = self.vehicles[vidx].path_index + 1;
+        if pi_next + 1 >= self.vehicles[vidx].path.len() {
+            // No further edge after the next node -> arriving at destination when exiting.
             self.vehicles[vidx].state = VehicleState::Arrived;
+            self.vehicles[vidx].current_lane = None;
+            self.vehicles[vidx].velocity = 0.0;
+            
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
             return;
         }
 
-        let a = self.vehicles[vidx].path[pi];
-        let b = self.vehicles[vidx].path[pi + 1];
+        let a = self.vehicles[vidx].path[pi_next];
+        let b = self.vehicles[vidx].path[pi_next + 1];
         let out_edge = match self.config.map.graph.find_edge(a, b) {
             Some(e) => e,
             None => return,
@@ -586,7 +631,26 @@ impl SimulationEngine {
             _ => 0,
         };
         let to_lane = LaneId::Normal(out_edge, dest_lane_id);
+
+        // Check whether there is space in the normal lane at `entering_pos`.
+        // If not enough space, keep the vehicle at the end of the internal lane
+        // (do not transfer yet) so it doesn't create overlaps in the normal lane.
+        if !self.can_enter_normal_lane(to_lane, entering_pos, vidx) {
+            self.vehicles[vidx].position_on_lane = il_len; // stay at end of internal lane
+            self.vehicles[vidx].velocity = 0.0;
+            
+            return;
+        }
+
+        // Commit transfer into the normal lane.
+        self.vehicles[vidx].position_on_lane = entering_pos;
         self.vehicles[vidx].current_lane = Some(to_lane);
+        // Advance the path index now that we've left the internal lane.
+        self.vehicles[vidx].path_index = pi_next;
+        // Immediately reserve/insert the vehicle into the destination normal lane so
+        // subsequent transfers or entries see the reservation and avoid stacking.
+        lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, vidx);
+        
         self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(to_lane) });
     }
 
@@ -598,6 +662,9 @@ impl SimulationEngine {
         if pi + 1 >= path_len - 1 {
             self.vehicles[vidx].position_on_lane = road_len;
             self.vehicles[vidx].state = VehicleState::Arrived;
+            self.vehicles[vidx].current_lane = None;
+            self.vehicles[vidx].velocity = 0.0;
+            
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
             return;
         }
@@ -629,6 +696,11 @@ impl SimulationEngine {
 
         self.vehicles[vidx].current_lane = Some(to_lane);
         self.vehicles[vidx].drive_plan.remove(0);
+        // Immediately reserve/insert the vehicle into the target internal lane so
+        // subsequent calls to `can_enter_internal_lane` see the reservation and
+        // cannot allow other vehicles to enter (prevents stacking).
+        lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, vidx);
+        
         self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(to_lane) });
     }
 
@@ -640,7 +712,7 @@ impl SimulationEngine {
         }
     }
 
-    // Helper: find nearest leader (smallest position > entering_pos) and nearest follower (largest position < entering_pos)
+    // Helper: find nearest leader (smallest position >= entering_pos) and nearest follower (largest position < entering_pos)
     // in the given lane. Returns (leader_idx_opt, follower_idx_opt).
     fn nearest_leader_and_follower(&self, lane: &LaneId, entering_pos: f32) -> (Option<usize>, Option<usize>) {
         let mut leader: Option<usize> = None;
@@ -648,7 +720,10 @@ impl SimulationEngine {
         if let Some(lst) = self.vehicles_by_lane.get(lane) {
             for &i in lst.iter() {
                 let p = self.vehicles[i].position_on_lane;
-                if p > entering_pos {
+                // Treat vehicles at exactly entering_pos as leaders to avoid
+                // allowing an entering vehicle to occupy the exact same
+                // slot as an existing one.
+                if p >= entering_pos {
                     match leader {
                         None => leader = Some(i),
                         Some(prev) => {
@@ -702,6 +777,40 @@ impl SimulationEngine {
 
         true
     }
+
+    // Check whether the vehicle `vidx` at `entering_pos` can enter a normal lane
+    // respecting the minimum gap and ensuring the vehicle rear is within the lane bounds.
+    fn can_enter_normal_lane(&self, to_lane: LaneId, entering_pos: f32, vidx: usize) -> bool {
+        let min_gap = self.config.minimum_gap;
+
+        // Allow the entering vehicle's rear to be negative (it may still be
+        // partially inside the junction). Decide using explicit interval
+        // checks against leader and follower, with `minimum_gap` padding.
+        let entering_front = entering_pos;
+        let entering_rear = entering_pos - self.vehicles[vidx].spec.length;
+
+        let (leader_opt, follower_opt) = self.nearest_leader_and_follower(&to_lane, entering_pos);
+
+        if let Some(li) = leader_opt {
+            let leader = &self.vehicles[li];
+            let leader_back = leader.position_on_lane - leader.spec.length;
+            // require leader_back - entering_front >= min_gap
+            if leader_back - entering_front < min_gap {
+                return false;
+            }
+        }
+
+        if let Some(fi) = follower_opt {
+            let follower = &self.vehicles[fi];
+            let follower_front = follower.position_on_lane;
+            // require entering_rear - follower_front >= min_gap
+            if entering_rear - follower_front < min_gap {
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 // Buffer flush
@@ -718,10 +827,21 @@ impl SimulationEngine {
             }
             if let Some(to_lane) = t.to_lane {
                 if self.vehicles[t.vehicle_idx].state != VehicleState::Arrived {
-                    lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx);
+                    // If the vehicle was already inserted as a reservation when
+                    // authorizing the transfer, avoid inserting it again.
+                    let already_present = self
+                        .vehicles_by_lane
+                        .get(&to_lane)
+                        .map_or(false, |lst| lst.contains(&t.vehicle_idx));
+                    if !already_present {
+                        lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx);
+                    }
                 }
             }
         }
+        // Log overlaps again after transfers are flushed so we can see
+        // any collisions introduced/avoided by transfer operations.
+        self.log_overlaps();
     }
 }
 

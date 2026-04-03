@@ -148,11 +148,11 @@ async fn process_incoming_msg(
             Message::Text(text) => {
                 match serde_json::from_str::<ClientPacket>(&text) {
                     Ok(packet) => handle_client_packet(packet, socket, instance).await,
-                    Err(e) => println!("Failed to parse packet: {} (text: {})", e, text),
+                    Err(e) => { println!("Failed to parse packet: {} (text: {})", e, text); },
                 }
                 true
             }
-            Message::Close(_) => {
+                Message::Close(_) => {
                 println!("Client disconnected (Close frame)");
                 false
             }

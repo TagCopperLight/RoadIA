@@ -136,7 +136,7 @@ impl SimulationInstance {
     pub fn new_default() -> Arc<Self> {
         // Use a randomly generated connected map for default instances.
         let map = create_connected_map(200, 1500.0, 1500.0);
-        let vehicles = create_random_vehicles(&map, 50);
+        let vehicles = create_random_vehicles(&map, 1000);
         Self::new(map, vehicles)
     }
 }
