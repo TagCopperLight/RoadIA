@@ -63,7 +63,7 @@ impl SimulationInstance {
         let config = SimulationConfig {
             start_time: 0.0,
             end_time: f32::MAX,
-            time_step: 0.05,
+            time_step: 0.25,
             minimum_gap: 2.0,
             map,
         };
@@ -121,7 +121,7 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    let remaining = Duration::from_millis(10).saturating_sub(elapsed);
+                    let remaining = Duration::from_millis(50).saturating_sub(elapsed);
                     drop(instance);
                     if !remaining.is_zero() {
                         sleep(remaining).await;
