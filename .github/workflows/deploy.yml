@@ -1,0 +1,46 @@
+name: Deploy to VPS (Native Build)
+
+on:
+  push:
+    branches:
+      - dev
+      - infra/docker
+
+jobs:
+  deploy:
+    name: Sync and Build on VPS
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Copy files to VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "."
+          target: "~/roadia"
+          rm: true # Clean old files before syncing
+
+      - name: Build and run on VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ALLOWED_ORIGINS: ${{ secrets.ALLOWED_ORIGINS }}
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: ALLOWED_ORIGINS,NEXT_PUBLIC_API_URL
+          script: |
+            cd ~/roadia
+            printf 'ALLOWED_ORIGINS=%s\nNEXT_PUBLIC_API_URL=%s\n' "$ALLOWED_ORIGINS" "$NEXT_PUBLIC_API_URL" > .env
+            set -a && . .env && set +a
+            # Build first so failures are caught before starting services
+            sudo -E docker compose build
+            sudo -E docker compose up -d
+            # Cleanup old unused containers and images
+            sudo docker system prune -f
