@@ -25,9 +25,11 @@ export default function MapComponent() {
 	} = useEditMode();
 
 	const simStateRef = useRef(simState);
-	simStateRef.current = simState;
 	const modeRef = useRef(mode);
-	modeRef.current = mode;
+	useEffect(() => {
+		simStateRef.current = simState;
+		modeRef.current = mode;
+	});
 
 	// Refs for auto-selecting newly created nodes
 	const pendingNewNodeRef = useRef(false);
