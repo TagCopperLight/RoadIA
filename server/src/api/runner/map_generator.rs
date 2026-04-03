@@ -1,10 +1,57 @@
+use std::path::Path;
+
 use petgraph::graph::NodeIndex;
 
 use crate::map::editor as map_editor;
 use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
+use crate::map::osm_parser;
 use crate::map::roundabout;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+
+/// Load a map from an `.osm.pbf` file, build intersections, and assign
+/// habitation / workplace kinds to leaf nodes so vehicles can spawn.
+pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmParseError> {
+    let mut map = osm_parser::parse_osm_pbf(path)?;
+
+    // Remove disconnected fragments — keep only the largest connected component.
+    map.retain_largest_component();
+
+    // Tag some intersections as Workplace so vehicles have destinations.
+    // Leaf nodes with only outgoing edges → Habitation (already default).
+    // Leaf nodes with only incoming edges → Workplace.
+    // Nodes with degree ≥ 3 → Intersection.
+    let node_indices: Vec<_> = map.graph.node_indices().collect();
+    for idx in &node_indices {
+        let in_deg = map.graph.edges_directed(*idx, petgraph::Direction::Incoming).count();
+        let out_deg = map.graph.edges_directed(*idx, petgraph::Direction::Outgoing).count();
+        let total = in_deg + out_deg;
+
+        if total >= 3 {
+            map.graph[*idx].kind = IntersectionKind::Intersection;
+        } else if out_deg == 0 {
+            map.graph[*idx].kind = IntersectionKind::Workplace;
+        } else if in_deg == 0 {
+            map.graph[*idx].kind = IntersectionKind::Habitation;
+        } else {
+            // Alternate between Habitation and Workplace for dead-end / degree-2 nodes
+            if map.graph[*idx].id % 2 == 0 {
+                map.graph[*idx].kind = IntersectionKind::Habitation;
+            } else {
+                map.graph[*idx].kind = IntersectionKind::Workplace;
+            }
+        }
+    }
+
+    println!(
+        "OSM map loaded: {} intersections, {} roads",
+        map.graph.node_count(),
+        map.graph.edge_count()
+    );
+
+    intersection::build_intersections(&mut map);
+    Ok(map)
+}
 
 
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
@@ -263,5 +310,28 @@ pub fn create_roundabout_test_map() -> Map {
 
     intersection::build_intersections(&mut map);
     roundabout::finalize_roundabout_links(&mut map, &handle);
+    map
+}
+
+pub fn create_multilane_test_map() -> Map {
+    let mut map = Map::new();
+
+    let h1 = map.add_intersection(IntersectionKind::Habitation,     0.0,   500.0);
+    let h2 = map.add_intersection(IntersectionKind::Habitation,   400.0,     0.0);
+    let h3 = map.add_intersection(IntersectionKind::Habitation,   400.0,  -400.0);
+    let i1 = map.add_intersection(IntersectionKind::Intersection, 500.0,   500.0);
+    let i2 = map.add_intersection(IntersectionKind::Intersection, 1000.0,  500.0);
+    let w1 = map.add_intersection(IntersectionKind::Workplace,    1500.0,  500.0);
+    let w2 = map.add_intersection(IntersectionKind::Workplace,    1000.0,    0.0);
+
+    map.add_two_way_road(h1, i1, 3, 50.0, 500.0);
+    map.add_two_way_road(i1, i2, 3, 50.0, 500.0);
+    map.add_two_way_road(i2, w1, 3, 50.0, 500.0);
+
+    map.add_two_way_road(h2, i1, 2, 30.0, 500.0);
+    map.add_two_way_road(h3, h2, 2, 30.0, 400.0);
+    map.add_two_way_road(i2, w2, 2, 30.0, 500.0);
+
+    intersection::build_intersections(&mut map);
     map
 }

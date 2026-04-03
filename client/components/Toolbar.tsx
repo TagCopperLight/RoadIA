@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { wsClient } from '@/app/websocket/websocket';
+import { useWs } from '@/app/websocket/websocket';
 
 const TOOLS = [
     { icon: 'Move', alt: 'Move' },
@@ -13,11 +13,13 @@ const TOOLS = [
 ];
 
 export default function Toolbar() {
+    const ws = useWs();
+
     const handleToolClick = (tool: string) => {
         if (tool === 'Play') {
-            wsClient.send('startSimulation', {});
+            ws?.send('startSimulation', {});
         } else if (tool === 'Stop') {
-            wsClient.send('resetSimulation', {});
+            ws?.send('resetSimulation', {});
         }
     };
 
@@ -26,12 +28,12 @@ export default function Toolbar() {
             <div className='flex items-center bg-black rounded-[10px] w-full'>
                 {TOOLS.map((tool, index) => (
                     <div key={tool.alt} className="flex items-center" onClick={() => handleToolClick(tool.alt)}>
-                        <Image 
-                            src={`/map/${tool.icon}.svg`} 
-                            alt={tool.alt} 
-                            width={24} 
-                            height={24} 
-                            className='m-[11px] cursor-pointer hover:opacity-50 transition-opacity' 
+                        <Image
+                            src={`/map/${tool.icon}.svg`}
+                            alt={tool.alt}
+                            width={24}
+                            height={24}
+                            className='m-[11px] cursor-pointer hover:opacity-50 transition-opacity'
                         />
                         {index < TOOLS.length - 1 && (
                             <Image src="/map/Separator.svg" alt="Separator" height={26} width={1} />
