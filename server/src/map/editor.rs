@@ -1,9 +1,9 @@
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 
-use crate::map::intersection::IntersectionKind;
+use crate::map::intersection::{build_intersections, IntersectionKind};
 use crate::map::model::Map;
-use crate::map::road::LinkType;
+use crate::map::road::{Lane, LinkType};
 use crate::map::roundabout::RoundaboutHandle;
 use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
@@ -131,13 +131,36 @@ pub fn update_road(
     map: &mut Map,
     id: u32,
     speed_limit: f32,
+    lane_count: Option<u8>,
 ) -> Result<(), String> {
     let edge_idx = map
         .find_edge(id)
         .ok_or_else(|| format!("Road {} not found", id))?;
 
-    let road = &mut map.graph[edge_idx];
-    road.speed_limit = speed_limit.clamp(1.0, MAX_SPEED);
+    {
+        let road = &mut map.graph[edge_idx];
+        road.speed_limit = speed_limit.clamp(1.0, MAX_SPEED);
+
+        if let Some(count) = lane_count {
+            let count = count.max(1);
+            let road_id = road.id;
+            let length = road.length;
+            let sl = road.speed_limit;
+            road.lanes = (0..count)
+                .map(|i| Lane {
+                    id: i as u32,
+                    road_id,
+                    length,
+                    speed_limit: sl,
+                    links: Vec::new(),
+                })
+                .collect();
+        }
+    }
+
+    if lane_count.is_some() {
+        build_intersections(map);
+    }
 
     Ok(())
 }
