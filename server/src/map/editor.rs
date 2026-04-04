@@ -1,9 +1,6 @@
-use petgraph::visit::EdgeRef;
-use petgraph::Direction;
-
-use crate::map::intersection::IntersectionKind;
+use crate::map::intersection::{build_intersections, IntersectionKind};
 use crate::map::model::Map;
-use crate::map::road::LinkType;
+use crate::map::road::{Lane, LinkType};
 use crate::map::roundabout::RoundaboutHandle;
 use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
@@ -27,42 +24,11 @@ pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {
         map.node_index_map.insert(swapped_id, idx);
     }
 
-    Ok(())
-}
-
-pub fn move_node(map: &mut Map, id: u32, x: f32, y: f32) -> Result<(), String> {
-    let idx = map
-        .node_index_map
-        .get(&id)
-        .copied()
-        .ok_or_else(|| format!("Node {} not found", id))?;
-
-    map.graph[idx].center_coordinates.x = x;
-    map.graph[idx].center_coordinates.y = y;
-
-    // Recalculate lengths of all connected edges.
-    let edge_indices: Vec<_> = map
-        .graph
-        .edges_directed(idx, Direction::Incoming)
-        .chain(map.graph.edges_directed(idx, Direction::Outgoing))
-        .map(|e| e.id())
-        .collect();
-
-    for edge_idx in edge_indices {
-        let (a, b) = map.graph.edge_endpoints(edge_idx).unwrap();
-        let ax = map.graph[a].center_coordinates.x;
-        let ay = map.graph[a].center_coordinates.y;
-        let bx = map.graph[b].center_coordinates.x;
-        let by = map.graph[b].center_coordinates.y;
-        let dx = bx - ax;
-        let dy = by - ay;
-        let ra = map.graph[a].radius;
-        let rb = map.graph[b].radius;
-        map.graph[edge_idx].length = ((dx * dx + dy * dy).sqrt() - ra - rb).max(1.0);
-    }
+    build_intersections(map);
 
     Ok(())
 }
+
 
 pub fn update_node(
     map: &mut Map,
@@ -114,6 +80,8 @@ pub fn add_road(
 
     let road_id = map.add_road(from_id, to_id, lane_count, speed_limit, length);
 
+    build_intersections(map);
+
     Ok(road_id)
 }
 
@@ -124,6 +92,8 @@ pub fn delete_road(map: &mut Map, id: u32) -> Result<(), String> {
 
     map.graph.remove_edge(edge_idx);
 
+    build_intersections(map);
+
     Ok(())
 }
 
@@ -131,13 +101,34 @@ pub fn update_road(
     map: &mut Map,
     id: u32,
     speed_limit: f32,
+    lane_count: Option<u8>,
 ) -> Result<(), String> {
     let edge_idx = map
         .find_edge(id)
         .ok_or_else(|| format!("Road {} not found", id))?;
 
-    let road = &mut map.graph[edge_idx];
-    road.speed_limit = speed_limit.clamp(1.0, MAX_SPEED);
+    {
+        let road = &mut map.graph[edge_idx];
+        road.speed_limit = speed_limit.clamp(1.0, MAX_SPEED);
+
+        if let Some(count) = lane_count {
+            let count = count.max(1);
+            let road_id = road.id;
+            let length = road.length;
+            let sl = road.speed_limit;
+            road.lanes = (0..count)
+                .map(|i| Lane {
+                    id: i as u32,
+                    road_id,
+                    length,
+                    speed_limit: sl,
+                    links: Vec::new(),
+                })
+                .collect();
+        }
+    }
+
+    build_intersections(map);
 
     Ok(())
 }

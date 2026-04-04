@@ -43,6 +43,24 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
         }
     }
 
+    // Reduce habitations and workplaces to 1/3 of their count.
+    let hab_indices: Vec<_> = map.graph.node_indices()
+        .filter(|&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
+        .collect();
+    let work_indices: Vec<_> = map.graph.node_indices()
+        .filter(|&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
+        .collect();
+
+    let hab_keep = (hab_indices.len() / 3).max(1);
+    let work_keep = (work_indices.len() / 3).max(1);
+
+    for &idx in &hab_indices[hab_keep..] {
+        map.graph[idx].kind = IntersectionKind::Intersection;
+    }
+    for &idx in &work_indices[work_keep..] {
+        map.graph[idx].kind = IntersectionKind::Intersection;
+    }
+
     println!(
         "OSM map loaded: {} intersections, {} roads",
         map.graph.node_count(),

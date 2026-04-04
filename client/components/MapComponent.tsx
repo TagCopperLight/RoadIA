@@ -1,10 +1,15 @@
 'use client';
 
 import Image from "next/image";
-import { useCallback, useState } from 'react';
-import { usePacket } from '@/app/websocket/websocket';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePacket, useWs } from '@/app/websocket/websocket';
+import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
+import ScoreModal from './ScoreModal';
+import PropertiesPanel from './PropertiesPanel';
+import BudgetHUD from './BudgetHUD';
+import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
 
 export default function MapComponent() {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -13,27 +18,43 @@ export default function MapComponent() {
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [showScore, setShowScore] = useState(false);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
+	const [editError, setEditError] = useState<string | null>(null);
+
+	const ws = useWs();
+	const {
+		mode, editTool, selectedElement, pendingRoadFrom, simState,
+		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
+	} = useEditMode();
+
+	const simStateRef = useRef(simState);
+	const modeRef = useRef(mode);
+	useEffect(() => {
+		simStateRef.current = simState;
+		modeRef.current = mode;
+	});
+
+	// Refs for auto-selecting newly created nodes
+	const pendingNewNodeRef = useRef(false);
+	const prevNodeIdsRef = useRef<Set<number>>(new Set());
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
 	}, []);
 
 	usePacket("map", (data) => {
-		console.log("Received map data:", data);
 		setMapData(data as MapData);
 	});
 
 	usePacket("vehicleUpdate", (data) => {
+		if (simStateRef.current === 'stopped' || modeRef.current === 'edit') return;
 		const update = data as { vehicles?: VehicleData[], traffic_lights?: TrafficLightData[] };
-        if (update && Array.isArray(update.vehicles)) {
+		if (update && Array.isArray(update.vehicles)) {
 			setVehicles(update.vehicles as VehicleData[]);
-        }
-
+		}
 		if (update && Array.isArray(update.traffic_lights)) {
 			setTrafficLights(prev => {
 				const next = new Map<number, TrafficLightData>();
 				(update.traffic_lights as TrafficLightData[]).forEach(tl => next.set(tl.id, tl));
-				// Skip re-render if green road sets haven't changed
 				const changed = [...next.entries()].some(([k, v]) =>
 					prev.get(k)?.green_road_ids.join() !== v.green_road_ids.join()
 				);
@@ -45,64 +66,144 @@ export default function MapComponent() {
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
 		setShowScore(true);
-	})
+	});
+
+	usePacket("mapEdit", (data) => {
+		const result = data as { success: boolean; error?: string; nodes: MapData['nodes']; edges: MapData['edges'] };
+		if (result.success) {
+			setMapData({ nodes: result.nodes, edges: result.edges });
+			setPendingRoadFrom(null);
+
+			// Auto-select newly created node
+			if (pendingNewNodeRef.current) {
+				pendingNewNodeRef.current = false;
+				const prevIds = prevNodeIdsRef.current;
+				const newNode = result.nodes.find((n: MapData['nodes'][number]) => !prevIds.has(n.id));
+				if (newNode) {
+					setSelectedElement({ type: 'node', id: newNode.id });
+					setEditTool('select');
+				}
+			}
+
+			// Resync road selection (handles one-way/two-way toggle and other road edits)
+			if (selectedElement?.type === 'road') {
+				const edges = result.edges as MapData['edges'];
+				const can = edges.find((e: MapData['edges'][number]) => e.id === selectedElement.canonicalId);
+				if (can) {
+					const newRev = edges.find((e: MapData['edges'][number]) => e.from === can.to && e.to === can.from);
+					if (newRev?.id !== selectedElement.reverseId) {
+						setSelectedElement({ type: 'road', canonicalId: can.id, reverseId: newRev?.id });
+					}
+				}
+			}
+		} else {
+			const msg = result.error ?? 'Unknown error';
+			setEditError(msg);
+			setTimeout(() => setEditError(null), 3000);
+		}
+	});
+
+	// Dismiss error on click
+	useEffect(() => {
+		if (!editError) return;
+		const t = setTimeout(() => setEditError(null), 3000);
+		return () => clearTimeout(t);
+	}, [editError]);
+
+	// Clear vehicles when simulation is reset
+	const [prevResetAt, setPrevResetAt] = useState(simulationResetAt);
+	if (simulationResetAt !== prevResetAt) {
+		setPrevResetAt(simulationResetAt);
+		setVehicles([]);
+	}
+
+	const handleAddNode = useCallback((x: number, y: number) => {
+		if (mapData) {
+			if (calculateCost(mapData) + estimateNodeCost('Intersection') > MAX_BUDGET) {
+				setEditError('Budget exceeded: not enough funds to add this intersection.');
+				return;
+			}
+		}
+		// Snapshot current node IDs before the add
+		prevNodeIdsRef.current = new Set(mapData?.nodes.map(n => n.id) ?? []);
+		pendingNewNodeRef.current = true;
+		ws?.send('addNode', { x, y, kind: 'Intersection' });
+	}, [ws, mapData]);
+
+	const handleAddRoad = useCallback((nodeId: number) => {
+		if (pendingRoadFrom === null) {
+			setPendingRoadFrom(nodeId);
+		} else if (pendingRoadFrom !== nodeId) {
+			if (mapData) {
+				const fromNode = mapData.nodes.find(n => n.id === pendingRoadFrom);
+				const toNode   = mapData.nodes.find(n => n.id === nodeId);
+				if (fromNode && toNode) {
+					if (calculateCost(mapData) + estimateRoadCost(fromNode, toNode, 2) > MAX_BUDGET) {
+						setEditError('Budget exceeded: not enough funds to build this road.');
+						setPendingRoadFrom(null);
+						return;
+					}
+				}
+			}
+			ws?.send('addRoad', { from_id: pendingRoadFrom, to_id: nodeId, lane_count: 2, speed_limit: 13.9 });
+			setPendingRoadFrom(null);
+		}
+	}, [ws, pendingRoadFrom, setPendingRoadFrom, mapData]);
+
+	const handleSelectNode = useCallback((id: number) => {
+		setSelectedElement({ type: 'node', id });
+	}, [setSelectedElement]);
+
+	const handleSelectRoad = useCallback((canonicalId: number, reverseId?: number) => {
+		setSelectedElement({ type: 'road', canonicalId, reverseId });
+	}, [setSelectedElement]);
+
+// In edit mode, show no vehicles
+	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
 	return (
-		<div ref={onRefChange} className="w-full h-full rounded-[10px] overflow-hidden relative">
-			{container && <PixiApp resizeTo={container} mapData={mapData} vehicles={vehicles} trafficLights={trafficLights} />}
-			<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
-				<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
+		<div className="w-full h-full relative flex">
+			<div ref={onRefChange} className="flex-1 rounded-[10px] overflow-hidden relative">
+				{container && (
+					<PixiApp
+						resizeTo={container}
+						mapData={mapData}
+						vehicles={visibleVehicles}
+						trafficLights={trafficLights}
+						mode={mode}
+						editTool={editTool}
+						selectedElement={selectedElement}
+						pendingRoadFrom={pendingRoadFrom}
+						onSelectNode={handleSelectNode}
+						onSelectRoad={handleSelectRoad}
+						onAddNode={handleAddNode}
+						onAddRoad={handleAddRoad}
+					/>
+				)}
+				<BudgetHUD mapData={mapData} />
+				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
+					<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
+				</div>
+
+				{editError && (
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
+						{editError}
+					</div>
+				)}
+
+				{showScore && score && (
+					<ScoreModal score={score} onClose={() => setShowScore(false)} />
+				)}
 			</div>
 
-			{showScore && score && (
-				<div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
-					<div className="bg-white p-8 rounded-2xl shadow-2xl max-w-md w-full mx-4 transform transition-all animate-in fade-in zoom-in duration-300">
-						<div className="flex justify-between items-start mb-6">
-							<h2 className="text-3xl font-bold text-gray-800">Simulation Terminée</h2>
-							<button 
-								onClick={() => setShowScore(false)}
-								className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
-							>
-								<svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-								</svg>
-							</button>
-						</div>
-						
-						<div className="space-y-4">
-							<div className="bg-gray-50 p-4 rounded-xl flex justify-between items-center">
-								<span className="font-semibold text-lg">Score Final</span>
-								<span className="text-3xl font-black text-gray-900">{score.score.toFixed(3)}</span>
-							</div>
-							
-							<div className="grid grid-cols-2 gap-4">
-								<div className="bg-gray-50 p-3 rounded-lg">
-									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Taux de réussite</p>
-									<p className="text-xl font-bold text-gray-800">{(score.success_rate * 100).toFixed(0)}%</p>
-								</div>
-								<div className="bg-gray-50 p-3 rounded-lg">
-									<p className="text-xs text-gray-500 uppercase font-bold mb-1">CO2 Émis</p>
-									<p className="text-xl font-bold text-gray-800">{score.total_emitted_co2.toFixed(2)}kg</p>
-								</div>
-								<div className="bg-gray-50 p-3 rounded-lg">
-									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Temps total</p>
-									<p className="text-xl font-bold text-gray-800">{score.total_trip_time.toFixed(0)}s</p>
-								</div>
-								<div className="bg-gray-50 p-3 rounded-lg">
-									<p className="text-xs text-gray-500 uppercase font-bold mb-1">Distance parcourue</p>
-									<p className="text-xl font-bold text-gray-800">{(score.total_distance_traveled / 1000).toFixed(2)}km</p>
-								</div>
-							</div>
-						</div>
-
-						<button 
-							onClick={() => setShowScore(false)}
-							className="mt-8 w-full bg-black hover:bg-neutral-800 text-white font-bold py-3 rounded-xl transition-colors cursor-pointer"
-						>
-							Fermer
-						</button>
-					</div>
-				</div>
+			{/* Properties panel sidebar */}
+			{mode === 'edit' && selectedElement && mapData && (
+				<PropertiesPanel
+					selectedElement={selectedElement}
+					mapData={mapData}
+					onClose={() => setSelectedElement(null)}
+					onSendPacket={(id, data) => ws?.send(id, data)}
+				/>
 			)}
 		</div>
 	);

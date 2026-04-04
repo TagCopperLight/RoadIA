@@ -1,5 +1,5 @@
 use crate::map::editor::{
-    add_node, add_road, add_roundabout, delete_node, delete_road, move_node, update_node,
+    add_node, add_road, add_roundabout, delete_node, delete_road, update_node,
     update_road,
 };
 use crate::map::intersection::{build_intersections, IntersectionKind};
@@ -78,40 +78,6 @@ fn delete_node_updates_swapped_index() {
     assert!(map.find_node(b_id).is_none(), "B should be removed");
 }
 
-// ---- move_node ----
-
-#[test]
-fn move_node_updates_coordinates() {
-    let (mut map, a, _b) = make_two_node_map();
-    move_node(&mut map, a, 99.0, 77.0).unwrap();
-    let ni = map.find_node(a).unwrap();
-    let node = &map.graph[ni];
-    assert!((node.center_coordinates.x - 99.0).abs() < 1e-4);
-    assert!((node.center_coordinates.y - 77.0).abs() < 1e-4);
-}
-
-#[test]
-fn move_node_recalculates_connected_road_length() {
-    let (mut map, a, b) = make_two_node_map();
-    // Initial length: dist((0,0),(300,400)) = 500.0
-    add_road(&mut map, a, b, 1, 30.0).unwrap();
-
-    // Move b to (0, 100) → center-to-center = 100, boundary-to-boundary = 98 (two radii of 1)
-    move_node(&mut map, b, 0.0, 100.0).unwrap();
-
-    let ni_a = map.find_node(a).unwrap();
-    let ni_b = map.find_node(b).unwrap();
-    let edge = map.graph.find_edge(ni_a, ni_b).unwrap();
-    let new_length = map.graph[edge].length;
-    assert!((new_length - 98.0).abs() < 0.5, "expected ~98, got {new_length}");
-}
-
-#[test]
-fn move_node_missing_returns_err() {
-    let mut map = Map::new();
-    assert!(move_node(&mut map, 9999, 0.0, 0.0).is_err());
-}
-
 // ---- update_node ----
 
 #[test]
@@ -138,7 +104,9 @@ fn add_road_calculates_euclidean_length() {
     let road_id = add_road(&mut map, a, b, 1, 30.0).unwrap();
     let edge = map.find_edge(road_id).unwrap();
     let length = map.graph[edge].length;
-    assert!((length - 498.0).abs() < 0.5, "expected 498, got {length}");
+    let intersection_radius = map.graph[map.find_node(a).unwrap()].radius;
+    let expected_value = 500.0 - intersection_radius * 2.0;
+    assert!((length - expected_value).abs() < 0.5, "expected {expected_value}, got {length}");
 }
 
 #[test]
@@ -193,7 +161,7 @@ fn delete_road_missing_returns_err() {
 fn update_road_changes_speed_limit() {
     let (mut map, a, b) = make_two_node_map();
     let road_id = add_road(&mut map, a, b, 1, 20.0).unwrap();
-    update_road(&mut map, road_id, 35.0).unwrap();
+    update_road(&mut map, road_id, 35.0, Some(1)).unwrap();
     let edge = map.find_edge(road_id).unwrap();
     assert!((map.graph[edge].speed_limit - 35.0).abs() < 1e-4);
 }
@@ -202,7 +170,7 @@ fn update_road_changes_speed_limit() {
 fn update_road_clamps_to_max_speed() {
     let (mut map, a, b) = make_two_node_map();
     let road_id = add_road(&mut map, a, b, 1, 20.0).unwrap();
-    update_road(&mut map, road_id, 9999.0).unwrap();
+    update_road(&mut map, road_id, 9999.0, Some(1)).unwrap();
     let edge = map.find_edge(road_id).unwrap();
     assert_eq!(map.graph[edge].speed_limit, MAX_SPEED);
 }
@@ -210,7 +178,7 @@ fn update_road_clamps_to_max_speed() {
 #[test]
 fn update_road_missing_returns_err() {
     let mut map = Map::new();
-    assert!(update_road(&mut map, 9999, 30.0).is_err());
+    assert!(update_road(&mut map, 9999, 30.0, Some(1)).is_err());
 }
 
 // ---- add_roundabout ----

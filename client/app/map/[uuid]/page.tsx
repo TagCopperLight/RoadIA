@@ -8,7 +8,7 @@ function Header() {
         <div className="flex items-center w-full p-[15px]">
             <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} loading='eager' />
             <div className='flex flex-col pl-[15px]'>
-                <p className='text-[17px]'>Lannion - 2025</p>
+                <p className='text-[17px]'>Lannion - 2026</p>
                 <div className='flex text-[15px] font-medium'>
                     {MENU_ITEMS.map((item) => (
                         <p key={item} className='mr-[14px] cursor-pointer hover:opacity-50 transition-opacity select-none'>
