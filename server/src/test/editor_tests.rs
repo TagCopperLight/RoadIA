@@ -1,5 +1,5 @@
 use crate::map::editor::{
-    add_node, add_road, add_roundabout, delete_node, delete_road, move_node, update_node,
+    add_node, add_road, add_roundabout, delete_node, delete_road, update_node,
     update_road,
 };
 use crate::map::intersection::{build_intersections, IntersectionKind};
@@ -76,42 +76,6 @@ fn delete_node_updates_swapped_index() {
     assert!(map.find_node(c_id).is_some(), "C should still exist after swap-fix");
     // B must be gone
     assert!(map.find_node(b_id).is_none(), "B should be removed");
-}
-
-// ---- move_node ----
-
-#[test]
-fn move_node_updates_coordinates() {
-    let (mut map, a, _b) = make_two_node_map();
-    move_node(&mut map, a, 99.0, 77.0).unwrap();
-    let ni = map.find_node(a).unwrap();
-    let node = &map.graph[ni];
-    assert!((node.center_coordinates.x - 99.0).abs() < 1e-4);
-    assert!((node.center_coordinates.y - 77.0).abs() < 1e-4);
-}
-
-#[test]
-fn move_node_recalculates_connected_road_length() {
-    let (mut map, a, b) = make_two_node_map();
-    // Initial length: dist((0,0),(300,400)) = 500.0
-    add_road(&mut map, a, b, 1, 30.0).unwrap();
-
-    // Move b to (0, 100) → center-to-center = 100, boundary-to-boundary = 98 (two radii of 1)
-    move_node(&mut map, b, 0.0, 100.0).unwrap();
-
-    let ni_a = map.find_node(a).unwrap();
-    let ni_b = map.find_node(b).unwrap();
-    let edge = map.graph.find_edge(ni_a, ni_b).unwrap();
-    let new_length = map.graph[edge].length;
-    let intersection_radius = map.graph[map.find_node(a).unwrap()].radius;
-    let expected_value = 100.0 - intersection_radius * 2.0;
-    assert!((new_length - expected_value).abs() < 0.5, "expected {expected_value}, got {new_length}");
-}
-
-#[test]
-fn move_node_missing_returns_err() {
-    let mut map = Map::new();
-    assert!(move_node(&mut map, 9999, 0.0, 0.0).is_err());
 }
 
 // ---- update_node ----

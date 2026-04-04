@@ -1,5 +1,4 @@
 import { memo } from 'react';
-import { FederatedPointerEvent } from 'pixi.js';
 import { MapNode } from '../types';
 
 const LINK_TYPE_COLORS: Record<string, number> = {
@@ -14,11 +13,8 @@ interface IntersectionProps {
 	isSelected?: boolean;
 	isEditMode?: boolean;
 	isPendingFrom?: boolean;
-	isMovable?: boolean;
 	onSelect?: () => void;
 	onAddRoad?: () => void;
-	onDragStart?: (id: number) => void;
-	onDragCancel?: () => void;
 }
 
 export const Intersection = memo(function Intersection({
@@ -26,33 +22,17 @@ export const Intersection = memo(function Intersection({
 	isSelected,
 	isEditMode,
 	isPendingFrom,
-	isMovable,
 	onSelect,
 	onAddRoad,
-	onDragStart,
-	onDragCancel,
 }: IntersectionProps) {
-	const isInteractive = isEditMode && (onSelect || onAddRoad || isMovable);
+	const isInteractive = isEditMode && (onSelect || onAddRoad);
 	const handleTap = onSelect ?? onAddRoad;
-
-	const handlePointerDown = (e: FederatedPointerEvent) => {
-		if (!isMovable || !onDragStart) return;
-		e.stopPropagation(); // prevent viewport from starting a pan
-		onDragStart(node.id);
-	};
-
-	// If the button is released while still over the intersection, cancel the drag
-	const handlePointerUp = () => {
-		onDragCancel?.();
-	};
 
 	return (
 		<pixiGraphics
 			eventMode={isInteractive ? 'static' : 'none'}
-			cursor={isMovable ? 'grab' : isInteractive ? 'pointer' : 'default'}
-			onPointerTap={isMovable ? undefined : handleTap}
-			onPointerDown={isMovable ? handlePointerDown : undefined}
-			onPointerUp={isMovable ? handlePointerUp : undefined}
+			cursor={isInteractive ? 'pointer' : 'default'}
+			onPointerTap={handleTap}
 			draw={(g) => {
 				g.clear();
 				g.position.set(node.x, node.y);
@@ -88,7 +68,7 @@ export const Intersection = memo(function Intersection({
 				if (isSelected && node.internal_lanes && node.internal_lanes.length > 0) {
 					for (const lane of node.internal_lanes) {
 						const color = LINK_TYPE_COLORS[lane.link_type] ?? 0x22c55e;
-						g.setStrokeStyle({ color, width: 2, alpha: 0.85 });
+						g.setStrokeStyle({ color, width: 1, alpha: 0.85 });
 						g.moveTo(lane.entry[0] - node.x, lane.entry[1] - node.y);
 						g.lineTo(lane.exit[0] - node.x, lane.exit[1] - node.y);
 						g.stroke();

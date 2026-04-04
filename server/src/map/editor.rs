@@ -1,5 +1,4 @@
 use petgraph::visit::EdgeRef;
-use petgraph::Direction;
 
 use crate::map::intersection::{build_intersections, IntersectionKind};
 use crate::map::model::Map;
@@ -30,39 +29,6 @@ pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {
     Ok(())
 }
 
-pub fn move_node(map: &mut Map, id: u32, x: f32, y: f32) -> Result<(), String> {
-    let idx = map
-        .node_index_map
-        .get(&id)
-        .copied()
-        .ok_or_else(|| format!("Node {} not found", id))?;
-
-    map.graph[idx].center_coordinates.x = x;
-    map.graph[idx].center_coordinates.y = y;
-
-    // Recalculate lengths of all connected edges.
-    let edge_indices: Vec<_> = map
-        .graph
-        .edges_directed(idx, Direction::Incoming)
-        .chain(map.graph.edges_directed(idx, Direction::Outgoing))
-        .map(|e| e.id())
-        .collect();
-
-    for edge_idx in edge_indices {
-        let (a, b) = map.graph.edge_endpoints(edge_idx).unwrap();
-        let ax = map.graph[a].center_coordinates.x;
-        let ay = map.graph[a].center_coordinates.y;
-        let bx = map.graph[b].center_coordinates.x;
-        let by = map.graph[b].center_coordinates.y;
-        let dx = bx - ax;
-        let dy = by - ay;
-        let ra = map.graph[a].radius;
-        let rb = map.graph[b].radius;
-        map.graph[edge_idx].length = ((dx * dx + dy * dy).sqrt() - ra - rb).max(1.0);
-    }
-
-    Ok(())
-}
 
 pub fn update_node(
     map: &mut Map,

@@ -4,7 +4,8 @@ import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, EditTool } from './EditModeContext';
 
 // Inline SVG icons
-function IconNavigate() {
+
+function IconSelect() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M4 0l16 12-7 2-4 8z" />
@@ -12,23 +13,6 @@ function IconNavigate() {
     );
 }
 
-function IconSelect() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M5 3l14 9-7 2-3 7z" />
-            <path d="M14 14l4 4" strokeLinecap="round" />
-        </svg>
-    );
-}
-
-function IconMove() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 2v20M2 12h20" strokeLinecap="round" />
-            <path d="M9 5l3-3 3 3M9 19l3 3 3-3M5 9l-3 3 3 3M19 9l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
-}
 
 function IconAddNode() {
     return (
@@ -172,16 +156,8 @@ export default function Toolbar() {
                 <div className="flex items-center">
                     {mode === 'edit' ? (
                         <>
-                            <ToolButton onClick={() => selectTool('navigate')} isSelected={editTool === 'navigate'} title="Navigate">
-                                <IconNavigate />
-                            </ToolButton>
-                            <Separator />
                             <ToolButton onClick={() => selectTool('select')} isSelected={editTool === 'select'} title="Select">
                                 <IconSelect />
-                            </ToolButton>
-                            <Separator />
-                            <ToolButton onClick={() => selectTool('move')} isSelected={editTool === 'move'} title="Move">
-                                <IconMove />
                             </ToolButton>
                             <Separator />
                             <ToolButton onClick={() => selectTool('addNode')} isSelected={editTool === 'addNode'} title="Add Node">

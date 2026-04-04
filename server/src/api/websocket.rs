@@ -30,7 +30,6 @@ pub enum ClientPacket {
     ResetSimulation {},
     AddNode { x: f32, y: f32, kind: String },
     DeleteNode { id: u32 },
-    MoveNode { id: u32, x: f32, y: f32 },
     UpdateNode { id: u32, kind: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
@@ -260,24 +259,6 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::MoveNode { id, x, y } => {
-            if instance.controller.is_running() {
-                send_edit_error(socket, "Stop simulation before editing the map").await;
-                return;
-            }
-            let mut eng = instance.engine.lock().await;
-            match editor::move_node(&mut eng.config.map, id, x, y) {
-                Ok(()) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
-                }
-                Err(e) => {
-                    drop(eng);
-                    send_edit_error(socket, &e).await;
-                }
-            }
-        }
 
         ClientPacket::UpdateNode { id, kind } => {
             if instance.controller.is_running() {
