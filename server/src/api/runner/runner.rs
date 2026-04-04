@@ -107,8 +107,6 @@ impl SimulationInstance {
                         let mut eng = instance.engine.lock().await;
                         eng.step();
                         eng.current_time += eng.config.time_step;
-                        eng.step();
-                        eng.current_time += eng.config.time_step;
                         let vehicles = eng.vehicles
                             .iter()
                             .map(|v| serialize_vehicle(v, &eng.config.map))
@@ -166,7 +164,7 @@ impl SimulationInstance {
         match create_osm_map(map_path) {
             Ok(map) => {
                 println!("Successfully loaded Lannion map from OSM!");
-                let vehicles = create_random_vehicles(&map, 50);
+                let vehicles = create_random_vehicles(&map, 500);
                 Self::new(map, vehicles)
             }
             Err(e) => {
