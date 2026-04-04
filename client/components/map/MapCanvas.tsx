@@ -110,27 +110,9 @@ export function MapCanvas({
 	const isEditMode = mode === 'edit';
 	const backgroundActive = isEditMode && editTool === 'addNode';
 
-	return (
-		<pixiCustomViewport
-			events={app.renderer.events}
-			drag
-			pinch
-			wheel={{ trackpadPinch: true, percent: 2 }}
-			passiveWheel={false}
-		>
-			<pixiContainer>
-				{/* Background hit area — addNode clicks + move-tool drag tracking */}
-				<pixiGraphics
-					draw={(g) => {
-						g.clear();
-						g.setFillStyle({ color: 0x000000, alpha: 0 });
-						g.rect(-100000, -100000, 200000, 200000);
-						g.fill();
-					}}
-					eventMode={backgroundActive ? 'static' : 'none'}
-					onPointerTap={handleBackgroundTap}
-				/>
-
+	const staticMapElements = useMemo(() => {
+		return (
+			<>
 				{/* Pass 1: Roads */}
 				{Array.from(edgePairs.values()).map(({ canonical, reverse }) => {
 					const startNode = nodeMap.get(canonical.from);
@@ -192,6 +174,31 @@ export function MapCanvas({
 						/>
 					);
 				})}
+			</>
+		);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights]);
+
+	return (
+		<pixiCustomViewport
+			events={app.renderer.events}
+			drag
+			pinch
+			wheel={{ trackpadPinch: true, percent: 2 }}
+			passiveWheel={false}
+		>
+			<pixiContainer>
+        {/* Background hit area — addNode clicks + move-tool drag tracking */}
+				<pixiGraphics
+					draw={(g) => {
+						g.clear();
+						g.setFillStyle({ color: 0x000000, alpha: 0 });
+						g.rect(-100000, -100000, 200000, 200000);
+						g.fill();
+					}}
+					eventMode={backgroundActive ? 'static' : 'none'}
+					onPointerTap={handleBackgroundTap}
+				/>
+				{staticMapElements}
 
 				{/* Pass 4: Vehicles (interpolated) */}
 				{displayVehicles.map((vehicle) => (
