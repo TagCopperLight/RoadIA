@@ -66,6 +66,17 @@ pub struct LinkState {
 }
 
 pub fn build_intersections(map: &mut Map) {
+    map.next_link_id = 0;
+
+    for node in map.graph.node_weights_mut() {
+        node.internal_lanes.clear();
+    }
+    for edge in map.graph.edge_weights_mut() {
+        for lane in &mut edge.lanes {
+            lane.links.clear();
+        }
+    }
+
     let junction_nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
     for node in junction_nodes {
         build_intersection(map, node);

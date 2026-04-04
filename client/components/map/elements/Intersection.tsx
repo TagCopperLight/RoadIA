@@ -68,10 +68,33 @@ export const Intersection = memo(function Intersection({
 				if (isSelected && node.internal_lanes && node.internal_lanes.length > 0) {
 					for (const lane of node.internal_lanes) {
 						const color = LINK_TYPE_COLORS[lane.link_type] ?? 0x22c55e;
-						g.setStrokeStyle({ color, width: 1, alpha: 0.85 });
-						g.moveTo(lane.entry[0] - node.x, lane.entry[1] - node.y);
-						g.lineTo(lane.exit[0] - node.x, lane.exit[1] - node.y);
+						const ex = lane.entry[0] - node.x;
+						const ey = lane.entry[1] - node.y;
+						const exitX = lane.exit[0] - node.x;
+						const exitY = lane.exit[1] - node.y;
+
+						g.setStrokeStyle({ color, width: 0.5, alpha: 0.85 });
+						g.moveTo(ex, ey);
+						g.lineTo(exitX, exitY);
 						g.stroke();
+
+						// Arrowhead at exit point
+						const ddx = exitX - ex;
+						const ddy = exitY - ey;
+						const len = Math.sqrt(ddx * ddx + ddy * ddy);
+						if (len > 0) {
+							const ux = ddx / len;
+							const uy = ddy / len;
+							const px = -uy;
+							const py = ux;
+							const arrowLen = 2;
+							const arrowHalf = 1;
+							g.setFillStyle({ color, alpha: 0.85 });
+							g.moveTo(exitX, exitY);
+							g.lineTo(exitX - ux * arrowLen + px * arrowHalf, exitY - uy * arrowLen + py * arrowHalf);
+							g.lineTo(exitX - ux * arrowLen - px * arrowHalf, exitY - uy * arrowLen - py * arrowHalf);
+							g.fill();
+						}
 					}
 				}
 			}}

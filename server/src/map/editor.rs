@@ -1,5 +1,3 @@
-use petgraph::visit::EdgeRef;
-
 use crate::map::intersection::{build_intersections, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::road::{Lane, LinkType};
@@ -25,6 +23,8 @@ pub fn delete_node(map: &mut Map, id: u32) -> Result<(), String> {
         let swapped_id = swapped.id;
         map.node_index_map.insert(swapped_id, idx);
     }
+
+    build_intersections(map);
 
     Ok(())
 }
@@ -80,6 +80,8 @@ pub fn add_road(
 
     let road_id = map.add_road(from_id, to_id, lane_count, speed_limit, length);
 
+    build_intersections(map);
+
     Ok(road_id)
 }
 
@@ -89,6 +91,8 @@ pub fn delete_road(map: &mut Map, id: u32) -> Result<(), String> {
         .ok_or_else(|| format!("Road {} not found", id))?;
 
     map.graph.remove_edge(edge_idx);
+
+    build_intersections(map);
 
     Ok(())
 }
@@ -124,9 +128,7 @@ pub fn update_road(
         }
     }
 
-    if lane_count.is_some() {
-        build_intersections(map);
-    }
+    build_intersections(map);
 
     Ok(())
 }
