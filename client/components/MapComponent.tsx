@@ -8,6 +8,8 @@ import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
 import ScoreModal from './ScoreModal';
 import PropertiesPanel from './PropertiesPanel';
+import BudgetHUD from './BudgetHUD';
+import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
 
 export default function MapComponent() {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
@@ -116,6 +118,12 @@ export default function MapComponent() {
 	}
 
 	const handleAddNode = useCallback((x: number, y: number) => {
+		if (mapData) {
+			if (calculateCost(mapData) + estimateNodeCost('Intersection') > MAX_BUDGET) {
+				setEditError('Budget exceeded: not enough funds to add this intersection.');
+				return;
+			}
+		}
 		// Snapshot current node IDs before the add
 		prevNodeIdsRef.current = new Set(mapData?.nodes.map(n => n.id) ?? []);
 		pendingNewNodeRef.current = true;
@@ -126,10 +134,21 @@ export default function MapComponent() {
 		if (pendingRoadFrom === null) {
 			setPendingRoadFrom(nodeId);
 		} else if (pendingRoadFrom !== nodeId) {
+			if (mapData) {
+				const fromNode = mapData.nodes.find(n => n.id === pendingRoadFrom);
+				const toNode   = mapData.nodes.find(n => n.id === nodeId);
+				if (fromNode && toNode) {
+					if (calculateCost(mapData) + estimateRoadCost(fromNode, toNode, 2) > MAX_BUDGET) {
+						setEditError('Budget exceeded: not enough funds to build this road.');
+						setPendingRoadFrom(null);
+						return;
+					}
+				}
+			}
 			ws?.send('addRoad', { from_id: pendingRoadFrom, to_id: nodeId, lane_count: 2, speed_limit: 13.9 });
 			setPendingRoadFrom(null);
 		}
-	}, [ws, pendingRoadFrom, setPendingRoadFrom]);
+	}, [ws, pendingRoadFrom, setPendingRoadFrom, mapData]);
 
 	const handleSelectNode = useCallback((id: number) => {
 		setSelectedElement({ type: 'node', id });
@@ -161,6 +180,7 @@ export default function MapComponent() {
 						onAddRoad={handleAddRoad}
 					/>
 				)}
+				<BudgetHUD mapData={mapData} />
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 					<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 				</div>
