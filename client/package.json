@@ -14,8 +14,7 @@
     "pixi-viewport": "^6.0.3",
     "pixi.js": "^8.17.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "roadia-root": "file:.."
+    "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
