@@ -126,19 +126,12 @@ impl SimulationEngine {
                 }
             }
             if !overlapped.is_empty() {
-                // collect details for printing
-                let mut details: Vec<String> = Vec::new();
-                for &i in &overlapped {
-                    let v = &self.vehicles[i];
-                    details.push(format!("id={} pos={:.2} len={:.2}", v.id, v.position_on_lane, v.spec.length));
-                }
-                let detail_str = details.join(", ");
                 match lane {
-                    LaneId::Internal(jid, ilid) => {
-                        println!("[overlap] Internal(junction={}, il={}) => {} vehicles overlapping: {}", jid, ilid, overlapped.len(), detail_str);
+                    LaneId::Internal(_jid, _ilid) => {
+                        // overlap logging suppressed
                     }
-                    LaneId::Normal(edge, lid) => {
-                        println!("[overlap] Normal(edge={}, lane={}) => {} vehicles overlapping: {}", edge.index(), lid, overlapped.len(), detail_str);
+                    LaneId::Normal(_edge, _lid) => {
+                        // overlap logging suppressed
                     }
                 }
             }
