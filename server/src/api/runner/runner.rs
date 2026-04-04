@@ -124,6 +124,7 @@ impl SimulationInstance {
 
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step);
+                    println!("Elapsed: {:?}, Step duration: {:?}", elapsed, step_duration);
                   
                     {
                         let engine = instance.engine.lock().await;
