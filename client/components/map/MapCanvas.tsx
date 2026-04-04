@@ -20,7 +20,6 @@ interface MapCanvasProps {
 	onSelectRoad: (canonicalId: number, reverseId?: number) => void;
 	onAddNode: (x: number, y: number) => void;
 	onAddRoad: (nodeId: number) => void;
-	onMoveNode: (id: number, x: number, y: number) => void;
 }
 
 export function MapCanvas({
@@ -35,7 +34,6 @@ export function MapCanvas({
 	onSelectRoad,
 	onAddNode,
 	onAddRoad,
-	onMoveNode,
 }: MapCanvasProps) {
 	const { app } = useApplication();
 
@@ -43,10 +41,6 @@ export function MapCanvas({
 	const targetRef = useRef<Map<number, VehicleData>>(new Map());
 	const displayRef = useRef<Map<number, VehicleData>>(new Map());
 	const [displayVehicles, setDisplayVehicles] = useState<VehicleData[]>([]);
-
-	// Move tool drag state
-	const draggingRef = useRef<{ nodeId: number } | null>(null);
-	const [dragOverride, setDragOverride] = useState<{ nodeId: number; x: number; y: number } | null>(null);
 
 	// Update targets when new WS data arrives
 	useEffect(() => {
@@ -113,41 +107,8 @@ export function MapCanvas({
 		onAddNode(local.x, local.y);
 	};
 
-	const handleBackgroundMove = (e: FederatedPointerEvent) => {
-		if (!draggingRef.current) return;
-		// Cancel if the primary button is no longer held (e.g. released over an intersection)
-		if (!(e.buttons & 1)) {
-			draggingRef.current = null;
-			setDragOverride(null);
-			return;
-		}
-		const pos = e.getLocalPosition(e.currentTarget);
-		setDragOverride({ nodeId: draggingRef.current.nodeId, x: pos.x, y: pos.y });
-	};
-
-	const handleBackgroundUp = (e: FederatedPointerEvent) => {
-		if (!draggingRef.current) return;
-		// Only send the packet if the node was actually dragged (pointer moved)
-		if (dragOverride !== null) {
-			const pos = e.getLocalPosition(e.currentTarget);
-			onMoveNode(draggingRef.current.nodeId, pos.x, pos.y);
-		}
-		draggingRef.current = null;
-		setDragOverride(null);
-	};
-
-	const handleDragStart = (nodeId: number) => {
-		draggingRef.current = { nodeId };
-	};
-
-	const handleDragCancel = () => {
-		draggingRef.current = null;
-		setDragOverride(null);
-	};
-
 	const isEditMode = mode === 'edit';
-	// Background is active for addNode clicks and for tracking move-tool drags
-	const backgroundActive = isEditMode && (editTool === 'addNode' || editTool === 'move');
+	const backgroundActive = isEditMode && editTool === 'addNode';
 
 	return (
 		<pixiCustomViewport
@@ -168,8 +129,6 @@ export function MapCanvas({
 					}}
 					eventMode={backgroundActive ? 'static' : 'none'}
 					onPointerTap={handleBackgroundTap}
-					onPointerMove={handleBackgroundMove}
-					onPointerUp={handleBackgroundUp}
 				/>
 
 				{/* Pass 1: Roads */}
@@ -198,25 +157,19 @@ export function MapCanvas({
 				{data.nodes.map((node) => {
 					const isSelected = selectedElement?.type === 'node' && selectedElement.id === node.id;
 					const isPendingFrom = pendingRoadFrom === node.id;
-					const displayNode = dragOverride?.nodeId === node.id
-						? { ...node, x: dragOverride.x, y: dragOverride.y }
-						: node;
 					return (
 						<Intersection
 							key={`node-${node.id}`}
-							node={displayNode}
+							node={node}
 							isSelected={isSelected}
 							isEditMode={isEditMode}
 							isPendingFrom={isPendingFrom}
-							isMovable={isEditMode && editTool === 'move'}
 							onSelect={isEditMode && editTool === 'select'
 								? () => onSelectNode(node.id)
 								: undefined}
 							onAddRoad={isEditMode && editTool === 'addRoad'
 								? () => onAddRoad(node.id)
 								: undefined}
-							onDragStart={handleDragStart}
-							onDragCancel={handleDragCancel}
 						/>
 					);
 				})}

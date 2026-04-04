@@ -139,11 +139,7 @@ export default function MapComponent() {
 		setSelectedElement({ type: 'road', canonicalId, reverseId });
 	}, [setSelectedElement]);
 
-	const handleMoveNode = useCallback((id: number, x: number, y: number) => {
-		ws?.send('moveNode', { id, x, y });
-	}, [ws]);
-
-	// In edit mode, show no vehicles
+// In edit mode, show no vehicles
 	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
 	return (
@@ -163,7 +159,6 @@ export default function MapComponent() {
 						onSelectRoad={handleSelectRoad}
 						onAddNode={handleAddNode}
 						onAddRoad={handleAddRoad}
-						onMoveNode={handleMoveNode}
 					/>
 				)}
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">

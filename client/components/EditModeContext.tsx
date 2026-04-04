@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, ReactNode, Dispatch, SetStateAction } from 'react';
 
 export type AppMode = "edit" | "simulation";
-export type EditTool = "navigate" | "select" | "move" | "addNode" | "addRoad";
+export type EditTool = "select" | "addNode" | "addRoad";
 export type SimState = "stopped" | "running" | "paused";
 export type SelectedElement =
     | { type: "node"; id: number }
@@ -29,7 +29,7 @@ const EditModeContext = createContext<EditModeContextType | null>(null);
 
 export function EditModeProvider({ children }: { children: ReactNode }) {
     const [mode, setMode] = useState<AppMode>("edit");
-    const [editTool, setEditTool] = useState<EditTool>("navigate");
+    const [editTool, setEditTool] = useState<EditTool>("select");
     const [simState, setSimState] = useState<SimState>("stopped");
     const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
     const [pendingRoadFrom, setPendingRoadFrom] = useState<number | null>(null);
