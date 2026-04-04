@@ -18,7 +18,7 @@ interface PropsPanelProps {
     onSendPacket: (id: string, data: Record<string, unknown>) => void;
 }
 
-function NodePanel({ node, onSendPacket }: { node: MapNode; onSendPacket: PropsPanelProps['onSendPacket'] }) {
+function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacket: PropsPanelProps['onSendPacket']; onClose: () => void }) {
     const [kind, setKind] = useState(node.kind);
     const [prevKind, setPrevKind] = useState(node.kind);
     if (node.kind !== prevKind) {
@@ -33,6 +33,11 @@ function NodePanel({ node, onSendPacket }: { node: MapNode; onSendPacket: PropsP
 
     const lanes = node.internal_lanes ?? [];
 
+    const handleDelete = () => {
+        onSendPacket('deleteNode', { id: node.id });
+        onClose();
+    };
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
@@ -45,7 +50,7 @@ function NodePanel({ node, onSendPacket }: { node: MapNode; onSendPacket: PropsP
                 <select
                     value={kind}
                     onChange={e => handleKindChange(e.target.value as MapNode['kind'])}
-                    className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-blue-500"
+                    className="bg-black text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200"
                 >
                     <option value="Intersection">Intersection</option>
                     <option value="Habitation">Habitation</option>
@@ -85,6 +90,13 @@ function NodePanel({ node, onSendPacket }: { node: MapNode; onSendPacket: PropsP
                     </div>
                 </div>
             )}
+
+            <button
+                onClick={handleDelete}
+                className="mt-1 bg-red-900 hover:bg-red-800 text-white text-xs rounded px-3 py-1.5 border border-red-700 transition-colors w-full"
+            >
+                Delete Node
+            </button>
         </div>
     );
 }
@@ -93,10 +105,12 @@ function RoadPanel({
     canonical,
     reverse,
     onSendPacket,
+    onClose,
 }: {
     canonical: MapEdge;
     reverse?: MapEdge;
     onSendPacket: PropsPanelProps['onSendPacket'];
+    onClose: () => void;
 }) {
     // Display in km/h; backend uses m/s
     const toKmh = (ms: number) => Math.round(ms * 3.6);
@@ -147,13 +161,29 @@ function RoadPanel({
         });
     };
 
+    const handleSwapDirection = () => {
+        onSendPacket('deleteRoad', { id: canonical.id });
+        onSendPacket('addRoad', {
+            from_id: canonical.to,
+            to_id: canonical.from,
+            lane_count: canonical.lane_count,
+            speed_limit: canonical.speed_limit,
+        });
+        onClose();
+    };
+
+    const handleDelete = () => {
+        onSendPacket('deleteRoad', { id: canonical.id });
+        if (reverse) onSendPacket('deleteRoad', { id: reverse.id });
+        onClose();
+    };
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 uppercase tracking-wide">Direction</label>
                 <span className="text-white text-sm">
                     Node {canonical.from} → Node {canonical.to}
-                    {reverse && <span className="text-gray-400"> (two-way)</span>}
                 </span>
             </div>
 
@@ -167,7 +197,7 @@ function RoadPanel({
                     onChange={e => setLaneCount(Number(e.target.value))}
                     onBlur={handleLaneCountBlur}
                     onKeyDown={e => { if (e.key === 'Enter') handleLaneCountBlur(); }}
-                    className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-blue-500 w-24"
+                    className="bg-black text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 w-24"
                 />
             </div>
 
@@ -186,7 +216,7 @@ function RoadPanel({
                     onChange={e => setSpeedKmh(Number(e.target.value))}
                     onBlur={handleSpeedBlur}
                     onKeyDown={e => { if (e.key === 'Enter') handleSpeedBlur(); }}
-                    className="bg-gray-700 text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-blue-500 w-24"
+                    className="bg-black text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 w-24"
                 />
             </div>
 
@@ -195,19 +225,34 @@ function RoadPanel({
                 {reverse ? (
                     <button
                         onClick={handleMakeOneWay}
-                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs rounded px-3 py-1.5 border border-gray-600 transition-colors text-left"
+                        className="bg-black hover:bg-gray-800 text-white text-xs rounded px-3 py-1.5 border border-gray-600 transition-colors text-left"
                     >
                         Make one-way
                     </button>
                 ) : (
-                    <button
-                        onClick={handleMakeTwoWay}
-                        className="bg-gray-700 hover:bg-gray-600 text-white text-xs rounded px-3 py-1.5 border border-gray-600 transition-colors text-left"
-                    >
-                        Make two-way
-                    </button>
+                    <div className="flex flex-col gap-1">
+                        <button
+                            onClick={handleMakeTwoWay}
+                            className="bg-black hover:bg-gray-800 text-white text-xs rounded px-3 py-1.5 border border-gray-600 transition-colors text-left"
+                        >
+                            Make two-way
+                        </button>
+                        <button
+                            onClick={handleSwapDirection}
+                            className="bg-black hover:bg-gray-800 text-white text-xs rounded px-3 py-1.5 border border-gray-600 transition-colors text-left"
+                        >
+                            Swap direction ⇄
+                        </button>
+                    </div>
                 )}
             </div>
+
+            <button
+                onClick={handleDelete}
+                className="mt-1 bg-red-900 hover:bg-red-800 text-white text-xs rounded px-3 py-1.5 border border-red-700 transition-colors w-full"
+            >
+                Delete Road
+            </button>
         </div>
     );
 }
@@ -220,7 +265,7 @@ export default function PropertiesPanel({ selectedElement, mapData, onClose, onS
         const node = mapData.nodes.find(n => n.id === selectedElement.id);
         if (!node) return null;
         title = 'Intersection';
-        content = <NodePanel node={node} onSendPacket={onSendPacket} />;
+        content = <NodePanel node={node} onSendPacket={onSendPacket} onClose={onClose} />;
     } else {
         const canonical = mapData.edges.find(e => e.id === selectedElement.canonicalId);
         if (!canonical) return null;
@@ -228,13 +273,13 @@ export default function PropertiesPanel({ selectedElement, mapData, onClose, onS
             ? mapData.edges.find(e => e.id === selectedElement.reverseId)
             : undefined;
         title = reverse ? 'Road (Two-way)' : 'Road (One-way)';
-        content = <RoadPanel canonical={canonical} reverse={reverse} onSendPacket={onSendPacket} />;
+        content = <RoadPanel canonical={canonical} reverse={reverse} onSendPacket={onSendPacket} onClose={onClose} />;
     }
 
     return (
-        <div className="flex-shrink-0 w-64 ml-3 bg-gray-800 rounded-[10px] overflow-hidden flex flex-col">
+        <div className="flex-shrink-0 w-64 ml-3 bg-black rounded-[10px] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-600">
                 <span className="text-white font-medium text-sm">{title}</span>
                 <button
                     onClick={onClose}
