@@ -177,17 +177,12 @@ impl SimulationEngine {
                     continue; // committed to crossing
                 }
                 
-                // Only rebuild plan occasionally to save CPU
-                if self.current_time - self.vehicles[vidx].last_plan_time > 0.5 {
-                    self.rebuild_drive_plan(vidx);
-                }
+                self.rebuild_drive_plan(vidx);
             }
         }
     }
 
     fn rebuild_drive_plan(&mut self, vidx: usize) {
-        self.vehicles[vidx].last_plan_time = self.current_time;
-        
         let v = &self.vehicles[vidx];
         let a_max = v.spec.max_acceleration;
         let d_max = v.spec.comfortable_deceleration;
