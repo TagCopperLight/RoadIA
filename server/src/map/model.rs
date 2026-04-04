@@ -44,7 +44,7 @@ impl Map {
         let id = self.next_node_id;
         self.next_node_id += 1;
         
-        let intersection = Intersection::new(id, kind, Coordinates { x, y }, 1.0);
+        let intersection = Intersection::new(id, kind, Coordinates { x, y }, 5.0);
         let idx = self.graph.add_node(intersection);
         self.node_index_map.insert(id, idx);
         id

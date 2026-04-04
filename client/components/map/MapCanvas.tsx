@@ -1,21 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApplication } from '@pixi/react';
+import { FederatedPointerEvent } from 'pixi.js';
 import { MapData, MapEdge, VehicleData, TrafficLightData } from './types';
+import { AppMode, EditTool, SelectedElement } from '../EditModeContext';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
 import { Vehicle } from './elements/Vehicle';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
 
+interface MapCanvasProps {
+	data: MapData;
+	vehicles: VehicleData[];
+	trafficLights: Map<number, TrafficLightData>;
+	mode: AppMode;
+	editTool: EditTool;
+	selectedElement: SelectedElement;
+	pendingRoadFrom: number | null;
+	onSelectNode: (id: number) => void;
+	onSelectRoad: (canonicalId: number, reverseId?: number) => void;
+	onAddNode: (x: number, y: number) => void;
+	onAddRoad: (nodeId: number) => void;
+}
 
 export function MapCanvas({
 	data,
 	vehicles,
 	trafficLights,
-}: {
-	data: MapData;
-	vehicles: VehicleData[];
-	trafficLights: Map<number, TrafficLightData>;
-}) {
+	mode,
+	editTool,
+	selectedElement,
+	pendingRoadFrom,
+	onSelectNode,
+	onSelectRoad,
+	onAddNode,
+	onAddRoad,
+}: MapCanvasProps) {
 	const { app } = useApplication();
 
 	// Interpolation: targetRef holds raw WS positions, displayRef holds smoothed positions
@@ -81,6 +100,16 @@ export function MapCanvas({
 		return map;
 	}, [data.edges]);
 
+	// Background overlay handles addNode clicks and move-tool drag tracking
+	const handleBackgroundTap = (e: FederatedPointerEvent) => {
+		if (mode !== 'edit' || editTool !== 'addNode') return;
+		const local = e.getLocalPosition(e.currentTarget);
+		onAddNode(local.x, local.y);
+	};
+
+	const isEditMode = mode === 'edit';
+	const backgroundActive = isEditMode && editTool === 'addNode';
+
 	const staticMapElements = useMemo(() => {
 		return (
 			<>
@@ -89,6 +118,7 @@ export function MapCanvas({
 					const startNode = nodeMap.get(canonical.from);
 					const endNode = nodeMap.get(canonical.to);
 					if (!startNode || !endNode) return null;
+					const isSelected = selectedElement?.type === 'road' && selectedElement.canonicalId === canonical.id;
 					return (
 						<Road
 							key={`road-${canonical.id}`}
@@ -96,14 +126,35 @@ export function MapCanvas({
 							reverseEdge={reverse}
 							startNode={startNode}
 							endNode={endNode}
+							isSelected={isSelected}
+							isEditMode={isEditMode}
+							onSelect={isEditMode && editTool === 'select'
+								? () => onSelectRoad(canonical.id, reverse?.id)
+								: undefined}
 						/>
 					);
 				})}
 
 				{/* Pass 2: Intersections */}
-				{data.nodes.map((node) => (
-					<Intersection key={`node-${node.id}`} node={node} />
-				))}
+				{data.nodes.map((node) => {
+					const isSelected = selectedElement?.type === 'node' && selectedElement.id === node.id;
+					const isPendingFrom = pendingRoadFrom === node.id;
+					return (
+						<Intersection
+							key={`node-${node.id}`}
+							node={node}
+							isSelected={isSelected}
+							isEditMode={isEditMode}
+							isPendingFrom={isPendingFrom}
+							onSelect={isEditMode && editTool === 'select'
+								? () => onSelectNode(node.id)
+								: undefined}
+							onAddRoad={isEditMode && editTool === 'addRoad'
+								? () => onAddRoad(node.id)
+								: undefined}
+						/>
+					);
+				})}
 
 				{/* Pass 3: Traffic Light Indicators */}
 				{data.edges.map((edge, index) => {
@@ -125,7 +176,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom]);
 
 	return (
 		<pixiCustomViewport
@@ -136,6 +187,17 @@ export function MapCanvas({
 			passiveWheel={false}
 		>
 			<pixiContainer>
+        {/* Background hit area — addNode clicks + move-tool drag tracking */}
+				<pixiGraphics
+					draw={(g) => {
+						g.clear();
+						g.setFillStyle({ color: 0x000000, alpha: 0 });
+						g.rect(-100000, -100000, 200000, 200000);
+						g.fill();
+					}}
+					eventMode={backgroundActive ? 'static' : 'none'}
+					onPointerTap={handleBackgroundTap}
+				/>
 				{staticMapElements}
 
 				{/* Pass 4: Vehicles (interpolated) */}
