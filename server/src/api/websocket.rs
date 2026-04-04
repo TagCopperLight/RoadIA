@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::broadcast;
 
 use std::collections::HashSet;
@@ -34,6 +35,7 @@ pub enum ClientPacket {
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
+    SetSpeed { multiplier: u32 },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -222,6 +224,11 @@ async fn handle_client_packet(
             for vehicle in eng.vehicles.iter_mut() {
                 let _ = vehicle.update_path(&map_snapshot);
             }
+        }
+
+        ClientPacket::SetSpeed { multiplier } => {
+            let clamped = multiplier.clamp(1, 20);
+            instance.speed_multiplier.store(clamped, Ordering::Relaxed);
         }
 
         ClientPacket::AddNode { x, y, kind } => {

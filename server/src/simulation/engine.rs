@@ -339,7 +339,7 @@ impl SimulationEngine {
 impl SimulationEngine {
     fn advance_traffic_lights(&mut self) {
         let dt = self.config.time_step;
-        self.green_links.clear();
+        let mut any_transition = false;
 
         for (&ctrl_id, state) in &mut self.traffic_light_states {
             let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
@@ -357,12 +357,24 @@ impl SimulationEngine {
             if state.time_in_phase >= total_duration {
                 state.time_in_phase -= total_duration;
                 state.phase_index = (state.phase_index + 1) % controller.phases.len();
+                any_transition = true;
             }
+        }
 
-            let current_phase = &controller.phases[state.phase_index];
-            if state.time_in_phase < current_phase.green_duration {
-                let ids: Vec<u32> = current_phase.green_link_ids.iter().copied().collect();
-                self.green_links.extend(ids);
+        if any_transition {
+            self.green_links.clear();
+            for (&ctrl_id, state) in &self.traffic_light_states {
+                let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                if controller.phases.is_empty() {
+                    continue;
+                }
+                let current_phase = &controller.phases[state.phase_index];
+                if state.time_in_phase < current_phase.green_duration {
+                    self.green_links.extend(current_phase.green_link_ids.iter().copied());
+                }
             }
         }
     }

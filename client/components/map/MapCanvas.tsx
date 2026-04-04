@@ -77,8 +77,9 @@ export function MapCanvas({
 			if (changed) setDisplayVehicles([...display.values()]);
 		};
 
+		if (!app?.ticker) return;
 		app.ticker.add(tick);
-		return () => { app.ticker.remove(tick); };
+		return () => { app.ticker?.remove(tick); };
 	}, [app]);
 
 	const nodeMap = useMemo(

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use tokio::io;
 use tokio::net::TcpListener;
 use tokio::sync::{Mutex, RwLock};
@@ -55,6 +55,7 @@ pub struct SimulationInstance {
     pub broadcast: broadcast::Sender<ServerPacket>,
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
+    pub speed_multiplier: AtomicU32,
 }
 
 impl SimulationInstance {
@@ -84,6 +85,7 @@ impl SimulationInstance {
             broadcast,
             controller,
             active_connections: AtomicUsize::new(0),
+            speed_multiplier: AtomicU32::new(3),
         });
 
         tokio::spawn({
@@ -102,11 +104,14 @@ impl SimulationInstance {
                     }
 
                     let start = tokio::time::Instant::now();
+                    let multiplier = instance.speed_multiplier.load(Ordering::Relaxed) as usize;
 
                     let (vehicles_data, traffic_lights_data, time_step) = {
                         let mut eng = instance.engine.lock().await;
-                        eng.step();
-                        eng.current_time += eng.config.time_step;
+                        for _ in 0..multiplier {
+                            eng.step();
+                            eng.current_time += eng.config.time_step;
+                        }
                         let vehicles = eng.vehicles
                             .iter()
                             .map(|v| serialize_vehicle(v, &eng.config.map))
@@ -123,7 +128,7 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    let step_duration = Duration::from_secs_f32(time_step);
+                    let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
                   
                     {
                         let engine = instance.engine.lock().await;
