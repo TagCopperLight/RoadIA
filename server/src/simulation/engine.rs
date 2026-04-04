@@ -38,6 +38,7 @@ pub struct SimulationEngine {
     pub green_links: HashSet<u32>,
     pending_transfers: Vec<PendingTransfer>,
     traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
+    link_directory: HashMap<u32, crate::map::road::Link>,
 }
 
 impl Simulation for SimulationEngine {
@@ -49,6 +50,16 @@ impl Simulation for SimulationEngine {
             .keys()
             .map(|&id| (id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 }))
             .collect();
+            
+        let mut link_directory = HashMap::new();
+        for edge in config.map.graph.edge_indices() {
+            for lane in &config.map.graph[edge].lanes {
+                for link in &lane.links {
+                    link_directory.insert(link.id, link.clone());
+                }
+            }
+        }
+        
         Self {
             config,
             vehicles,
@@ -59,6 +70,7 @@ impl Simulation for SimulationEngine {
             pending_transfers: Vec::new(),
             all_vehicles_arrived: false,
             traffic_light_states,
+            link_directory,
         }
     }
 
@@ -164,6 +176,7 @@ impl SimulationEngine {
                 if matches!(self.vehicles[vidx].current_lane, Some(LaneId::Internal(_, _))) {
                     continue; // committed to crossing
                 }
+                
                 self.rebuild_drive_plan(vidx);
             }
         }
@@ -469,14 +482,7 @@ impl SimulationEngine {
     }
 
     fn find_link(&self, link_id: u32) -> Option<crate::map::road::Link> {
-        for edge in self.config.map.graph.edge_indices() {
-            for lane in &self.config.map.graph[edge].lanes {
-                if let Some(lnk) = lane.links.iter().find(|l| l.id == link_id) {
-                    return Some(lnk.clone());
-                }
-            }
-        }
-        None
+        self.link_directory.get(&link_id).cloned()
     }
 
     fn vehicle_ahead_info(&self, vidx: usize, lane_id: LaneId) -> (f32, f32) {

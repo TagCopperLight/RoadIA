@@ -87,7 +87,7 @@ pub struct Vehicle {
     pub registered_link_ids: Vec<u32>,
     pub waiting_time: f32,
     pub impatience: f32,
-
+    
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,

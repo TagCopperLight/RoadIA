@@ -25,7 +25,7 @@ export function PixiApp({ resizeTo, mapData, vehicles, trafficLights }: AppProps
 	const handleInit = useCallback(() => setIsInitialized(true), []);
 
 	return (
-		<Application onInit={handleInit} background={0xC1D9B7} resizeTo={resizeTo}>
+		<Application onInit={handleInit} background={0xC1D9B7} resizeTo={resizeTo} antialias={true}>
 			{isInitialized && mapData && <MapCanvas data={mapData} vehicles={vehicles} trafficLights={trafficLights} />}
 		</Application>
 	);
