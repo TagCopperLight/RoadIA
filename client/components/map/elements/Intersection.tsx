@@ -40,7 +40,7 @@ export const Intersection = memo(function Intersection({
 				// Selection highlight: amber transparent fill behind intersection
 				if (isSelected) {
 					g.setFillStyle({ color: 0xfbbf24, alpha: 0.4 });
-					g.circle(0, 0, node.radius + 6);
+					g.circle(0, 0, node.radius + 4);
 					g.fill();
 				}
 
