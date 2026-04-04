@@ -88,8 +88,6 @@ pub struct Vehicle {
     pub waiting_time: f32,
     pub impatience: f32,
     
-    pub last_plan_time: f32,
-
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,
@@ -122,7 +120,8 @@ impl Vehicle {
             drive_plan: Vec::new(),
             registered_link_ids: Vec::new(),
             waiting_time: 0.0,
-            impatience: 0.0,            last_plan_time: -100.0,            emitted_co2: 0.0,
+            impatience: 0.0,
+            emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
         }
