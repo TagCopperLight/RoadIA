@@ -258,10 +258,11 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
         0.0
     };
 
-    let score = TIME_WEIGHT * time_term
+    // le score possède une valeur entre 0 et 100
+    let score = (TIME_WEIGHT * time_term
         + SUCCESS_WEIGHT * success_rate
         + POLLUTION_WEIGHT * pollution_term
-        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length);
+        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length)) * 100f32;
 
     let total_distance_traveled: f32 = vehicles
         .iter()
