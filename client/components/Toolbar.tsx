@@ -7,7 +7,7 @@ import { useEditMode, EditTool } from './EditModeContext';
 
 function IconSelect() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
             <path d="M4 0l16 12-7 2-4 8z" />
         </svg>
     );
@@ -16,7 +16,7 @@ function IconSelect() {
 
 function IconAddNode() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="9" />
             <line x1="12" y1="8" x2="12" y2="16" strokeLinecap="round" />
             <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
@@ -26,7 +26,7 @@ function IconAddNode() {
 
 function IconAddRoad() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="5" cy="12" r="3" fill="currentColor" stroke="none" />
             <circle cx="19" cy="12" r="3" fill="currentColor" stroke="none" />
             <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" strokeDasharray="2 2" />
@@ -36,7 +36,7 @@ function IconAddRoad() {
 
 function IconPlay() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="5,3 19,12 5,21" />
         </svg>
     );
@@ -44,7 +44,7 @@ function IconPlay() {
 
 function IconPause() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
             <rect x="5" y="4" width="4" height="16" rx="1" />
             <rect x="15" y="4" width="4" height="16" rx="1" />
         </svg>
@@ -53,7 +53,7 @@ function IconPause() {
 
 function IconReset() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M4 12a8 8 0 1 1 2 5.3" strokeLinecap="round" />
             <polyline points="4,7 4,12 9,12" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -62,7 +62,7 @@ function IconReset() {
 
 function IconModeEdit() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -71,7 +71,7 @@ function IconModeEdit() {
 
 function IconModeSimulation() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />
             <polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none" />
         </svg>
@@ -93,8 +93,8 @@ function ToolButton({
         <button
             onClick={onClick}
             title={title}
-            className={`flex items-center justify-center p-[10px] cursor-pointer transition-opacity text-white
-                ${isSelected ? 'opacity-75' : 'opacity-100 hover:opacity-50'}`}
+            className={`flex items-center justify-center p-[16px] cursor-pointer transition-opacity text-white
+                ${isSelected ? 'opacity-35' : 'opacity-100 hover:opacity-50'}`}
         >
             {children}
         </button>
@@ -102,7 +102,7 @@ function ToolButton({
 }
 
 function Separator() {
-    return <div className="w-px h-[26px] bg-white opacity-20" />;
+    return <div className="w-px h-[40px] bg-white opacity-20" />;
 }
 
 export default function Toolbar() {
