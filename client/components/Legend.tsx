@@ -5,7 +5,8 @@ import { useState } from 'react';
 interface LegendItem {
     label: string;
     color?: string;
-    type?: 'node' | 'road-twoway' | 'road-oneway';
+    type?: 'node' | 'road-twoway' | 'road-oneway' | 'vehicle';
+    subtext?: string;
 }
 
 export default function Legend() {
@@ -17,6 +18,10 @@ export default function Legend() {
         { label: 'Workplace', color: '#ef4444', type: 'node' },
         { label: 'Route bidirectionnelle', type: 'road-twoway' },
         { label: 'Route unidirectionnelle', type: 'road-oneway' },
+        { label: 'Hybride (45%)', color: '#A855F7', type: 'vehicle' },
+        { label: 'Électrique (30%)', color: '#06B6D4', type: 'vehicle' },
+        { label: 'Essence (15%)', color: '#F59E0B', type: 'vehicle' },
+        { label: 'Diesel (10%)', color: '#8B7355', type: 'vehicle' },
     ];
 
     const renderLegendShape = (item: LegendItem) => {
@@ -57,6 +62,13 @@ export default function Legend() {
                         <div className="absolute left-0 right-0 bottom-0 border-b border-white" />
                     </div>
                 );
+            case 'vehicle':
+                return (
+                    <div
+                        className="w-6 h-3 rounded-sm flex-shrink-0"
+                        style={{ backgroundColor: item.color }}
+                    />
+                );
             default:
                 return null;
         }
@@ -79,9 +91,16 @@ export default function Legend() {
             {isExpanded && (
                 <div className="border-t border-gray-700 p-3 flex flex-col gap-3">
                     {legendItems.map((item, index) => (
-                        <div key={index} className="flex items-center gap-2.5">
-                            {renderLegendShape(item)}
-                            <span className="text-xs text-gray-300">{item.label}</span>
+                        <div key={index}>
+                            <div className="flex items-center gap-2.5">
+                                {renderLegendShape(item)}
+                                <span className="text-xs text-gray-300 font-medium">{item.label}</span>
+                            </div>
+                            {item.subtext && (
+                                <div className="ml-7 text-xs text-gray-500 mt-1">
+                                    {item.subtext}
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
