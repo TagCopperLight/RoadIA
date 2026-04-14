@@ -37,6 +37,12 @@ export default function MapComponent() {
 	const pendingNewNodeRef = useRef(false);
 	const prevNodeIdsRef = useRef<Set<number>>(new Set());
 
+	// Refs for auto-selecting newly created roads
+	const pendingNewRoadRef = useRef(false);
+	const prevEdgeIdsRef = useRef<Set<number>>(new Set());
+	const lastAddRoadFromRef = useRef<number | null>(null);
+	const lastAddRoadToRef = useRef<number | null>(null);
+
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
 	}, []);
@@ -82,6 +88,30 @@ export default function MapComponent() {
 				if (newNode) {
 					setSelectedElement({ type: 'node', id: newNode.id });
 					setEditTool('select');
+				}
+			}
+
+			// Auto-select newly created road
+			if (pendingNewRoadRef.current) {
+				pendingNewRoadRef.current = false;
+				const prevIds = prevEdgeIdsRef.current;
+				const fromId = lastAddRoadFromRef.current;
+				const toId = lastAddRoadToRef.current;
+
+				if (fromId !== null && toId !== null) {
+					// Find the canonical edge (from_id → to_id)
+					const canonicalEdge = result.edges.find(
+						(e: MapData['edges'][number]) => e.from === fromId && e.to === toId && !prevIds.has(e.id)
+					);
+					// Find the reverse edge (to_id → from_id) if it exists
+					const reverseEdge = result.edges.find(
+						(e: MapData['edges'][number]) => e.from === toId && e.to === fromId && !prevIds.has(e.id)
+					);
+
+					if (canonicalEdge) {
+						setSelectedElement({ type: 'road', canonicalId: canonicalEdge.id, reverseId: reverseEdge?.id });
+						setEditTool('select');
+					}
 				}
 			}
 
@@ -145,6 +175,11 @@ export default function MapComponent() {
 					}
 				}
 			}
+			// Snapshot current edge IDs before the add
+			prevEdgeIdsRef.current = new Set(mapData?.edges.map(e => e.id) ?? []);
+			lastAddRoadFromRef.current = pendingRoadFrom;
+			lastAddRoadToRef.current = nodeId;
+			pendingNewRoadRef.current = true;
 			ws?.send('addRoad', { from_id: pendingRoadFrom, to_id: nodeId, lane_count: 2, speed_limit: 13.9 });
 			setPendingRoadFrom(null);
 		}
