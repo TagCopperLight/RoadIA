@@ -26,7 +26,7 @@ export default function ScoreModal({ score, onClose }: ScoreModalProps) {
 				<div className="space-y-4">
 					<div className="bg-gray-50 p-4 rounded-xl flex justify-between items-center">
 						<span className="font-semibold text-lg">Score Final</span>
-						<span className="text-3xl font-black text-gray-900">{score.score.toFixed(3)}</span>
+						<span className="text-3xl font-black text-gray-900">{score.score.toFixed(1)}/100</span>
 					</div>
 
 					<div className="grid grid-cols-2 gap-4">
