@@ -7,7 +7,7 @@ use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
-use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
@@ -100,7 +100,28 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         let origin = habitations[rand::random_range(0..habitations.len())];
         let destination = workplaces[rand::random_range(0..workplaces.len())];
 
-        let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
+        // SDES 2025 motorization distribution (https://www.statistiques.developpement-durable.gouv.fr/)
+        // Essence Hybride: 45% | Electric: 30% | Thermique: 15% | Diesel: 10%
+        let rand_val = rand::random_range(0.0..100.0);
+        let (vehicle_type, max_speed) = if rand_val < 45.0 {
+            (VehicleType::Hybride, 45.0)  // Modern hybrid cars
+        } else if rand_val < 75.0 {
+            (VehicleType::Electrique, 40.0)      // Electric slightly more efficient
+        } else if rand_val < 90.0 {
+            (VehicleType::Essence, 50.0)  // Essence cars faster
+        } else {
+            (VehicleType::Diesel, 48.0)          // Diesel trucks/utility
+        };
+
+        let spec = VehicleSpec::new(
+            VehicleKind::Car,
+            vehicle_type,
+            max_speed,
+            4.0,  // acceleration
+            3.0,  // comfortable_deceleration
+            1.0,  // reaction_time
+            10.0, // length
+        );
 
         let trip = TripRequest {
             origin,

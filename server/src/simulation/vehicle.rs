@@ -3,15 +3,55 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::map::{model::Coordinates, model::Map};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum VehicleKind {
     Car,
     Bus,
+}
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum VehicleType {
+    Hybride,
+    Electrique,
+    Essence,
+    Diesel,
+}
+
+impl VehicleType {
+    /// Retourne (co2_min, co2_max) en g/km
+    pub fn co2_range(&self) -> (f32, f32) {
+        match self {
+            VehicleType::Hybride => (130.0, 160.0),
+            VehicleType::Electrique => (0.0, 60.0),
+            VehicleType::Essence => (140.0, 180.0),
+            VehicleType::Diesel => (110.0, 150.0),
+        }
+    }
+
+    /// Size en pixels: petits (Électrique), moyens (Hybrid/Diesel), grands (Essence)
+    pub fn size_pixels(&self) -> (f32, f32) {
+        match self {
+            VehicleType::Electrique => (8.0, 4.0),      // Compact
+            VehicleType::Hybride => (10.0, 5.0), // Standard
+            VehicleType::Diesel => (10.0, 5.0),         // Standard 
+            VehicleType::Essence => (10.0, 5.0), // Standard
+        }
+    }
+
+    /// Couleur repr. motorisation (approx)
+    pub fn color(&self) -> u32 {
+        match self {
+            VehicleType::Hybride => 0xA855F7,   // Violet
+            VehicleType::Electrique => 0x06B6D4,       // Cyan
+            VehicleType::Essence => 0xF59E0B,   // Ambre
+            VehicleType::Diesel => 0x8B7355,           // Marron
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct VehicleSpec {
     pub kind: VehicleKind,
+    pub vehicle_type: VehicleType,
     pub max_speed: f32,
     pub max_acceleration: f32,
     pub comfortable_deceleration: f32,
@@ -20,9 +60,18 @@ pub struct VehicleSpec {
 }
 
 impl VehicleSpec {
-    pub fn new(kind: VehicleKind, max_speed: f32, max_acceleration: f32, comfortable_deceleration: f32, reaction_time: f32, length: f32) -> Self {
+    pub fn new(
+        kind: VehicleKind,
+        vehicle_type: VehicleType,
+        max_speed: f32,
+        max_acceleration: f32,
+        comfortable_deceleration: f32,
+        reaction_time: f32,
+        length: f32,
+    ) -> Self {
         Self {
             kind,
+            vehicle_type,
             max_speed,
             max_acceleration,
             comfortable_deceleration,
@@ -145,6 +194,10 @@ impl Vehicle {
         vehicle_ahead_distance: f32,
         vehicle_ahead_velocity: f32,
     ) -> f32 {
+        if self.velocity >= self.spec.max_speed {
+            return 0.0; // Don't accelerate if at max speed
+        }
+
         if minimum_gap == 0.0 {
             minimum_gap = 0.1;
         }

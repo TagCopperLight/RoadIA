@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
-use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
+use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState, VehicleType};
 use crate::api::runner::runner::{AppState, SimulationInstance};
 
 #[derive(Debug, Deserialize)]
@@ -437,6 +437,12 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
     let heading = vehicle.get_heading(sim_map);
+    let motorization = match vehicle.spec.vehicle_type {
+        VehicleType::Hybride => "Hybride",
+        VehicleType::Electrique => "Electrique",
+        VehicleType::Essence => "Essence",
+        VehicleType::Diesel => "Diesel",
+    };
     json!({
         "id": vehicle.id,
         "x": coords.x,
@@ -450,7 +456,8 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
             VehicleState::WaitingToDepart => "Waiting",
             VehicleState::OnRoad => "Moving",
             VehicleState::Arrived => "Arrived",
-        }
+        },
+        "motorization": motorization,
     })
 }
 
