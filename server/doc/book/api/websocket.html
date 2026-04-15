@@ -1,0 +1,664 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>WebSocket protocol - documentation</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-5b6ca4d7.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="websocket-protocol"><a class="header" href="#websocket-protocol">WebSocket protocol</a></h1>
+<p>Résumé du protocole échangé via <code>/ws</code> (fichier principal: <code>src/api/websocket.rs</code>).</p>
+<p>Paramètres de connexion (query):</p>
+<ul>
+<li><code>uuid</code>: identifiant de l’instance de simulation (UUID)</li>
+<li><code>token</code>: jeton d’authentification pour l’instance</li>
+</ul>
+<p>Paquets clients (<code>ClientPacket</code>):</p>
+<ul>
+<li><code>StartSimulation</code>, <code>StopSimulation</code>, <code>ResetSimulation</code></li>
+<li><code>AddNode { x, y, kind }</code>, <code>DeleteNode { id }</code>, <code>MoveNode { id, x, y }</code>, <code>UpdateNode { id, kind }</code></li>
+<li><code>AddRoad { from_id, to_id, lane_count, speed_limit }</code>, <code>DeleteRoad { id }</code>, <code>UpdateRoad { id, speed_limit }</code></li>
+</ul>
+<p>Paquets serveur (<code>ServerPacket</code>):</p>
+<ul>
+<li><code>Map { nodes, edges }</code> — état complet de la carte</li>
+<li><code>VehicleUpdate { vehicles, traffic_lights }</code> — positions et états des véhicules</li>
+<li><code>MapEdit { success, error, nodes, edges }</code> — réponse aux opérations d’édition</li>
+<li><code>Score { score, total_trip_time, total_emitted_co2, network_length, total_distance_traveled, success_rate }</code></li>
+</ul>
+<p>Notes d’implémentation:</p>
+<ul>
+<li>Les messages sont JSON sérialisés via serde/serde_json.</li>
+<li>Les modifications de carte sont refusées si la simulation est en cours.</li>
+<li>La fonction <code>serialize_map</code> et <code>serialize_vehicle</code> contrôlent le format côté serveur.</li>
+</ul>
+<h2 id="example-json-formats"><a class="header" href="#example-json-formats">Example JSON formats</a></h2>
+<p>Client -&gt; Server example (start simulation):</p>
+<pre><code class="language-json">{ "id": "StartSimulation", "data": {} }
+</code></pre>
+<p>Client -&gt; Server example (add node):</p>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
+</code></pre>
+<p>Server -&gt; Client example (map):</p>
+<pre><code class="language-json">{ "id": "Map", "data": { "nodes": [...], "edges": [...] } }
+</code></pre>
+<h2 id="payloads--champs-détaillés"><a class="header" href="#payloads--champs-détaillés">Payloads — champs détaillés</a></h2>
+<ul>
+<li>ClientPacket fields:</li>
+<li>StartSimulation / StopSimulation / ResetSimulation: empty <code>data</code> object, no fields.</li>
+<li>AddNode: <code>data = { "x": &lt;float&gt;, "y": &lt;float&gt;, "kind": "Habitation|Intersection|Workplace" }</code> — <code>x,y</code> in world coordinates, <code>kind</code> is node classification.</li>
+<li>DeleteNode: <code>data = { "id": &lt;u32&gt; }</code> — node id assigned by server.</li>
+<li>MoveNode: <code>data = { "id": &lt;u32&gt;, "x": &lt;float&gt;, "y": &lt;float&gt; }</code> — new coordinates.</li>
+<li>UpdateNode: <code>data = { "id": &lt;u32&gt;, "kind": "..." }</code> — change node kind.</li>
+<li>AddRoad: <code>data = { "from_id": &lt;u32&gt;, "to_id": &lt;u32&gt;, "lane_count": &lt;u8&gt;, "speed_limit": &lt;float&gt; }</code> — creates a directed road.</li>
+<li>DeleteRoad: <code>data = { "id": &lt;u32&gt; }</code> — road id.</li>
+<li>UpdateRoad: <code>data = { "id": &lt;u32&gt;, "speed_limit": &lt;float&gt; }</code> — modify speed limit.</li>
+</ul>
+<p>ServerPacket fields:</p>
+<ul>
+<li>Map: <code>data = { "nodes": [ { "id": &lt;u32&gt;, "x": &lt;float&gt;, "y": &lt;float&gt;, "kind": "..." } ], "edges": [ { "id": &lt;u32&gt;, "from": &lt;u32&gt;, "to": &lt;u32&gt;, "lane_count": &lt;u8&gt;, "speed_limit": &lt;float&gt; } ] }</code> — nodes and edges are arrays of simple records representing the snapshot.</li>
+<li>Map: <code>data = { "nodes": [ { "id": &lt;u32&gt;, "x": &lt;float&gt;, "y": &lt;float&gt;, "kind": "...", "has_traffic_light": &lt;bool&gt;, "radius": &lt;float&gt; } ], "edges": [ { "id": &lt;u32&gt;, "from": &lt;u32&gt;, "to": &lt;u32&gt;, "lane_count": &lt;u8&gt;, "lane_width": &lt;float&gt;, "length": &lt;float&gt;, "speed_limit": &lt;float&gt; } ] }</code> — nodes and edges are arrays of JSON objects produced by <code>serialize_map</code> (includes <code>has_traffic_light</code>, <code>radius</code>, <code>lane_width</code>, <code>length</code>).</li>
+<li>VehicleUpdate: <code>data = { "vehicles": [ { "id": &lt;u64&gt;, "x": &lt;float&gt;, "y": &lt;float&gt;, "heading": &lt;float&gt;, "kind": "Car|Bus", "state": "Waiting|Moving|Arrived" } ], "traffic_lights": [ { "id": &lt;u32&gt;, "green_road_ids": [&lt;u32&gt;] } ] }</code> — vehicles are serialized by <code>serialize_vehicle</code> (current implementation returns <code>id</code>, <code>x</code>,<code>y</code>,<code>heading</code>,<code>kind</code>,<code>state</code>).</li>
+<li>MapEdit: <code>data = { "success": &lt;bool&gt;, "error": &lt;string|null&gt;, "nodes": [...], "edges": [...] }</code> — includes resulting snapshot on success.</li>
+<li>Score: <code>data = { "score": &lt;float&gt;, "total_trip_time": &lt;float&gt;, "total_emitted_co2": &lt;float&gt;, "network_length": &lt;float&gt;, "total_distance_traveled": &lt;float&gt;, "success_rate": &lt;float&gt; }</code></li>
+</ul>
+<h2 id="server-side-functions--parameters-summary"><a class="header" href="#server-side-functions--parameters-summary">Server-side functions &amp; parameters (summary)</a></h2>
+<ul>
+<li><code>ws_handler(ws: WebSocketUpgrade, Query(params): Query&lt;ConnectParams&gt;, State(state): State&lt;Arc&lt;AppState&gt;&gt;)</code>: <code>params.uuid</code> and <code>params.token</code> authenticate and route the socket to the correct <code>SimulationInstance</code>.</li>
+<li><code>ws_loop(socket, instance, state, uuid)</code>: <code>socket</code> is the upgraded WebSocket, <code>instance</code> holds engine/broadcast/controller; loop polls socket messages and the instance’s broadcast channel.</li>
+<li><code>handle_client_packet(packet, socket, instance)</code>: <code>packet</code> is a <code>ClientPacket</code> enum; modifies <code>instance.engine</code> under lock for map edits or calls <code>instance.controller.start/stop</code>.</li>
+<li><code>serialize_map(map) -&gt; (nodes, edges)</code>: transforms <code>Map</code> into two JSON arrays suitable for <code>ServerPacket::Map</code>.</li>
+<li><code>serialize_vehicle(vehicle, sim_map) -&gt; Value</code>: serializes a vehicle into <code>serde_json::Value</code> with coordinates, heading, speed and state.</li>
+</ul>
+<h2 id="clientpacket--description-champ-par-champ--exemples-json"><a class="header" href="#clientpacket--description-champ-par-champ--exemples-json">ClientPacket — description champ par champ + exemples JSON</a></h2>
+<ul>
+<li>StartSimulation
+<ul>
+<li>data: {} (aucun champ)</li>
+<li>usage: démarre l’exécution de la simulation pour l’instance liée au socket.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "StartSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>StopSimulation
+<ul>
+<li>data: {} (aucun champ)</li>
+<li>usage: stoppe l’exécution (met <code>controller.stop()</code>).</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "StopSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>ResetSimulation
+<ul>
+<li>data: {} (aucun champ)</li>
+<li>usage: remet l’état de l’engine à t=0, réinitialise véhicules et chemins.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "ResetSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>AddNode
+<ul>
+<li>champs:
+<ul>
+<li><code>x</code> (float) : position X monde.</li>
+<li><code>y</code> (float) : position Y monde.</li>
+<li><code>kind</code> (string) : une des <code>Habitation</code>, <code>Intersection</code>, <code>Workplace</code>.</li>
+</ul>
+</li>
+<li>validation: <code>x,y</code> numériques, <code>kind</code> reconnu.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
+</code></pre>
+<ul>
+<li>DeleteNode
+<ul>
+<li>champs:
+<ul>
+<li><code>id</code> (u32) : identifiant du noeud à supprimer (tel que renvoyé par le serveur).</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "DeleteNode", "data": { "id": 42 } }
+</code></pre>
+<ul>
+<li>MoveNode
+<ul>
+<li>champs:
+<ul>
+<li><code>id</code> (u32), <code>x</code> (float), <code>y</code> (float) — nouvelle position.</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "MoveNode", "data": { "id": 42, "x": 130.0, "y": 60.2 } }
+</code></pre>
+<ul>
+<li>UpdateNode
+<ul>
+<li>champs:
+<ul>
+<li><code>id</code> (u32), <code>kind</code> (string) — nouveau type.</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "UpdateNode", "data": { "id": 42, "kind": "Workplace" } }
+</code></pre>
+<ul>
+<li>AddRoad
+<ul>
+<li>champs:
+<ul>
+<li><code>from_id</code> (u32), <code>to_id</code> (u32) : ids de noeuds existants.</li>
+<li><code>lane_count</code> (u8) : nombre de voies (&gt;=1).</li>
+<li><code>speed_limit</code> (float) : en unités de projet.</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "AddRoad", "data": { "from_id": 10, "to_id": 11, "lane_count": 2, "speed_limit": 13.9 } }
+</code></pre>
+<ul>
+<li>DeleteRoad
+<ul>
+<li>champs: <code>id</code> (u32) — identifiant de la route.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "DeleteRoad", "data": { "id": 17 } }
+</code></pre>
+<ul>
+<li>UpdateRoad
+<ul>
+<li>champs: <code>id</code> (u32), <code>speed_limit</code> (float) — met à jour la limite de vitesse.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "UpdateRoad", "data": { "id": 17, "speed_limit": 11.1 } }
+</code></pre>
+<h2 id="serverpacket--description-champ-par-champ--exemples-json"><a class="header" href="#serverpacket--description-champ-par-champ--exemples-json">ServerPacket — description champ par champ + exemples JSON</a></h2>
+<ul>
+<li>Map
+<ul>
+<li>data:
+<ul>
+<li><code>nodes</code>: tableau d’objets <code>{ id: u32, x: float, y: float, kind: string }</code>.</li>
+<li><code>edges</code>: tableau d’objets <code>{ id: u32, from: u32, to: u32, lane_count: u8, speed_limit: float }</code>.</li>
+</ul>
+</li>
+<li>usage: snapshot complet de la carte; envoyé à la connexion lors de l’upgrade et après opérations d’édition.</li>
+<li>exemple (simplifié):</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "Map",
+	"data": {
+		"nodes": [ { "id": 1, "x": 0.0, "y": 0.0, "kind": "Habitation" } ],
+		"edges": [ { "id": 2, "from": 1, "to": 3, "lane_count": 2, "speed_limit": 13.9 } ]
+	}
+}
+</code></pre>
+<ul>
+<li>
+<p>VehicleUpdate</p>
+<ul>
+<li>
+<ul>
+<li>data:</li>
+</ul>
+</li>
+<li>
+<pre><code>  - `vehicles`: tableau d'objets véhicule (produit par `serialize_vehicle`) comprenant actuellement:
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `id` (u64)
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `x`, `y` (float) : coordonnées monde
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `heading` (float) : orientation en radians
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `kind` (string) : `Car` | `Bus`
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `state` (string) : `Waiting` | `Moving` | `Arrived`
+</code></pre>
+</li>
+<li>
+<pre><code>  	- champs additionnels (non exposés par la version actuelle) : `position_on_lane`, `velocity`, `path_index` — peuvent être ajoutés si besoin.
+</code></pre>
+</li>
+<li>
+<pre><code>  - `traffic_lights`: tableau `{ id: u32, green_road_ids: [&lt;u32&gt;] }` indiquant routes (road ids) actuellement ouvertes par les controllers.
+</code></pre>
+</li>
+</ul>
+<h3 id="schémas-json-exhaustifs"><a class="header" href="#schémas-json-exhaustifs">Schémas JSON exhaustifs</a></h3>
+<p>Nodes (produit par <code>serialize_map</code>):</p>
+<pre><code class="language-json">{
+	"id": 1,
+	"kind": "Intersection",
+	"x": 10.0,
+	"y": 5.0,
+	"has_traffic_light": false,
+	"radius": 4.0
+}
+</code></pre>
+<p>Edges / Roads:</p>
+<pre><code class="language-json">{
+	"id": 2,
+	"from": 1,
+	"to": 3,
+	"lane_count": 2,
+	"lane_width": 3.0,
+	"length": 120.0,
+	"speed_limit": 13.9
+}
+</code></pre>
+<p>Full <code>Map</code> payload example (combining nodes + edges):</p>
+<pre><code class="language-json">{
+	"id": "Map",
+	"data": {
+		"nodes": [ /* Node objects as above */ ],
+		"edges": [ /* Edge objects as above */ ]
+	}
+}
+</code></pre>
+<p>Vehicle (exact shape from <code>serialize_vehicle</code>):</p>
+<pre><code class="language-json">{
+	"id": 1001,
+	"x": 12.3,
+	"y": 45.6,
+	"heading": 1.5708,
+	"kind": "Car",
+	"state": "Moving"
+}
+</code></pre>
+<p>Traffic lights (as serialized):</p>
+<pre><code class="language-json">{
+	"id": 5,
+	"green_road_ids": [ 2, 3 ]
+}
+</code></pre>
+<p>MapEdit (success):</p>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": {
+		"success": true,
+		"error": null,
+		"nodes": [ /* full nodes snapshot */ ],
+		"edges": [ /* full edges snapshot */ ]
+	}
+}
+</code></pre>
+<p>MapEdit (failure):</p>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": { "success": false, "error": "Stop simulation before editing the map", "nodes": [], "edges": [] }
+}
+</code></pre>
+<pre><code>  - `traffic_lights`: tableau `{ id: u32, green_road_ids: [&lt;u32&gt;] }` indiquant routes (road ids) actuellement ouvertes par les controllers.
+</code></pre>
+<ul>
+<li>exemple (simplifié):</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "VehicleUpdate",
+	"data": {
+		"vehicles": [ { "id": 1001, "x": 12.3, "y": 45.6, "vx": 5.0, "vy": 0.0, "state": "OnRoad" } ],
+		"traffic_lights": [ { "controller_id": 5, "green_links": [101,102] } ]
+	}
+}
+</code></pre>
+<ul>
+<li>MapEdit
+<ul>
+<li>data:
+<ul>
+<li><code>success</code> (bool)</li>
+<li><code>error</code> (string|null)</li>
+<li><code>nodes</code>, <code>edges</code> : snapshot résultant si <code>success=true</code>.</li>
+</ul>
+</li>
+<li>exemple (success):</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": { "success": true, "error": null, "nodes": [...], "edges": [...] }
+}
+</code></pre>
+<pre><code>- exemple (failure):
+</code></pre>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": { "success": false, "error": "Stop simulation before editing", "nodes": [], "edges": [] }
+}
+</code></pre>
+<ul>
+<li>Score
+<ul>
+<li>data: champs numériques décrivant métriques finales.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "Score",
+	"data": { "score": 87.5, "total_trip_time": 1234.0, "total_emitted_co2": 56.7, "network_length": 1200.0, "total_distance_traveled": 10000.0, "success_rate": 0.95 }
+}
+</code></pre>
+<h2 id="http-endpoint-apisimulations-post--champs-et-exemple"><a class="header" href="#http-endpoint-apisimulations-post--champs-et-exemple">HTTP endpoint <code>/api/simulations</code> (POST) — champs et exemple</a></h2>
+<ul>
+<li>Request: aucun body requis.</li>
+<li>Response (JSON): <code>{ "uuid": "&lt;uuid&gt;", "token": "&lt;hex32&gt;" }</code> — <code>uuid</code> identifie l’instance, <code>token</code> autorise la connexion WS.</li>
+</ul>
+<p>Exemple:</p>
+<p>Request:</p>
+<pre><code class="language-http">POST /api/simulations HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{ "uuid": "550e8400-e29b-41d4-a716-446655440000", "token": "a1b2c3..." }
+</code></pre>
+<h2 id="authentificationhandshake-ws"><a class="header" href="#authentificationhandshake-ws">Authentification/handshake WS</a></h2>
+<ul>
+<li>Connexion WebSocket: client ouvre <code>/ws?uuid=&lt;uuid&gt;&amp;token=&lt;token&gt;</code>.</li>
+<li>Le serveur valide <code>uuid</code> &amp; <code>token</code> puis renvoie <code>Map</code> initial.</li>
+</ul>
+<hr>
+<p>J’ai ajouté ces descriptions champ-par-champ et exemples JSON. Veux-tu que je fasse la même chose pour les fonctions publiques de <code>runner</code> et les utilitaires <code>map_generator</code> (POST <code>/api/simulations</code> already covered) ?</p>
+<h2 id="runtime-sequence-websocket"><a class="header" href="#runtime-sequence-websocket">Runtime sequence (WebSocket)</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+	participant Client
+	participant WS
+	Client-&gt;&gt;WS: open /ws?uuid&amp;token
+	WS--&gt;&gt;Client: Map (initial)
+	Client-&gt;&gt;WS: AddNode / StartSimulation / UpdateRoad
+	WS--&gt;&gt;Client: MapEdit (ack) or Map (new state)
+	WS--&gt;&gt;Client: VehicleUpdate (periodic)
+	WS--&gt;&gt;Client: Score (when simulation ends)
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../api/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../api/ws_examples.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../api/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../api/ws_examples.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../mermaid-loader-58f8d2c4.js"></script>
+        <script src="../mermaid-init-1ea3646b.js"></script>
+        <script src="../katex-loader-1f369d43.js"></script>
+        <script src="../katex-init-7f5dd265.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
