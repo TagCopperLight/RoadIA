@@ -20,6 +20,8 @@ interface MapCanvasProps {
 	onSelectRoad: (canonicalId: number, reverseId?: number) => void;
 	onAddNode: (x: number, y: number) => void;
 	onAddRoad: (nodeId: number) => void;
+	onWaypointNodeClick?: (nodeId: number) => void;
+	allNodesMap?: Map<number, any> | null;
 }
 
 export function MapCanvas({
@@ -34,6 +36,8 @@ export function MapCanvas({
 	onSelectRoad,
 	onAddNode,
 	onAddRoad,
+	onWaypointNodeClick,
+	allNodesMap,
 }: MapCanvasProps) {
 	const { app } = useApplication();
 
@@ -147,7 +151,9 @@ export function MapCanvas({
 							isSelected={isSelected}
 							isEditMode={isEditMode}
 							isPendingFrom={isPendingFrom}
-							onSelect={isEditMode && editTool === 'select'
+							onSelect={mode === 'edit' && onWaypointNodeClick
+								? () => onWaypointNodeClick(node.id)
+								: isEditMode && editTool === 'select'
 								? () => onSelectNode(node.id)
 								: undefined}
 							onAddRoad={isEditMode && editTool === 'addRoad'
@@ -177,7 +183,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, onWaypointNodeClick]);
 
 	return (
 		<pixiCustomViewport
@@ -188,7 +194,7 @@ export function MapCanvas({
 			passiveWheel={false}
 		>
 			<pixiContainer>
-        {/* Background hit area — addNode clicks + move-tool drag tracking */}
+				{/* Background hit area — addNode clicks + move-tool drag tracking */}
 				<pixiGraphics
 					draw={(g) => {
 						g.clear();
@@ -200,7 +206,6 @@ export function MapCanvas({
 					onPointerTap={handleBackgroundTap}
 				/>
 				{staticMapElements}
-
 				{/* Pass 4: Vehicles (interpolated) */}
 				{displayVehicles.map((vehicle) => (
 					<Vehicle key={`vehicle-${vehicle.id}`} data={vehicle} />

@@ -9,16 +9,32 @@ import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
 import ScoreModal from './ScoreModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
+import { WaypointPanel } from './WaypointPanel';
 import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
+
+interface VehicleInfo {
+	id: number;
+	origin_node_id: number;
+	dest_node_id: number;
+	vehicle_type: string;
+}
+
+interface WaypointPanelHandle {
+	onNodeClick: (nodeId: number) => void;
+	getSelectedVehicleId: () => number | null;
+	getPendingWaypoints: () => number[];
+}
 
 export default function MapComponent() {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const [vehicleList, setVehicleList] = useState<VehicleInfo[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [showScore, setShowScore] = useState(false);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [editError, setEditError] = useState<string | null>(null);
+	const waypointPanelRef = useRef<WaypointPanelHandle | null>(null);
 
 	const ws = useWs();
 	const {
@@ -66,6 +82,13 @@ export default function MapComponent() {
 				);
 				return changed ? next : prev;
 			});
+		}
+	});
+
+	usePacket("vehicleList", (data) => {
+		const list = data as { vehicles: VehicleInfo[] };
+		if (list && Array.isArray(list.vehicles)) {
+			setVehicleList(list.vehicles);
 		}
 	});
 
@@ -140,6 +163,8 @@ export default function MapComponent() {
 		return () => clearTimeout(t);
 	}, [editError]);
 
+
+
 	// Clear vehicles when simulation is reset
 	const [prevResetAt, setPrevResetAt] = useState(simulationResetAt);
 	if (simulationResetAt !== prevResetAt) {
@@ -193,6 +218,13 @@ export default function MapComponent() {
 		setSelectedElement({ type: 'road', canonicalId, reverseId });
 	}, [setSelectedElement]);
 
+	const handleWaypointNodeClick = useCallback((nodeId: number) => {
+		// When in edit mode and a node is clicked, pass it to the waypoint panel
+		if (waypointPanelRef.current) {
+			waypointPanelRef.current.onNodeClick(nodeId);
+		}
+	}, []);
+
 // In edit mode, show no vehicles
 	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
@@ -213,7 +245,8 @@ export default function MapComponent() {
 						onSelectRoad={handleSelectRoad}
 						onAddNode={handleAddNode}
 						onAddRoad={handleAddRoad}
-					/>
+					onWaypointNodeClick={handleWaypointNodeClick}
+					allNodesMap={mapData ? new Map(mapData.nodes.map(n => [n.id, n])) : null}				/>
 				)}
 				<BudgetHUD mapData={mapData} />
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
@@ -239,6 +272,16 @@ export default function MapComponent() {
 					onClose={() => setSelectedElement(null)}
 					onSendPacket={(id, data) => ws?.send(id, data)}
 				/>
+			)}
+
+			{/* Waypoint panel sidebar - visible when waypoints tool is selected */}
+			{mode === 'edit' && editTool === 'waypoints' && (
+				<div className="w-80 h-full flex flex-col">
+					<WaypointPanel
+						ref={waypointPanelRef}
+						vehicles={vehicleList}
+					/>
+				</div>
 			)}
 		</div>
 	);

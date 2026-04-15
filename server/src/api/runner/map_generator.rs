@@ -135,6 +135,96 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     vehicles
 }
 
+/// Create test vehicles with common waypoints for visualization
+/// Creates a scenario where multiple vehicles pass through the same intermediate nodes
+/// This allows testing waypoint system with visual confirmation
+pub fn create_test_vehicles_with_waypoints(map: &Map, count: usize) -> Vec<Vehicle> {
+    let mut vehicles = Vec::new();
+    let mut ids = 0..;
+
+    let nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
+    if nodes.len() < 4 {
+        println!("Warning: map needs at least 4 nodes for waypoint test. Falling back to random.");
+        return create_random_vehicles(map, count);
+    }
+
+    let habitations: Vec<NodeIndex> = nodes.iter()
+        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
+        .copied()
+        .collect();
+
+    let workplaces: Vec<NodeIndex> = nodes.iter()
+        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
+        .copied()
+        .collect();
+
+    if habitations.is_empty() || workplaces.is_empty() {
+        println!("Warning: Cannot create test vehicles, missing Habitation or Workplace nodes");
+        return vehicles;
+    }
+
+    // Pick 2-3 random intermediate waypoints that will be common to all vehicles
+    let intermediate_candidates: Vec<NodeIndex> = nodes.iter()
+        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Intersection))
+        .copied()
+        .collect();
+
+    let num_waypoints = if intermediate_candidates.len() >= 3 { 3 } else if intermediate_candidates.len() >= 2 { 2 } else { 1 };
+    let common_waypoints: Vec<NodeIndex> = intermediate_candidates.iter()
+        .take(num_waypoints)
+        .copied()
+        .collect();
+
+    println!(
+        "Creating {} test vehicles with {} common waypoints: {:?}",
+        count, common_waypoints.len(), common_waypoints
+    );
+
+    for i in 0..count {
+        let origin = habitations[i % habitations.len()];
+        let destination = workplaces[i % workplaces.len()];
+
+        // Rotate motorization types for diversity
+        let rand_val = (i as f32 % 100.0) + 25.0;
+        let (vehicle_type, max_speed) = if rand_val < 45.0 {
+            (VehicleType::Hybride, 45.0)
+        } else if rand_val < 75.0 {
+            (VehicleType::Electrique, 40.0)
+        } else if rand_val < 90.0 {
+            (VehicleType::Essence, 50.0)
+        } else {
+            (VehicleType::Diesel, 48.0)
+        };
+
+        let spec = VehicleSpec::new(
+            VehicleKind::Car,
+            vehicle_type,
+            max_speed,
+            4.0,
+            3.0,
+            1.0,
+            10.0,
+        );
+
+        let trip = TripRequest {
+            origin,
+            destination,
+            departure_time: (i as f32) * 0.5, // Stagger departures by 0.5s
+        };
+
+        let mut vehicle = Vehicle::new(ids.next().unwrap(), spec, trip);
+        
+        // Add common waypoints to vehicle
+        vehicle.add_waypoints(common_waypoints.clone());
+        
+        println!("Vehicle {} with waypoints: {:?}", vehicle.id, vehicle.waypoints);
+        
+        vehicles.push(vehicle);
+    }
+
+    vehicles
+}
+
 pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     let mut map = Map::new();
 
