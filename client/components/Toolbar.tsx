@@ -78,6 +78,17 @@ function IconModeSimulation() {
     );
 }
 
+function IconWaypoints() {
+    return (
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="5" cy="7" r="2" fill="currentColor" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="19" cy="17" r="2" fill="currentColor" />
+            <path d="M7,9 L10,10 L14,14 L17,15" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 function ToolButton({
     onClick,
     isSelected,
@@ -166,6 +177,10 @@ export default function Toolbar() {
                             <Separator />
                             <ToolButton onClick={() => selectTool('addRoad')} isSelected={editTool === 'addRoad'} title="Add Road">
                                 <IconAddRoad />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('waypoints')} isSelected={editTool === 'waypoints'} title="Add Waypoints">
+                                <IconWaypoints />
                             </ToolButton>
                         </>
                     ) : (

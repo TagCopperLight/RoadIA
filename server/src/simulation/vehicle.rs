@@ -20,7 +20,7 @@ impl VehicleType {
     /// Retourne (co2_min, co2_max) en g/km
     pub fn co2_range(&self) -> (f32, f32) {
         match self {
-            VehicleType::Hybride => (130.0, 160.0),
+            VehicleType::Hybride => (100.0, 140.0),
             VehicleType::Electrique => (0.0, 60.0),
             VehicleType::Essence => (140.0, 180.0),
             VehicleType::Diesel => (110.0, 150.0),
@@ -140,6 +140,10 @@ pub struct Vehicle {
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,
+    
+    // Waypoints system: intermediate points the vehicle must visit
+    pub waypoints: Vec<NodeIndex>,        // Queue of waypoints to visit (in order)
+    pub current_waypoint_index: usize,    // Index of the next waypoint to reach
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
@@ -173,6 +177,8 @@ impl Vehicle {
             emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
+            waypoints: Vec::new(),
+            current_waypoint_index: 0,
         }
     }
 
@@ -368,6 +374,61 @@ impl Vehicle {
                 .graph
                 .find_edge(self.get_current_node(), self.get_next_node()),
         }
+    }
+
+    // ============= Waypoint Management =============
+
+    /// Add a waypoint to the queue
+    pub fn add_waypoint(&mut self, waypoint: NodeIndex) {
+        self.waypoints.push(waypoint);
+    }
+
+    /// Add multiple waypoints at once
+    pub fn add_waypoints(&mut self, waypoints: Vec<NodeIndex>) {
+        self.waypoints.extend(waypoints);
+    }
+
+    /// Get the next destination (either the next waypoint or the final destination)
+    pub fn get_current_destination(&self) -> NodeIndex {
+        if self.current_waypoint_index < self.waypoints.len() {
+            self.waypoints[self.current_waypoint_index]
+        } else {
+            self.trip.destination
+        }
+    }
+
+    /// Check if vehicle has waypoints remaining
+    pub fn has_waypoints(&self) -> bool {
+        self.current_waypoint_index < self.waypoints.len()
+    }
+
+    /// Check if vehicle has reached the current destination
+    pub fn is_at_destination(&self) -> bool {
+        self.path_index >= self.path.len() - 1
+    }
+
+    /// Move to the next waypoint in the queue, recalculating the path
+    pub fn advance_to_next_waypoint(&mut self, map: &Map) {
+        if self.has_waypoints() {
+            self.current_waypoint_index += 1;
+            // Recalculate path to the new destination
+            let current_pos = self.get_current_node();
+            let next_dest = self.get_current_destination();
+            match fastest_path(map, current_pos, next_dest) {
+                Some(path) => self.path = path,
+                None => eprintln!(
+                    "Warning: no path found for vehicle {} (waypoint {:?} → {:?})",
+                    self.id, current_pos, next_dest
+                ),
+            }
+            self.path_index = 0;
+        }
+    }
+
+    /// Clear all waypoints
+    pub fn clear_waypoints(&mut self) {
+        self.waypoints.clear();
+        self.current_waypoint_index = 0;
     }
 
 }

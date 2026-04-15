@@ -5,3 +5,4 @@ pub mod editor;
 pub mod osm_parser;
 pub mod roundabout;
 pub mod traffic_light;
+pub mod waypoint;

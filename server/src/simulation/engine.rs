@@ -585,9 +585,31 @@ impl SimulationEngine {
 
         let pi = self.vehicles[vidx].path_index;
         if pi + 1 >= self.vehicles[vidx].path.len() {
-            self.vehicles[vidx].state = VehicleState::Arrived;
-            self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
-            self.check_if_all_vehicles_arrived();
+            // Check if vehicle has waypoints remaining
+            if self.vehicles[vidx].has_waypoints() {
+                // Move to next waypoint instead of arriving
+                self.vehicles[vidx].advance_to_next_waypoint(&self.config.map);
+                // Continue with new path calculation
+                let a = self.vehicles[vidx].path[0];
+                let b = if self.vehicles[vidx].path.len() > 1 {
+                    self.vehicles[vidx].path[1]
+                } else {
+                    a // No path, stay at current position
+                };
+                let out_edge = match self.config.map.graph.find_edge(a, b) {
+                    Some(e) => e,
+                    None => return,
+                };
+                let dest_lane_id = 0; // Default lane
+                let to_lane = LaneId::Normal(out_edge, dest_lane_id);
+                self.vehicles[vidx].current_lane = Some(to_lane);
+                self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(to_lane) });
+            } else {
+                // No more waypoints, mark as arrived
+                self.vehicles[vidx].state = VehicleState::Arrived;
+                self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+                self.check_if_all_vehicles_arrived();
+            }
             return;
         }
 
@@ -624,9 +646,34 @@ impl SimulationEngine {
 
         if pi + 1 >= path_len - 1 {
             self.vehicles[vidx].position_on_lane = road_len;
-            self.vehicles[vidx].state = VehicleState::Arrived;
-            self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
-            self.check_if_all_vehicles_arrived();
+            
+            // Check if vehicle has waypoints remaining
+            if self.vehicles[vidx].has_waypoints() {
+                // Move to next waypoint instead of arriving
+                self.vehicles[vidx].advance_to_next_waypoint(&self.config.map);
+                self.vehicles[vidx].state = VehicleState::OnRoad;
+                let a = self.vehicles[vidx].path[0];
+                let b = if self.vehicles[vidx].path.len() > 1 {
+                    self.vehicles[vidx].path[1]
+                } else {
+                    a
+                };
+                let out_edge = match self.config.map.graph.find_edge(a, b) {
+                    Some(e) => e,
+                    None => {
+                        self.vehicles[vidx].state = VehicleState::Arrived;
+                        self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+                        return;
+                    }
+                };
+                self.vehicles[vidx].current_lane = Some(LaneId::Normal(out_edge, 0));
+                self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(LaneId::Normal(out_edge, 0)) });
+            } else {
+                // No more waypoints, mark as arrived
+                self.vehicles[vidx].state = VehicleState::Arrived;
+                self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+                self.check_if_all_vehicles_arrived();
+            }
             return;
         }
 
