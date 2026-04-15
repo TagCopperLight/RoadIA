@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3ae62e47.js";
+            window.path_to_searchindex_js = "searchindex-a8bb04b6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-98ddbbda.js"></script>
+        <script src="toc-5b6ca4d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -186,6 +186,26 @@
 <li>Un endpoint WebSocket <code>/ws</code> pour s’abonner aux mises à jour de la simulation et envoyer des commandes d’édition ou de contrôle.</li>
 </ul>
 <p>Les pages suivantes décrivent le protocole WebSocket et le runner qui démarre le serveur.</p>
+<h2 id="example-create-a-simulation-http"><a class="header" href="#example-create-a-simulation-http">Example: create a simulation (HTTP)</a></h2>
+<p>Request (cURL):</p>
+<pre><code class="language-bash">curl -X POST http://localhost:8080/api/simulations -H "Content-Type: application/json"
+</code></pre>
+<p>Response (JSON):</p>
+<pre><code class="language-json">{ "uuid": "&lt;uuid&gt;", "token": "&lt;token&gt;" }
+</code></pre>
+<p>Sequence: create -&gt; connect via WebSocket</p>
+<pre><code class="language-mermaid">sequenceDiagram
+	participant Client
+	participant Server
+	Client-&gt;&gt;Server: POST /api/simulations
+	Server--&gt;&gt;Client: {uuid, token}
+	Client-&gt;&gt;Server: WS /ws?uuid=...&amp;token=...
+	Server--&gt;&gt;Client: initial Map packet
+	loop realtime
+		Server--&gt;&gt;Client: VehicleUpdate
+		Client-&gt;&gt;Server: ClientPacket (edits/control)
+	end
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="websocket-protocol"><a class="header" href="#websocket-protocol">WebSocket protocol</a></h1>
 <p>Résumé du protocole échangé via <code>/ws</code> (fichier principal: <code>src/api/websocket.rs</code>).</p>
@@ -213,6 +233,495 @@
 <li>Les modifications de carte sont refusées si la simulation est en cours.</li>
 <li>La fonction <code>serialize_map</code> et <code>serialize_vehicle</code> contrôlent le format côté serveur.</li>
 </ul>
+<h2 id="example-json-formats"><a class="header" href="#example-json-formats">Example JSON formats</a></h2>
+<p>Client -&gt; Server example (start simulation):</p>
+<pre><code class="language-json">{ "id": "StartSimulation", "data": {} }
+</code></pre>
+<p>Client -&gt; Server example (add node):</p>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
+</code></pre>
+<p>Server -&gt; Client example (map):</p>
+<pre><code class="language-json">{ "id": "Map", "data": { "nodes": [...], "edges": [...] } }
+</code></pre>
+<h2 id="payloads--champs-détaillés"><a class="header" href="#payloads--champs-détaillés">Payloads — champs détaillés</a></h2>
+<ul>
+<li>ClientPacket fields:</li>
+<li>StartSimulation / StopSimulation / ResetSimulation: empty <code>data</code> object, no fields.</li>
+<li>AddNode: <code>data = { "x": &lt;float&gt;, "y": &lt;float&gt;, "kind": "Habitation|Intersection|Workplace" }</code> — <code>x,y</code> in world coordinates, <code>kind</code> is node classification.</li>
+<li>DeleteNode: <code>data = { "id": &lt;u32&gt; }</code> — node id assigned by server.</li>
+<li>MoveNode: <code>data = { "id": &lt;u32&gt;, "x": &lt;float&gt;, "y": &lt;float&gt; }</code> — new coordinates.</li>
+<li>UpdateNode: <code>data = { "id": &lt;u32&gt;, "kind": "..." }</code> — change node kind.</li>
+<li>AddRoad: <code>data = { "from_id": &lt;u32&gt;, "to_id": &lt;u32&gt;, "lane_count": &lt;u8&gt;, "speed_limit": &lt;float&gt; }</code> — creates a directed road.</li>
+<li>DeleteRoad: <code>data = { "id": &lt;u32&gt; }</code> — road id.</li>
+<li>UpdateRoad: <code>data = { "id": &lt;u32&gt;, "speed_limit": &lt;float&gt; }</code> — modify speed limit.</li>
+</ul>
+<p>ServerPacket fields:</p>
+<ul>
+<li>Map: <code>data = { "nodes": [ { "id": &lt;u32&gt;, "x": &lt;float&gt;, "y": &lt;float&gt;, "kind": "..." } ], "edges": [ { "id": &lt;u32&gt;, "from": &lt;u32&gt;, "to": &lt;u32&gt;, "lane_count": &lt;u8&gt;, "speed_limit": &lt;float&gt; } ] }</code> — nodes and edges are arrays of simple records representing the snapshot.</li>
+<li>Map: <code>data = { "nodes": [ { "id": &lt;u32&gt;, "x": &lt;float&gt;, "y": &lt;float&gt;, "kind": "...", "has_traffic_light": &lt;bool&gt;, "radius": &lt;float&gt; } ], "edges": [ { "id": &lt;u32&gt;, "from": &lt;u32&gt;, "to": &lt;u32&gt;, "lane_count": &lt;u8&gt;, "lane_width": &lt;float&gt;, "length": &lt;float&gt;, "speed_limit": &lt;float&gt; } ] }</code> — nodes and edges are arrays of JSON objects produced by <code>serialize_map</code> (includes <code>has_traffic_light</code>, <code>radius</code>, <code>lane_width</code>, <code>length</code>).</li>
+<li>VehicleUpdate: <code>data = { "vehicles": [ { "id": &lt;u64&gt;, "x": &lt;float&gt;, "y": &lt;float&gt;, "heading": &lt;float&gt;, "kind": "Car|Bus", "state": "Waiting|Moving|Arrived" } ], "traffic_lights": [ { "id": &lt;u32&gt;, "green_road_ids": [&lt;u32&gt;] } ] }</code> — vehicles are serialized by <code>serialize_vehicle</code> (current implementation returns <code>id</code>, <code>x</code>,<code>y</code>,<code>heading</code>,<code>kind</code>,<code>state</code>).</li>
+<li>MapEdit: <code>data = { "success": &lt;bool&gt;, "error": &lt;string|null&gt;, "nodes": [...], "edges": [...] }</code> — includes resulting snapshot on success.</li>
+<li>Score: <code>data = { "score": &lt;float&gt;, "total_trip_time": &lt;float&gt;, "total_emitted_co2": &lt;float&gt;, "network_length": &lt;float&gt;, "total_distance_traveled": &lt;float&gt;, "success_rate": &lt;float&gt; }</code></li>
+</ul>
+<h2 id="server-side-functions--parameters-summary"><a class="header" href="#server-side-functions--parameters-summary">Server-side functions &amp; parameters (summary)</a></h2>
+<ul>
+<li><code>ws_handler(ws: WebSocketUpgrade, Query(params): Query&lt;ConnectParams&gt;, State(state): State&lt;Arc&lt;AppState&gt;&gt;)</code>: <code>params.uuid</code> and <code>params.token</code> authenticate and route the socket to the correct <code>SimulationInstance</code>.</li>
+<li><code>ws_loop(socket, instance, state, uuid)</code>: <code>socket</code> is the upgraded WebSocket, <code>instance</code> holds engine/broadcast/controller; loop polls socket messages and the instance’s broadcast channel.</li>
+<li><code>handle_client_packet(packet, socket, instance)</code>: <code>packet</code> is a <code>ClientPacket</code> enum; modifies <code>instance.engine</code> under lock for map edits or calls <code>instance.controller.start/stop</code>.</li>
+<li><code>serialize_map(map) -&gt; (nodes, edges)</code>: transforms <code>Map</code> into two JSON arrays suitable for <code>ServerPacket::Map</code>.</li>
+<li><code>serialize_vehicle(vehicle, sim_map) -&gt; Value</code>: serializes a vehicle into <code>serde_json::Value</code> with coordinates, heading, speed and state.</li>
+</ul>
+<h2 id="clientpacket--description-champ-par-champ--exemples-json"><a class="header" href="#clientpacket--description-champ-par-champ--exemples-json">ClientPacket — description champ par champ + exemples JSON</a></h2>
+<ul>
+<li>StartSimulation
+<ul>
+<li>data: {} (aucun champ)</li>
+<li>usage: démarre l’exécution de la simulation pour l’instance liée au socket.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "StartSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>StopSimulation
+<ul>
+<li>data: {} (aucun champ)</li>
+<li>usage: stoppe l’exécution (met <code>controller.stop()</code>).</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "StopSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>ResetSimulation
+<ul>
+<li>data: {} (aucun champ)</li>
+<li>usage: remet l’état de l’engine à t=0, réinitialise véhicules et chemins.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "ResetSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>AddNode
+<ul>
+<li>champs:
+<ul>
+<li><code>x</code> (float) : position X monde.</li>
+<li><code>y</code> (float) : position Y monde.</li>
+<li><code>kind</code> (string) : une des <code>Habitation</code>, <code>Intersection</code>, <code>Workplace</code>.</li>
+</ul>
+</li>
+<li>validation: <code>x,y</code> numériques, <code>kind</code> reconnu.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
+</code></pre>
+<ul>
+<li>DeleteNode
+<ul>
+<li>champs:
+<ul>
+<li><code>id</code> (u32) : identifiant du noeud à supprimer (tel que renvoyé par le serveur).</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "DeleteNode", "data": { "id": 42 } }
+</code></pre>
+<ul>
+<li>MoveNode
+<ul>
+<li>champs:
+<ul>
+<li><code>id</code> (u32), <code>x</code> (float), <code>y</code> (float) — nouvelle position.</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "MoveNode", "data": { "id": 42, "x": 130.0, "y": 60.2 } }
+</code></pre>
+<ul>
+<li>UpdateNode
+<ul>
+<li>champs:
+<ul>
+<li><code>id</code> (u32), <code>kind</code> (string) — nouveau type.</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "UpdateNode", "data": { "id": 42, "kind": "Workplace" } }
+</code></pre>
+<ul>
+<li>AddRoad
+<ul>
+<li>champs:
+<ul>
+<li><code>from_id</code> (u32), <code>to_id</code> (u32) : ids de noeuds existants.</li>
+<li><code>lane_count</code> (u8) : nombre de voies (&gt;=1).</li>
+<li><code>speed_limit</code> (float) : en unités de projet.</li>
+</ul>
+</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "AddRoad", "data": { "from_id": 10, "to_id": 11, "lane_count": 2, "speed_limit": 13.9 } }
+</code></pre>
+<ul>
+<li>DeleteRoad
+<ul>
+<li>champs: <code>id</code> (u32) — identifiant de la route.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "DeleteRoad", "data": { "id": 17 } }
+</code></pre>
+<ul>
+<li>UpdateRoad
+<ul>
+<li>champs: <code>id</code> (u32), <code>speed_limit</code> (float) — met à jour la limite de vitesse.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{ "id": "UpdateRoad", "data": { "id": 17, "speed_limit": 11.1 } }
+</code></pre>
+<h2 id="serverpacket--description-champ-par-champ--exemples-json"><a class="header" href="#serverpacket--description-champ-par-champ--exemples-json">ServerPacket — description champ par champ + exemples JSON</a></h2>
+<ul>
+<li>Map
+<ul>
+<li>data:
+<ul>
+<li><code>nodes</code>: tableau d’objets <code>{ id: u32, x: float, y: float, kind: string }</code>.</li>
+<li><code>edges</code>: tableau d’objets <code>{ id: u32, from: u32, to: u32, lane_count: u8, speed_limit: float }</code>.</li>
+</ul>
+</li>
+<li>usage: snapshot complet de la carte; envoyé à la connexion lors de l’upgrade et après opérations d’édition.</li>
+<li>exemple (simplifié):</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "Map",
+	"data": {
+		"nodes": [ { "id": 1, "x": 0.0, "y": 0.0, "kind": "Habitation" } ],
+		"edges": [ { "id": 2, "from": 1, "to": 3, "lane_count": 2, "speed_limit": 13.9 } ]
+	}
+}
+</code></pre>
+<ul>
+<li>
+<p>VehicleUpdate</p>
+<ul>
+<li>
+<ul>
+<li>data:</li>
+</ul>
+</li>
+<li>
+<pre><code>  - `vehicles`: tableau d'objets véhicule (produit par `serialize_vehicle`) comprenant actuellement:
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `id` (u64)
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `x`, `y` (float) : coordonnées monde
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `heading` (float) : orientation en radians
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `kind` (string) : `Car` | `Bus`
+</code></pre>
+</li>
+<li>
+<pre><code>  	- `state` (string) : `Waiting` | `Moving` | `Arrived`
+</code></pre>
+</li>
+<li>
+<pre><code>  	- champs additionnels (non exposés par la version actuelle) : `position_on_lane`, `velocity`, `path_index` — peuvent être ajoutés si besoin.
+</code></pre>
+</li>
+<li>
+<pre><code>  - `traffic_lights`: tableau `{ id: u32, green_road_ids: [&lt;u32&gt;] }` indiquant routes (road ids) actuellement ouvertes par les controllers.
+</code></pre>
+</li>
+</ul>
+<h3 id="schémas-json-exhaustifs"><a class="header" href="#schémas-json-exhaustifs">Schémas JSON exhaustifs</a></h3>
+<p>Nodes (produit par <code>serialize_map</code>):</p>
+<pre><code class="language-json">{
+	"id": 1,
+	"kind": "Intersection",
+	"x": 10.0,
+	"y": 5.0,
+	"has_traffic_light": false,
+	"radius": 4.0
+}
+</code></pre>
+<p>Edges / Roads:</p>
+<pre><code class="language-json">{
+	"id": 2,
+	"from": 1,
+	"to": 3,
+	"lane_count": 2,
+	"lane_width": 3.0,
+	"length": 120.0,
+	"speed_limit": 13.9
+}
+</code></pre>
+<p>Full <code>Map</code> payload example (combining nodes + edges):</p>
+<pre><code class="language-json">{
+	"id": "Map",
+	"data": {
+		"nodes": [ /* Node objects as above */ ],
+		"edges": [ /* Edge objects as above */ ]
+	}
+}
+</code></pre>
+<p>Vehicle (exact shape from <code>serialize_vehicle</code>):</p>
+<pre><code class="language-json">{
+	"id": 1001,
+	"x": 12.3,
+	"y": 45.6,
+	"heading": 1.5708,
+	"kind": "Car",
+	"state": "Moving"
+}
+</code></pre>
+<p>Traffic lights (as serialized):</p>
+<pre><code class="language-json">{
+	"id": 5,
+	"green_road_ids": [ 2, 3 ]
+}
+</code></pre>
+<p>MapEdit (success):</p>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": {
+		"success": true,
+		"error": null,
+		"nodes": [ /* full nodes snapshot */ ],
+		"edges": [ /* full edges snapshot */ ]
+	}
+}
+</code></pre>
+<p>MapEdit (failure):</p>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": { "success": false, "error": "Stop simulation before editing the map", "nodes": [], "edges": [] }
+}
+</code></pre>
+<pre><code>  - `traffic_lights`: tableau `{ id: u32, green_road_ids: [&lt;u32&gt;] }` indiquant routes (road ids) actuellement ouvertes par les controllers.
+</code></pre>
+<ul>
+<li>exemple (simplifié):</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "VehicleUpdate",
+	"data": {
+		"vehicles": [ { "id": 1001, "x": 12.3, "y": 45.6, "vx": 5.0, "vy": 0.0, "state": "OnRoad" } ],
+		"traffic_lights": [ { "controller_id": 5, "green_links": [101,102] } ]
+	}
+}
+</code></pre>
+<ul>
+<li>MapEdit
+<ul>
+<li>data:
+<ul>
+<li><code>success</code> (bool)</li>
+<li><code>error</code> (string|null)</li>
+<li><code>nodes</code>, <code>edges</code> : snapshot résultant si <code>success=true</code>.</li>
+</ul>
+</li>
+<li>exemple (success):</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": { "success": true, "error": null, "nodes": [...], "edges": [...] }
+}
+</code></pre>
+<pre><code>- exemple (failure):
+</code></pre>
+<pre><code class="language-json">{
+	"id": "MapEdit",
+	"data": { "success": false, "error": "Stop simulation before editing", "nodes": [], "edges": [] }
+}
+</code></pre>
+<ul>
+<li>Score
+<ul>
+<li>data: champs numériques décrivant métriques finales.</li>
+<li>exemple:</li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-json">{
+	"id": "Score",
+	"data": { "score": 87.5, "total_trip_time": 1234.0, "total_emitted_co2": 56.7, "network_length": 1200.0, "total_distance_traveled": 10000.0, "success_rate": 0.95 }
+}
+</code></pre>
+<h2 id="http-endpoint-apisimulations-post--champs-et-exemple"><a class="header" href="#http-endpoint-apisimulations-post--champs-et-exemple">HTTP endpoint <code>/api/simulations</code> (POST) — champs et exemple</a></h2>
+<ul>
+<li>Request: aucun body requis.</li>
+<li>Response (JSON): <code>{ "uuid": "&lt;uuid&gt;", "token": "&lt;hex32&gt;" }</code> — <code>uuid</code> identifie l’instance, <code>token</code> autorise la connexion WS.</li>
+</ul>
+<p>Exemple:</p>
+<p>Request:</p>
+<pre><code class="language-http">POST /api/simulations HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{}
+</code></pre>
+<p>Response:</p>
+<pre><code class="language-json">{ "uuid": "550e8400-e29b-41d4-a716-446655440000", "token": "a1b2c3..." }
+</code></pre>
+<h2 id="authentificationhandshake-ws"><a class="header" href="#authentificationhandshake-ws">Authentification/handshake WS</a></h2>
+<ul>
+<li>Connexion WebSocket: client ouvre <code>/ws?uuid=&lt;uuid&gt;&amp;token=&lt;token&gt;</code>.</li>
+<li>Le serveur valide <code>uuid</code> &amp; <code>token</code> puis renvoie <code>Map</code> initial.</li>
+</ul>
+<hr>
+<p>J’ai ajouté ces descriptions champ-par-champ et exemples JSON. Veux-tu que je fasse la même chose pour les fonctions publiques de <code>runner</code> et les utilitaires <code>map_generator</code> (POST <code>/api/simulations</code> already covered) ?</p>
+<h2 id="runtime-sequence-websocket"><a class="header" href="#runtime-sequence-websocket">Runtime sequence (WebSocket)</a></h2>
+<pre><code class="language-mermaid">sequenceDiagram
+	participant Client
+	participant WS
+	Client-&gt;&gt;WS: open /ws?uuid&amp;token
+	WS--&gt;&gt;Client: Map (initial)
+	Client-&gt;&gt;WS: AddNode / StartSimulation / UpdateRoad
+	WS--&gt;&gt;Client: MapEdit (ack) or Map (new state)
+	WS--&gt;&gt;Client: VehicleUpdate (periodic)
+	WS--&gt;&gt;Client: Score (when simulation ends)
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><!-- WebSocket JSON examples for ClientPacket and ServerPacket -->
+<h1 id="websocket-examples"><a class="header" href="#websocket-examples">WebSocket Examples</a></h1>
+<p>Ce fichier rassemble des exemples JSON envoyés et reçus via le WebSocket.</p>
+<h2 id="format-général"><a class="header" href="#format-général">Format général</a></h2>
+<p>Les paquets utilisent <code>serde</code> avec <code>tag = "id"</code> et <code>content = "data"</code>, <code>rename_all = "camelCase"</code>.</p>
+<p>Exemple générique:</p>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 12.3, "y": 45.6, "kind": "Intersection" } }
+</code></pre>
+<hr>
+<h2 id="client--serveur-clientpacket-exemples"><a class="header" href="#client--serveur-clientpacket-exemples">Client → Serveur (ClientPacket) exemples</a></h2>
+<ul>
+<li>Start / Stop / Reset:</li>
+</ul>
+<pre><code class="language-json">{ "id": "StartSimulation", "data": {} }
+{ "id": "StopSimulation", "data": {} }
+{ "id": "ResetSimulation", "data": {} }
+</code></pre>
+<ul>
+<li>Edition de nœud:</li>
+</ul>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 10.0, "y": 5.0, "kind": "Intersection" } }
+{ "id": "DeleteNode", "data": { "id": 17 } }
+{ "id": "MoveNode", "data": { "id": 17, "x": 12.0, "y": 6.0 } }
+{ "id": "UpdateNode", "data": { "id": 17, "kind": "Workplace" } }
+</code></pre>
+<ul>
+<li>Edition de route:</li>
+</ul>
+<pre><code class="language-json">{ "id": "AddRoad", "data": { "fromId": 3, "toId": 4, "laneCount": 2, "speedLimit": 13.9 } }
+{ "id": "DeleteRoad", "data": { "id": 21 } }
+{ "id": "UpdateRoad", "data": { "id": 21, "speedLimit": 11.1 } }
+</code></pre>
+<p>Note: les clés internes suivent <code>camelCase</code> à la sérialisation (par ex. <code>laneCount</code>, <code>speedLimit</code>).</p>
+<hr>
+<h2 id="serveur--client-serverpacket-exemples"><a class="header" href="#serveur--client-serverpacket-exemples">Serveur → Client (ServerPacket) exemples</a></h2>
+<ul>
+<li><code>Map</code> (extrait de <code>serialize_map</code>):</li>
+</ul>
+<pre><code class="language-json">{
+  "id": "Map",
+  "data": {
+    "nodes": [
+      { "id": 1, "kind": "Intersection", "x": 10.0, "y": 5.0, "has_traffic_light": false, "radius": 4.0 }
+    ],
+    "edges": [
+      { "id": 2, "from": 1, "to": 3, "lane_count": 2, "lane_width": 3.0, "length": 120.0, "speed_limit": 13.9 }
+    ]
+  }
+}
+</code></pre>
+<ul>
+<li><code>VehicleUpdate</code>:</li>
+</ul>
+<pre><code class="language-json">{
+  "id": "VehicleUpdate",
+  "data": {
+    "vehicles": [
+      {
+        "id": 5,
+        "x": 11.2,
+        "y": 6.3,
+        "heading": 1.5708,
+        "kind": "Car",
+        "state": "Moving"
+      }
+    ],
+    "traffic_lights": [ { "id": 1, "green_road_ids": [2] } ]
+  }
+}
+</code></pre>
+<ul>
+<li><code>MapEdit</code> (success / failure):</li>
+</ul>
+<pre><code class="language-json">{
+  "id": "MapEdit",
+  "data": {
+    "success": true,
+    "error": null,
+    "nodes": [ { "id": 1, "kind": "Habitation", "x": 0, "y": 0, "has_traffic_light": false, "radius": 3.0 } ],
+    "edges": [ { "id": 2, "from": 1, "to": 3, "lane_count": 2, "lane_width": 3.0, "length": 120.0, "speed_limit": 13.9 } ]
+  }
+}
+
+{
+  "id": "MapEdit",
+  "data": { "success": false, "error": "Stop simulation before editing the map", "nodes": [], "edges": [] }
+}
+</code></pre>
+<ul>
+<li><code>Score</code>:</li>
+</ul>
+<pre><code class="language-json">{
+  "id": "Score",
+  "data": {
+    "score": 123.4,
+    "totalTripTime": 456.7,
+    "totalEmittedCo2": 12.3,
+    "networkLength": 789.0,
+    "totalDistanceTraveled": 345.6,
+    "successRate": 0.92
+  }
+}
+</code></pre>
+<hr>
+<p>Usage: copiez ces exemples dans la console WebSocket de votre client (ou dans l’outil <code>WebSocket</code> du navigateur) pour simuler interactions.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="runner--server-entrypoints"><a class="header" href="#runner--server-entrypoints">Runner / Server entrypoints</a></h1>
 <p>Fichier principal: <code>src/api/runner/runner.rs</code>.</p>
@@ -236,6 +745,46 @@
 <li><code>SimulationInstance::new_default()</code> charge <code>data/lannion.osm.pbf</code> via le map generator si disponible.</li>
 <li>L’instance publie périodiquement les mises à jour et envoie un <code>Score</code> lorsque la simulation se termine.</li>
 </ul>
+<h2 id="runner-startup-sequence"><a class="header" href="#runner-startup-sequence">Runner startup sequence</a></h2>
+<pre><code class="language-mermaid">flowchart LR
+	A["run()"] --&gt; B["Build AppState"]
+	B --&gt; C["Configure CORS"]
+	C --&gt; D["Register routes: /ws, /api/simulations"]
+	D --&gt; E["Bind TcpListener 0.0.0.0:8080"]
+	E --&gt; F["axum::serve(app)"]
+</code></pre>
+<h2 id="example-create--monitor"><a class="header" href="#example-create--monitor">Example: create + monitor</a></h2>
+<ol>
+<li>POST <code>/api/simulations</code> → server responds <code>{uuid, token}</code></li>
+<li>Client opens WebSocket <code>/ws?uuid=&lt;uuid&gt;&amp;token=&lt;token&gt;</code></li>
+<li>Server sends initial <code>Map</code> packet and then periodic <code>VehicleUpdate</code> packets from the instance’s background task</li>
+</ol>
+<h2 id="notes-for-operators"><a class="header" href="#notes-for-operators">Notes for operators</a></h2>
+<ul>
+<li>Ensure <code>ALLOWED_ORIGINS</code> env var is set before running server.</li>
+<li>The runner uses <code>tower_http::cors::CorsLayer</code> to enforce origins and allowed methods.</li>
+</ul>
+<h2 id="architecture-diagram"><a class="header" href="#architecture-diagram">Architecture diagram</a></h2>
+<p>High-level ownership and component diagram:</p>
+<pre><code class="language-mermaid">graph LR
+	subgraph Server
+		AppState[[AppState]]
+		Runner[Runner / Axum Server]
+	end
+	subgraph Instance
+		SI[SimulationInstance]
+		Engine[SimulationEngine]
+		Broadcast[BroadcastChannel]
+	end
+	Client[WebClient]
+
+	Runner --&gt; AppState
+	AppState --&gt; SI
+	SI --&gt; Engine
+	SI --&gt; Broadcast
+	Client --&gt;|POST /api/simulations| Runner
+	Client --&gt;|WS /ws?uuid&amp;token| Broadcast
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="map-module"><a class="header" href="#map-module">Map module</a></h1>
 <p>Ce chapitre introduit le sous-module <code>map</code> du backend. Il regroupe les structures et algorithmes relatifs à la topologie routière, la construction des intersections et le parsing OSM.</p>
@@ -253,16 +802,42 @@
 <li>
 <p><code>Map</code> : conteneur principal contenant un <code>petgraph::Graph&lt;Intersection, Road&gt;</code>, indices, compteurs d’ID et <code>traffic_lights</code>.</p>
 <ul>
-<li>Méthodes utiles: <code>new()</code>, <code>add_intersection()</code>, <code>add_road()</code>, <code>add_two_way_road()</code>, <code>find_node()</code>, <code>find_edge()</code>, <code>retain_largest_component()</code>.</li>
+<li>Méthodes utiles (signatures et description):
+<ul>
+<li><code>Map::new() -&gt; Map</code> — constructeur vide.</li>
+<li><code>Map::add_intersection(&amp;mut self, kind: IntersectionKind, x: f32, y: f32) -&gt; u32</code> — ajoute un noeud, retourne son <code>id</code> (u32). <code>x,y</code> en unités monde (m).</li>
+<li><code>Map::add_road(&amp;mut self, from: u32, to: u32, lane_count: u8, speed_limit: f32, length: f32) -&gt; u32</code> — ajoute une arête dirigée entre <code>from</code> et <code>to</code>. Calcule et stocke un <code>road id</code> unique.</li>
+<li><code>Map::add_two_way_road(&amp;mut self, from: u32, to: u32, lane_count: u8, speed_limit: f32, length: f32) -&gt; (u32,u32)</code> — crée deux routes opposées et retourne leurs ids.</li>
+<li><code>Map::find_node(&amp;self, id: u32) -&gt; Option&lt;NodeIndex&gt;</code> — récupère l’index interne <code>NodeIndex</code> si présent.</li>
+<li><code>Map::find_edge(&amp;self, id: u32) -&gt; Option&lt;EdgeIndex&gt;</code> — recherche un <code>EdgeIndex</code> par <code>road.id</code>.</li>
+<li><code>Map::retain_largest_component(&amp;mut self)</code> — supprime fragments isolés (utile après parsing OSM).</li>
+</ul>
+</li>
 </ul>
 </li>
 <li>
 <p><code>Coordinates</code> : structure légère <code>x, y</code> pour positions.</p>
 </li>
 </ul>
+<p>Exemples:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut map = Map::new();
+let n = map.add_intersection(IntersectionKind::Intersection, 10.0, 5.0); // returns node id
+let r = map.add_road(n, other_n, 2, 13.9, 120.0); // returns road id
+<span class="boring">}</span></code></pre>
 <p>Comportement important:</p>
 <ul>
 <li><code>retain_largest_component()</code> nettoie les fragments OSM isolés en ne conservant que la composante la plus grande (utile après parsing OSM).</li>
+</ul>
+<p>Erreurs courantes / garanties:</p>
+<ul>
+<li><code>add_road</code> panique si <code>from</code> / <code>to</code> inconnus (la version publique <code>editor::add_road</code> gère ces erreurs et retourne <code>Result</code>).</li>
+</ul>
+<p>Notes sur les unités:</p>
+<ul>
+<li><code>speed_limit</code> : unité interne du projet (assimilée à m/s dans la simulation).</li>
+<li><code>length</code>, <code>x</code>, <code>y</code>, <code>radius</code> : unités en mètres.</li>
 </ul>
 <p>Utilisation:</p>
 <ul>
@@ -271,19 +846,80 @@
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="roads--lanes"><a class="header" href="#roads--lanes">Roads &amp; Lanes</a></h1>
 <p>Fichier: <code>src/map/road.rs</code>.</p>
-<p>Types exposés:</p>
+<p>Types exposés et champs (champ-par-champ)</p>
 <ul>
-<li><code>Road</code> : représente une arête du graphe, contient <code>id</code>, <code>length</code>, <code>speed_limit</code>, <code>lane_width</code>, <code>lanes: Vec&lt;Lane&gt;</code>.</li>
-<li><code>Lane</code> : parcourt une route, a <code>id</code>, <code>road_id</code>, <code>length</code>, <code>speed_limit</code>, <code>links: Vec&lt;Link&gt;</code>.</li>
-<li><code>Link</code>, <code>FoeLink</code> et <code>LinkType</code> : décrivent les connexions entre lanes, les priorités et les entrées pour les intersections.</li>
+<li>
+<p><code>Road</code>:</p>
+<ul>
+<li><code>id: u32</code> — identifiant unique.</li>
+<li><code>length: f32</code> — longueur utile de la section entre intersections (m).</li>
+<li><code>speed_limit: f32</code> — limite de vitesse pour la route (m/s).</li>
+<li><code>lane_width: f32</code> — largeur des voies (m).</li>
+<li><code>lanes: Vec&lt;Lane&gt;</code> — tableaux de <code>Lane</code> attachées à cette route.</li>
 </ul>
-<p>Constructeur:</p>
+</li>
+<li>
+<p><code>Lane</code>:</p>
 <ul>
-<li><code>Road::new(id, lane_count, speed_limit, length)</code> crée les <code>lane_count</code> lanes.</li>
+<li><code>id: u32</code> — identifiant local de la voie.</li>
+<li><code>road_id: u32</code> — id de la <code>Road</code> parente.</li>
+<li><code>length: f32</code> — généralement égal à <code>road.length</code>.</li>
+<li><code>speed_limit: f32</code> — copie locale de la limite pour access rapide.</li>
+<li><code>links: Vec&lt;Link&gt;</code> — mouvements sortants définissant les destinations possibles depuis cette voie.</li>
 </ul>
-<p>Rôle:</p>
+</li>
+<li>
+<p><code>Link</code>:</p>
 <ul>
-<li>Les <code>links</code> d’une <code>Lane</code> définissent comment les véhicules traversent les intersections (liaisons internes, priorités, etc.).</li>
+<li><code>id: u32</code> — identifiant du mouvement (utilisé dans <code>DrivePlanEntry</code> et <code>link_states</code>).</li>
+<li><code>destination_road_id: u32</code> — id de la <code>Road</code> de sortie ciblée par ce mouvement.</li>
+<li><code>via_internal_lane_id: u32</code> — id de l’<code>InternalLane</code> traversée dans l’intersection.</li>
+<li><code>link_type: LinkType</code> — sémantique du mouvement (<code>Priority</code>, <code>Yield</code>, <code>Stop</code>, <code>TrafficLight</code>).</li>
+<li><code>foe_links: Vec&lt;FoeLink&gt;</code> — liste des <code>FoeLink</code> (liens en conflit) utilisée par <code>is_link_open</code>.</li>
+</ul>
+</li>
+<li>
+<p><code>FoeLink</code>:</p>
+<ul>
+<li><code>id: u32</code> — id du lien adverse en conflit.</li>
+<li><code>link_type: LinkType</code> — type du lien adverse (utile si feux/priority changent).</li>
+<li><code>angle</code> / heuristiques (implémentation) — orientation relative utilisée pour priorité à droite.</li>
+</ul>
+</li>
+</ul>
+<p>Constructeurs et helpers</p>
+<ul>
+<li><code>Road::new(id, lane_count, speed_limit, length)</code> — crée la <code>Road</code> et initialise <code>lane_count</code> voies avec <code>lane_width</code> par défaut.</li>
+</ul>
+<p>Rôle et utilisation</p>
+<ul>
+<li>Les <code>links</code> d’une <code>Lane</code> correspondent aux mouvements autorisés à la traversée d’une intersection. Ils sont référencés par <code>DrivePlanEntry.link_id</code> lors de la planification et servent de clef pour <code>link_states</code> (enregistrement des approches). <code>foe_links</code> représente conflits physiques (croisements / merges).</li>
+</ul>
+<p>JSON / payload (format côté API)</p>
+<p>Exemple <code>Road</code> JSON (tel que sérialisé par <code>serialize_map</code>):</p>
+<pre><code class="language-json">{
+	"id": 2,
+	"from": 1,
+	"to": 3,
+	"lane_count": 2,
+	"lane_width": 3.0,
+	"length": 120.0,
+	"speed_limit": 13.9
+}
+</code></pre>
+<p>Exemple conceptuel d’un <code>Link</code> (non directement sérialisé entier par le serveur, mais utilisé par l’engine):</p>
+<pre><code class="language-json">{
+	"id": 101,
+	"destination_road_id": 3,
+	"via_internal_lane_id": 55,
+	"link_type": "Yield",
+	"foe_links": [ { "id": 201, "link_type": "Priority" } ]
+}
+</code></pre>
+<p>Notes:</p>
+<ul>
+<li>Les <code>link.id</code> sont uniques et globalement utilisés pour l’enregistrement d’approches et la synchronisation entre clients et engine.</li>
+<li>Les structures internes (Lane, Link, FoeLink) servent principalement à la logique de planification; l’API n’expose que un sous-ensemble via <code>serialize_map</code>.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="intersections"><a class="header" href="#intersections">Intersections</a></h1>
@@ -300,6 +936,150 @@
 <li><code>is_link_open</code> prend en compte le type de lien, l’état des feux (<code>green_links</code>), véhicules présents et conflit temporel d’approche.</li>
 </ul>
 <p>Ces algorithmes sont centraux pour la logique d’intersection du simulateur.</p>
+<h2 id="worked-example-two-conflicting-movements"><a class="header" href="#worked-example-two-conflicting-movements">Worked example: two conflicting movements</a></h2>
+<p>Imaginons une intersection simple avec deux mouvements en conflit: <code>A→B</code> (link id 101) et <code>C→D</code> (link id 201). Leur <code>DrivePlanEntry</code> fournit des fenêtres d’arrivée/départ estimées.</p>
+<p>Supposons:</p>
+<ul>
+<li>Ego (<code>link_id=101</code>): <code>arrival_time = 12.0</code> s, <code>leave_time = 12.8</code> s</li>
+<li>Foe (<code>link_id=201</code>): <code>arrival_time = 12.3</code> s, <code>leave_time = 13.0</code> s</li>
+</ul>
+<p>La fonction <code>time_window_conflict([12.0,12.8], [12.3,13.0])</code> renvoie <code>true</code> (fenêtres se chevauchent). Si <code>foe</code> a priorité, <code>is_link_open</code> retournera <code>false</code> pour l’ego.</p>
+<h3 id="mermaid-diagram-conflict-schematic"><a class="header" href="#mermaid-diagram-conflict-schematic">Mermaid diagram: conflict schematic</a></h3>
+<pre><code class="language-mermaid">flowchart LR
+	subgraph Intersection
+		A[Approach A]
+		B[Approach B]
+		C[Approach C]
+		D[Approach D]
+	end
+	A -- "link 101" --&gt; B
+	C -- "link 201" --&gt; D
+</code></pre>
+<h2 id="worked-example-priority--traffic-lights"><a class="header" href="#worked-example-priority--traffic-lights">Worked example: priority &amp; traffic lights</a></h2>
+<ol>
+<li>Si <code>link.link_type == TrafficLight</code> et <code>green_links</code> contient <code>link.id</code>, <code>is_link_open</code> autorise le passage (si les voies internes ne sont pas occupées).</li>
+<li>Si <code>link.link_type == Stop</code>, l’ego doit rester arrêté jusqu’à l’absence de conflit temporel avec ses <code>foe_links</code>.</li>
+<li>Si <code>link.link_type == Yield</code>, on vérifie <code>foe_is_to_the_right</code> pour appliquer priorité à droite lorsque pertinent.</li>
+</ol>
+<h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging tips</a></h2>
+<ul>
+<li>Inspecter la table <code>link_states: HashMap&lt;u32, LinkState&gt;</code> pour afficher les <code>ApproachData</code> actuels.</li>
+<li>Visualiser <code>intersection.internal_lanes</code> et <code>link.foe_links</code> pour comprendre les blocages.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="link-ids--how-to-obtain-them"><a class="header" href="#link-ids--how-to-obtain-them">Link IDs &amp; how to obtain them</a></h1>
+<p>This page explains how <code>Link</code> and <code>InternalLane</code> IDs are produced and how to obtain them to configure traffic‑light phases or inspect movements.</p>
+<p>Background</p>
+<ul>
+<li><code>build_intersections(&amp;mut map)</code> constructs <code>InternalLane</code> and <code>Link</code> objects for each junction and assigns unique <code>link.id</code> values. These <code>link.id</code> values are used by the engine (DrivePlanEntry.link_id) and by traffic light phases.</li>
+</ul>
+<p>How to list link ids (Rust snippet)</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// After the map has been fully constructed and build_intersections(map) called
+for node_idx in map.graph.node_indices() {
+    let node = &amp;map.graph[node_idx];
+    println!("Intersection {}: internal_lanes={}", node.id, node.internal_lanes.len());
+    for il in &amp;node.internal_lanes {
+        println!("  InternalLane id={} from_lane={} to_lane={} length={}", il.id, il.from_lane_id, il.to_lane_id, il.length);
+    }
+}
+
+for edge_idx in map.graph.edge_indices() {
+    let road = &amp;map.graph[edge_idx];
+    println!("Road {}: lanes={}", road.id, road.lanes.len());
+    for lane in &amp;road.lanes {
+        for link in &amp;lane.links {
+            println!("  link.id={} -&gt; dest_road={} via_internal_lane={}", link.id, link.destination_road_id, link.via_internal_lane_id);
+        }
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>Practical workflow for traffic light phases</p>
+<ol>
+<li>Build the intersections: call <code>build_intersections(&amp;mut map)</code> after the map topography is final.</li>
+<li>Run the listing code above (or log/print) to collect candidate <code>link.id</code> values for each desired green phase.</li>
+<li>Call <code>add_traffic_light_controller(map, intersection_id, phases)</code> with <code>phases: Vec&lt;(Vec&lt;link_id&gt;, green_duration, yellow_duration)&gt;</code>.</li>
+</ol>
+<p>Notes</p>
+<ul>
+<li><code>link.id</code> values are globally unique across the map and stable while the map structure is unchanged. If you edit the map and re-run <code>build_intersections</code>, ids may change — regenerate the list after each structural edit.</li>
+<li><code>serialize_map</code> does not expose link ids; you must inspect the server-side <code>Map</code> structure (via logging or a debug endpoint) to collect them.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="intersection-scenarios-deadlock-priority-right-traffic-light"><a class="header" href="#intersection-scenarios-deadlock-priority-right-traffic-light">Intersection scenarios (deadlock, priority-right, traffic-light)</a></h1>
+<p>This page describes small scenarios you can construct to validate engine behavior.</p>
+<p>Scenario 1 — Priority-right deadlock (2-vehicle deadlock)</p>
+<ul>
+<li>Setup: two approaches A and B arriving simultaneously, both are <code>Yield</code> to each other (e.g. misconfigured foe links), both wait for the other → deadlock.</li>
+<li>Expected behavior: engine should detect no progress; remedies include adding small jitter to arrival times or an impatience escalation that forces one vehicle to proceed after timeout.</li>
+</ul>
+<p>Mermaid diagram (schematic):</p>
+<pre><code class="language-mermaid">flowchart LR
+  A[Approach A] --&gt;|link 101| X(Intersection)
+  B[Approach B] --&gt;|link 201| X
+</code></pre>
+<p>Scenario 2 — Priority-right example</p>
+<ul>
+<li>Setup: Ego on approach A, Foe on approach B. Foe arrives earlier or is to the right (depending on geometry). If <code>foe_is_to_the_right</code> returns true, Ego should yield.</li>
+<li>Test: tune arrival windows to make tie-breaker rely on <code>foe_is_to_the_right</code>.</li>
+</ul>
+<p>Scenario 3 — Traffic-light timing</p>
+<ul>
+<li>Setup: traffic light with two phases: phase 1 opens links [101,102] for 10s, phase 2 opens [201] for 8s.</li>
+<li>Observations: <code>advance_traffic_lights</code> should populate <code>green_links</code> with ids of currently green links; <code>is_link_open</code> should allow <code>TrafficLight</code> type links only when their id is in <code>green_links</code>.</li>
+</ul>
+<p>How to run scenarios (suggestion)</p>
+<ol>
+<li>Construct a small <code>Map</code> programmatically via <code>editor::add_node</code> / <code>add_road</code> or by starting from an example map.</li>
+<li>Call <code>build_intersections(&amp;mut map)</code>.</li>
+<li>Create <code>Vehicle</code> instances with <code>trip</code> origins/destinations designed to traverse the target links and set <code>departure_time</code> to control arrival ordering.</li>
+<li>Run <code>SimulationEngine::new(config, vehicles)</code> and step through <code>engine.step()</code> while logging <code>DrivePlanEntry</code> and <code>link_states</code>.</li>
+</ol>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="map-editor-quick-examples"><a class="header" href="#map-editor-quick-examples">Map editor quick examples</a></h1>
+<p>Fichier: <code>src/map/editor.rs</code> — helper functions pour modifier la carte.</p>
+<h2 id="add_roundabout-exemple-rust"><a class="header" href="#add_roundabout-exemple-rust"><code>add_roundabout</code> (exemple Rust)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let handle = add_roundabout(
+    &amp;mut map,
+    center_x: 100.0,
+    center_y: 50.0,
+    ring_radius: 30.0,
+    num_arms: 4,
+    ring_speed_limit: 8.0,
+    ring_lane_count: 1,
+);
+// handle.ring_node_ids and handle.ring_road_ids contiennent les ids créés
+<span class="boring">}</span></code></pre>
+<p>Contraintes:</p>
+<ul>
+<li><code>num_arms &gt;= 3</code>.</li>
+<li><code>ring_radius</code> doit être supérieur au minimum calculé (fonction de <code>num_arms</code>).</li>
+</ul>
+<h2 id="add_traffic_light_controller-exemple-rust"><a class="header" href="#add_traffic_light_controller-exemple-rust"><code>add_traffic_light_controller</code> (exemple Rust)</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// phases: Vec&lt;(Vec&lt;link_id&gt;, green_duration_s, yellow_duration_s)&gt;
+let phases = vec![ (vec![101, 102], 10.0, 2.0), (vec![201], 8.0, 2.0) ];
+let result = add_traffic_light_controller(&amp;mut map, intersection_id, phases);
+match result {
+    Ok(handle) =&gt; println!("controller id = {}", handle.controller_id),
+    Err(e) =&gt; eprintln!("Failed to add controller: {}", e),
+}
+<span class="boring">}</span></code></pre>
+<p>Notes:</p>
+<ul>
+<li><code>add_traffic_light_controller</code> marque <code>link.link_type = TrafficLight</code> pour les link ids fournis et insère le contrôleur dans <code>map.traffic_lights</code>.</li>
+<li>Il faut fournir des link ids valides (obtenus après <code>build_intersections</code>), ou construire le rond-point avant d’ajouter le contrôleur.</li>
+</ul>
+<h2 id="utilisation-via-lapi-websocket"><a class="header" href="#utilisation-via-lapi-websocket">Utilisation via l’API WebSocket</a></h2>
+<p>Les fonctions <code>add_node</code>, <code>add_road</code>, <code>move_node</code>, <code>update_node</code>, <code>delete_node</code>, <code>delete_road</code> sont exposées via les paquets <code>ClientPacket</code> (<code>AddNode</code>, <code>AddRoad</code>, etc.).</p>
+<p>Exemple WS pour ajouter un noeud:</p>
+<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
+</code></pre>
+<p>Remarque: <code>add_roundabout</code> et <code>add_traffic_light_controller</code> ne sont pas directement exposés par les paquets WS standard — utilisez les helpers Rust ou scripts d’initialisation pour construire des configurations complexes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="simulation-overview"><a class="header" href="#simulation-overview">Simulation overview</a></h1>
 <p>Le sous-système <code>simulation</code> contient la configuration, l’engine, la cinématique et le modèle <code>Vehicle</code>.</p>
@@ -329,6 +1109,42 @@
 <ul>
 <li>Tests unitaires couvrant <code>rebuild_drive_plan</code>, <code>is_link_open</code>, et transitions de feux.</li>
 </ul>
+<p>API et descriptions fonctionnelles (paramètres &amp; retours)</p>
+<p><code>SimulationEngine::new(config: SimulationConfig, vehicles: Vec&lt;Vehicle&gt;) -&gt; SimulationEngine</code>:</p>
+<ul>
+<li><code>config</code>: configuration de simulation (map, time_step, start/end times, minimum_gap, etc.).</li>
+<li><code>vehicles</code>: liste initiale de <code>Vehicle</code> (doit contenir <code>trip</code>/<code>origin</code>/<code>destination</code>).</li>
+</ul>
+<p>Cycle interne (<strong>step</strong>) — fonctions principales:</p>
+<ul>
+<li><code>handle_departures(&amp;mut self)</code> — active les véhicules dont <code>departure_time &lt;= current_time</code> si espace suffisant sur la voie d’origine; met <code>state = OnRoad</code> et insère dans <code>vehicles_by_lane</code>.</li>
+<li><code>plan_movements(&amp;mut self)</code> — pour chaque véhicule en <code>OnRoad</code> et non engagé dans un <code>Internal</code> lane, appelle <code>rebuild_drive_plan(vidx)</code> pour générer <code>DrivePlanEntry</code> sur l’itinéraire anticipé.</li>
+<li><code>rebuild_drive_plan(&amp;mut self, vidx: usize)</code> — construit la séquence de <code>DrivePlanEntry</code> pour le véhicule <code>vidx</code>:
+<ul>
+<li>calcule <code>braking_horizon</code> en fonction de <code>v^2/(2*d_max)</code> et d’un buffer;</li>
+<li>itère sur le <code>path</code> et pour chaque jonction identifie <code>in_edge</code>/<code>out_edge</code>, calcule <code>arrival_time</code> via <code>kinematics::arrival_time(...)</code>, <code>leave_time</code> via <code>kinematics::leave_time(...)</code>, et remplit <code>DrivePlanEntry</code> (voir <code>simulation::vehicle::DrivePlanEntry</code> pour champs).</li>
+</ul>
+</li>
+<li><code>register_approaches(&amp;mut self)</code> — lit les <code>DrivePlanEntry</code> des véhicules et inscrit <code>ApproachData</code> dans <code>link_states</code> (clé: <code>link_id</code>) afin que les arbitres (is_link_open) puissent décider.</li>
+<li><code>advance_traffic_lights(&amp;mut self)</code> — incrémente le temps des phases et met à jour <code>green_links</code> en conséquence.</li>
+<li><code>execute_movements(&amp;mut self)</code> — pour chaque véhicule OnRoad appelle <code>execute_vehicle(vidx, lane_id)</code>.</li>
+</ul>
+<p>Fonctions utilitaires importantes:</p>
+<ul>
+<li><code>determine_safe_speed(&amp;self, vidx: usize) -&gt; (f32, Option&lt;f32&gt;)</code> — renvoie <code>(speed_to_use, optional_stop_distance)</code>:
+<ul>
+<li>si <code>is_link_open(...)</code> retourne vrai → renvoie <code>v_pass</code> (point of no return logic) sinon renvoie <code>v_wait</code> et la distance de freinage demandée (Some(distance)).</li>
+</ul>
+</li>
+<li><code>find_link(&amp;self, link_id: u32) -&gt; Option&lt;map::road::Link&gt;</code> — renvoie le clone du link depuis <code>link_directory</code>.</li>
+<li><code>lane_length</code>, <code>lane_speed_limit</code> — exposent propriétés utilitaires pour une lane donnée du véhicule.</li>
+</ul>
+<p>Points de documentation à surveiller (actions recommandées):</p>
+<ul>
+<li>Documenter précisément les unités et marges temporelles utilisées par <code>arrival_time</code>/<code>leave_time</code> (fonctions dans <code>simulation::kinematics</code>).</li>
+<li>Ajouter exemples numériques dans <code>simulation/kinematics.md</code> démontrant <code>arrival_time</code> et <code>v_stop_at</code> pour scénarios typiques.</li>
+<li>Documenter la structure de <code>link_states</code> et <code>ApproachData</code> (déjà couvert dans <code>map/intersection.md</code> mais à lier ici).</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="vehicle-model"><a class="header" href="#vehicle-model">Vehicle model</a></h1>
 <p>Fichier: <code>src/simulation/vehicle.rs</code>.</p>
@@ -345,9 +1161,155 @@
 <li><code>compute_acceleration(...)</code> : calcule l’accélération cible basée sur l’IDM-like logic.</li>
 <li><code>get_coordinates</code>, <code>get_heading</code> : positionnement pour rendu / export.</li>
 </ul>
+<p>Détails et schémas champ-par-champ</p>
+<p><code>VehicleSpec</code> fields:</p>
+<ul>
+<li><code>kind</code>: <code>Car | Bus</code> — véhicule logique.</li>
+<li><code>max_speed</code>: vitesse maximale (m/s).</li>
+<li><code>max_acceleration</code>: acceleration maximale (m/s²).</li>
+<li><code>comfortable_deceleration</code>: décélération confortable (m/s²).</li>
+<li><code>reaction_time</code>: temps de réaction (s).</li>
+<li><code>length</code>: longueur du véhicule (m).</li>
+</ul>
+<p><code>DrivePlanEntry</code> (généré par <code>rebuild_drive_plan</code>):</p>
+<ul>
+<li><code>link_id</code> (u32): id du mouvement interne attendu.</li>
+<li><code>lane_id</code> (LaneId): lane d’origine (EdgeIndex + lane index) ou internal.</li>
+<li><code>via_internal_lane_id</code> (u32): id de l’<code>InternalLane</code> traversée à la jonction.</li>
+<li><code>junction_id</code> (u32): id de l’intersection concernée.</li>
+<li><code>v_pass</code> (f32): vitesse cible pour traverser la jonction (m/s).</li>
+<li><code>v_wait</code> (f32): vitesse à maintenir en attente (m/s).</li>
+<li><code>arrival_time</code>, <code>leave_time</code> (f32): fenêtres temporelles estimées (s, temps simulé).</li>
+<li><code>distance</code> (f32): distance cumulée jusqu’à ce point (m).</li>
+<li><code>set_request</code> (bool): si <code>true</code>, le véhicule inscrit une approche sur ce link.</li>
+</ul>
+<p><code>compute_acceleration(desired_velocity, minimum_gap, vehicle_ahead_distance, vehicle_ahead_velocity) -&gt; f32</code>:</p>
+<ul>
+<li><code>desired_velocity</code> (m/s): vitesse visée par la route / limite.</li>
+<li><code>minimum_gap</code> (m): écart minimal entre véhicules (si 0 converti en 0.1 internal).</li>
+<li><code>vehicle_ahead_distance</code> (m): distance disponible jusqu’au véhicule précédent (ou inf).</li>
+<li><code>vehicle_ahead_velocity</code> (m/s): vitesse précédente du véhicule devant.</li>
+</ul>
+<p>Retour: accélération (m/s²). Implémentation: term free-road + terme de freinage calculé via l’IDM-like formule; retourne <code>-comfortable_deceleration</code> si <code>vehicle_ahead_distance &lt;= 0</code>.</p>
+<p>Exemple numérique concis:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let accel = vehicle.compute_acceleration(13.9, 2.0, 10.0, 5.0);
+// accel en m/s^2; valeur positive =&gt; accélération, négative =&gt; freinage
+<span class="boring">}</span></code></pre>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="driveplanentry--linkstate-json-examples"><a class="header" href="#driveplanentry--linkstate-json-examples">DrivePlanEntry &amp; LinkState (JSON examples)</a></h1>
+<p>This page shows the runtime structures produced by the engine and how they look conceptually as JSON. These are not directly serialized by the server as a public API, but they describe the internal data the engine uses.</p>
+<h2 id="driveplanentry-fields"><a class="header" href="#driveplanentry-fields">DrivePlanEntry (fields)</a></h2>
+<ul>
+<li><code>link_id</code> (u32): id of the internal movement (see <code>map/link_ids.md</code>).</li>
+<li><code>lane_id</code> (LaneId): origin lane (Normal(edge, lane_idx) or Internal(junction, il_id)).</li>
+<li><code>via_internal_lane_id</code> (u32): internal lane id traversed at the junction.</li>
+<li><code>junction_id</code> (u32): intersection id.</li>
+<li><code>v_pass</code> (f32): pass velocity (m/s).</li>
+<li><code>v_wait</code> (f32): wait velocity if blocked (m/s).</li>
+<li><code>arrival_time</code>, <code>leave_time</code> (f32): estimated times in simulation seconds.</li>
+<li><code>arrival_speed</code>, <code>leave_speed</code> (f32): speeds used for timing.</li>
+<li><code>distance</code> (f32): cumulative distance from current vehicle position to link.</li>
+<li><code>set_request</code> (bool): whether the vehicle registers an approach request for this link.</li>
+</ul>
+<p>Example DrivePlanEntry JSON (single entry):</p>
+<pre><code class="language-json">{
+  "link_id": 101,
+  "lane_id": { "Normal": [ 42, 0 ] },
+  "via_internal_lane_id": 55,
+  "junction_id": 10,
+  "v_pass": 9.5,
+  "v_wait": 3.0,
+  "arrival_time": 12.34,
+  "leave_time": 12.90,
+  "arrival_speed": 8.5,
+  "leave_speed": 7.0,
+  "distance": 45.2,
+  "set_request": true
+}
+</code></pre>
+<h2 id="linkstate-and-approachdata"><a class="header" href="#linkstate-and-approachdata">LinkState and ApproachData</a></h2>
+<p><code>LinkState</code> holds approaching vehicles keyed by vehicle id. <code>ApproachData</code> contains estimated arrival/leave times and speeds.</p>
+<p>Example <code>LinkState</code> JSON:</p>
+<pre><code class="language-json">{
+  "link_id": 101,
+  "approaching": {
+    "42": { "arrival_time": 12.34, "leave_time": 12.9, "arrival_speed": 8.5, "leave_speed": 7.0, "will_pass": true },
+    "1001": { "arrival_time": 13.5, "leave_time": 14.1, "arrival_speed": 9.0, "leave_speed": 8.0, "will_pass": false }
+  }
+}
+</code></pre>
+<p>How the engine uses these structures</p>
+<ul>
+<li>After <code>rebuild_drive_plan</code>, vehicles with <code>set_request=true</code> insert <code>ApproachData</code> into <code>link_states[link_id].approaching</code>.</li>
+<li><code>is_link_open</code> consults <code>link_states</code> and <code>foe_links</code> to decide whether the <code>ego</code> vehicle may proceed.</li>
+</ul>
+<p>Debug tip: to reproduce engine decisions, record the <code>DrivePlanEntry</code> list for the ego vehicle and the <code>LinkState.approaching</code> map for all <code>foe_links</code>, then evaluate <code>time_window_conflict</code> on arrival/leave intervals.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="kinematics-helpers"><a class="header" href="#kinematics-helpers">Kinematics helpers</a></h1>
+<p>Fichier: <code>src/simulation/kinematics.rs</code>.</p>
+<p>Ce chapitre donne des exemples numériques pour les fonctions utilitaires: <code>arrival_time</code>, <code>leave_time</code>, <code>v_stop_at</code>, <code>approach_speed</code>.</p>
+<p>Unités: distances en mètres (m), vitesses en m/s, durées en secondes (s).</p>
+<h2 id="v_stop_atdist-d_max"><a class="header" href="#v_stop_atdist-d_max"><code>v_stop_at(dist, d_max)</code></a></h2>
+<ul>
+<li>Formule: $v = \sqrt{2,d_{max},dist}$</li>
+</ul>
+<p>Exemple:</p>
+<ul>
+<li>distance = 25 m, d_max = 3.0 m/s²</li>
+</ul>
+<pre><code class="language-text">v = sqrt(2 * 3.0 * 25) = sqrt(150) ≈ 12.247 m/s
+</code></pre>
+<p>Interprétation: une vitesse jusqu’à ~12.25 m/s peut être arrêtée sur 25 m avec décélération 3.0 m/s².</p>
+<h2 id="arrival_timedist-v0-v1-a_max-d_max"><a class="header" href="#arrival_timedist-v0-v1-a_max-d_max"><code>arrival_time(dist, v0, v1, a_max, d_max)</code></a></h2>
+<ul>
+<li>Calcule le temps minimal pour parcourir <code>dist</code> en partant à <code>v0</code> et en arrivant à <code>v1</code> sous contraintes d’accélération/décélération.</li>
+</ul>
+<p>Exemple numérique simple (cas accélération):</p>
+<ul>
+<li>dist = 100 m, v0 = 10 m/s, v1 = 20 m/s, a_max = 2.0 m/s², d_max = 2.0 m/s²</li>
+</ul>
+<p>Calcul conceptuel (résumé):</p>
+<ol>
+<li>Estimer le temps nécessaire pour accélérer de 10→20 m/s avec a_max = 2.0: t_acc = (v1 - v0)/a_max = 5.0 s.</li>
+<li>Distance parcourue pendant l’accélération approximative: s_acc = (v0 + v1)/2 * t_acc = 15 * 5 = 75 m.</li>
+<li>Reste à parcourir en croisière: s_cruise = 100 - 75 = 25 m.</li>
+<li>Temps de croisière: t_cruise = s_cruise / v1 = 25 / 20 = 1.25 s.</li>
+<li>Total approximé: t_total ≈ t_acc + t_cruise = 6.25 s.</li>
+</ol>
+<blockquote>
+<p>Note: l’implémentation exacte de <code>arrival_time</code> tient compte des limites, des phases et renvoie une valeur proche de ce calcul.</p>
+</blockquote>
+<h2 id="leave_timet_arrive-lane_len-veh_len-v_arrive-v_leave"><a class="header" href="#leave_timet_arrive-lane_len-veh_len-v_arrive-v_leave"><code>leave_time(t_arrive, lane_len, veh_len, v_arrive, v_leave)</code></a></h2>
+<ul>
+<li>Règle: estimer le temps de sortie en supposant une vitesse moyenne bornée ≥ 0.1 m/s.</li>
+</ul>
+<p>Exemple:</p>
+<ul>
+<li>t_arrive = 12.0 s, lane_len = 8.0 m, veh_len = 4.0 m, v_arrive = 5.0 m/s, v_leave = 13.9 m/s</li>
+</ul>
+<ol>
+<li>avg_speed ≈ max( (5.0 + 13.9)/2, 0.1 ) = 9.45 m/s</li>
+<li>t_leave = 12.0 + (lane_len + veh_len) / avg_speed = 12.0 + 12.0 / 9.45 ≈ 13.27 s</li>
+</ol>
+<h2 id="approach_speedlink_type-road_speed_limit"><a class="header" href="#approach_speedlink_type-road_speed_limit"><code>approach_speed(link_type, road_speed_limit)</code></a></h2>
+<ul>
+<li>Heuristiques:
+<ul>
+<li><code>Priority</code> → <code>road_speed_limit</code></li>
+<li><code>Yield</code> → <code>0.7 * road_speed_limit</code></li>
+<li><code>Stop</code> → <code>0.0</code></li>
+<li><code>TrafficLight</code> → <code>road_speed_limit</code></li>
+</ul>
+</li>
+</ul>
+<p>Exemple: <code>link_type = Yield</code>, <code>road_speed_limit = 13.9</code> → approach_speed ≈ 0.7 * 13.9 = 9.73 m/s</p>
+<hr>
+<p>Ces exemples aident à comprendre les ordres de grandeur et tester la cohérence des <code>DrivePlanEntry</code> produits par le moteur.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="scoring-system"><a class="header" href="#scoring-system">Scoring system</a></h1>
-<p>Fichier: <code>src/scoring/mod.rs</code> (et autres fichiers de scoring).</p>
+<p>Fichier: <code>src/scoring/mod.rs</code> (et autres fonctions utilitaires).</p>
 <p>But:</p>
 <ul>
 <li>Calculer un score global sur la simulation basé sur: temps de trajet total, émissions de CO2, distance parcourue, taux de succès (arrivées).</li>
@@ -355,6 +1317,38 @@
 <p>Utilisation:</p>
 <ul>
 <li><code>SimulationEngine::get_score()</code> appelle le module <code>scoring</code> pour produire un <code>Score</code> struct, qui est ensuite envoyé au client via <code>ServerPacket::Score</code>.</li>
+</ul>
+<h2 id="détails-de-limplémentation"><a class="header" href="#détails-de-limplémentation">Détails de l’implémentation</a></h2>
+<p>Le scoring combine plusieurs termes normalisés : temps, succès (ratio véhicules arrivés), pollution et infrastructure. Les poids actuels (dans <code>scoring/mod.rs</code>) sont :</p>
+<ul>
+<li><code>TIME_WEIGHT = 0.4</code></li>
+<li><code>SUCCESS_WEIGHT = 0.2</code></li>
+<li><code>POLLUTION_WEIGHT = 0.2</code></li>
+<li><code>INFRASTRUCTURE_WEIGHT = 0.2</code></li>
+</ul>
+<p>Le calcul suit ces étapes :</p>
+<ol>
+<li><code>success_rate</code> = véhicules arrivés / total</li>
+<li><code>total_trip_time</code> = maximum du temps de trajet observé (arrived_at - departure_time)</li>
+<li><code>sum_trip_time</code> = somme des temps effectifs pour véhicules arrivés</li>
+<li><code>total_ref_trip_time</code> = somme des temps théoriques minimaux (<code>get_vehicle_min_time</code>) sur les mêmes trajets</li>
+<li><code>time_term</code> = <code>total_ref_trip_time / sum_trip_time</code> (proche de 1 si efficaces)</li>
+<li><code>pollution_term</code> = <code>total_ref_emitted_co2 / total_emitted_co2</code></li>
+<li><code>infrastructure_term</code> = <code>best_network_length (Steiner lower bound) / network_length</code></li>
+</ol>
+<p>Score final :</p>
+<pre><code>score = TIME_WEIGHT * time_term
+	+ SUCCESS_WEIGHT * success_rate
+	+ POLLUTION_WEIGHT * pollution_term
+	+ INFRASTRUCTURE_WEIGHT * infrastructure_term
+</code></pre>
+<h2 id="unités-et-constantes"><a class="header" href="#unités-et-constantes">Unités et constantes</a></h2>
+<ul>
+<li>Les fonctions de co2 utilisent des constantes physiques/empiriques (masse, rendement moteur, surface frontale, densité de l’air, etc.) pour estimer les émissions par distance parcourue.</li>
+</ul>
+<h2 id="exemple-dinterprétation"><a class="header" href="#exemple-dinterprétation">Exemple d’interprétation</a></h2>
+<ul>
+<li><code>score</code> dans <code>[0,1]</code> (théoriquement) : plus élevé = meilleur compromis temps/pollution/succès/infrastructure.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="build--run"><a class="header" href="#build--run">Build &amp; Run</a></h1>
@@ -402,6 +1396,22 @@ git push origin feature/documentation
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>
@@ -418,6 +1428,8 @@ git push origin feature/documentation
         <script src="book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="mermaid-loader-58f8d2c4.js"></script>
+        <script src="mermaid-init-1ea3646b.js"></script>
 
         <script>
         window.addEventListener('load', function() {
