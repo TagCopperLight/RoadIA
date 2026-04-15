@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3ae62e47.js";
+            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-98ddbbda.js"></script>
+        <script src="../toc-5b6ca4d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -181,16 +181,42 @@
 <li>
 <p><code>Map</code> : conteneur principal contenant un <code>petgraph::Graph&lt;Intersection, Road&gt;</code>, indices, compteurs d’ID et <code>traffic_lights</code>.</p>
 <ul>
-<li>Méthodes utiles: <code>new()</code>, <code>add_intersection()</code>, <code>add_road()</code>, <code>add_two_way_road()</code>, <code>find_node()</code>, <code>find_edge()</code>, <code>retain_largest_component()</code>.</li>
+<li>Méthodes utiles (signatures et description):
+<ul>
+<li><code>Map::new() -&gt; Map</code> — constructeur vide.</li>
+<li><code>Map::add_intersection(&amp;mut self, kind: IntersectionKind, x: f32, y: f32) -&gt; u32</code> — ajoute un noeud, retourne son <code>id</code> (u32). <code>x,y</code> en unités monde (m).</li>
+<li><code>Map::add_road(&amp;mut self, from: u32, to: u32, lane_count: u8, speed_limit: f32, length: f32) -&gt; u32</code> — ajoute une arête dirigée entre <code>from</code> et <code>to</code>. Calcule et stocke un <code>road id</code> unique.</li>
+<li><code>Map::add_two_way_road(&amp;mut self, from: u32, to: u32, lane_count: u8, speed_limit: f32, length: f32) -&gt; (u32,u32)</code> — crée deux routes opposées et retourne leurs ids.</li>
+<li><code>Map::find_node(&amp;self, id: u32) -&gt; Option&lt;NodeIndex&gt;</code> — récupère l’index interne <code>NodeIndex</code> si présent.</li>
+<li><code>Map::find_edge(&amp;self, id: u32) -&gt; Option&lt;EdgeIndex&gt;</code> — recherche un <code>EdgeIndex</code> par <code>road.id</code>.</li>
+<li><code>Map::retain_largest_component(&amp;mut self)</code> — supprime fragments isolés (utile après parsing OSM).</li>
+</ul>
+</li>
 </ul>
 </li>
 <li>
 <p><code>Coordinates</code> : structure légère <code>x, y</code> pour positions.</p>
 </li>
 </ul>
+<p>Exemples:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut map = Map::new();
+let n = map.add_intersection(IntersectionKind::Intersection, 10.0, 5.0); // returns node id
+let r = map.add_road(n, other_n, 2, 13.9, 120.0); // returns road id
+<span class="boring">}</span></code></pre>
 <p>Comportement important:</p>
 <ul>
 <li><code>retain_largest_component()</code> nettoie les fragments OSM isolés en ne conservant que la composante la plus grande (utile après parsing OSM).</li>
+</ul>
+<p>Erreurs courantes / garanties:</p>
+<ul>
+<li><code>add_road</code> panique si <code>from</code> / <code>to</code> inconnus (la version publique <code>editor::add_road</code> gère ces erreurs et retourne <code>Result</code>).</li>
+</ul>
+<p>Notes sur les unités:</p>
+<ul>
+<li><code>speed_limit</code> : unité interne du projet (assimilée à m/s dans la simulation).</li>
+<li><code>length</code>, <code>x</code>, <code>y</code>, <code>radius</code> : unités en mètres.</li>
 </ul>
 <p>Utilisation:</p>
 <ul>
@@ -232,6 +258,22 @@
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>
@@ -248,6 +290,8 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../mermaid-loader-58f8d2c4.js"></script>
+        <script src="../mermaid-init-1ea3646b.js"></script>
 
 
 
