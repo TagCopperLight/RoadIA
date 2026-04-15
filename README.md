@@ -72,3 +72,12 @@ Services:
 |---|---|---|---|
 | `NEXT_PUBLIC_API_URL` | client | `http://localhost:8080` | URL of the backend API |
 | `ALLOWED_ORIGINS` | server | `http://localhost:3000` | CORS allowed origins |
+
+## Build and run the documentation
+
+```bash
+mdbook build
+mdbook serve
+```
+
+For now the maps are in http://localhost:3000/map/{uuid} where {uuid} is not used and can be any string.
