@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApplication } from '@pixi/react';
 import { FederatedPointerEvent } from 'pixi.js';
-import { MapData, MapEdge, VehicleData, TrafficLightData } from './types';
+import { MapData, MapEdge, MapNode, VehicleData, TrafficLightData } from './types';
 import { AppMode, EditTool, SelectedElement } from '../EditModeContext';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
@@ -21,7 +21,7 @@ interface MapCanvasProps {
 	onAddNode: (x: number, y: number) => void;
 	onAddRoad: (nodeId: number) => void;
 	onWaypointNodeClick?: (nodeId: number) => void;
-	allNodesMap?: Map<number, any> | null;
+	_allNodesMap?: Map<number, MapNode> | null;
 }
 
 export function MapCanvas({
@@ -37,7 +37,6 @@ export function MapCanvas({
 	onAddNode,
 	onAddRoad,
 	onWaypointNodeClick,
-	allNodesMap,
 }: MapCanvasProps) {
 	const { app } = useApplication();
 
@@ -183,7 +182,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, onWaypointNodeClick]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, mode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, onWaypointNodeClick]);
 
 	return (
 		<pixiCustomViewport
