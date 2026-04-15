@@ -2,3 +2,6 @@
 title = "documentation"
 authors = []
 language = "en"
+
+[output.html]
+additional-js = ["mermaid-loader.js", "mermaid-init.js"]
