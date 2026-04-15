@@ -246,7 +246,7 @@ export default function MapComponent() {
 						onAddNode={handleAddNode}
 						onAddRoad={handleAddRoad}
 					onWaypointNodeClick={handleWaypointNodeClick}
-					allNodesMap={mapData ? new Map(mapData.nodes.map(n => [n.id, n])) : null}				/>
+				/>
 				)}
 				<BudgetHUD mapData={mapData} />
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
