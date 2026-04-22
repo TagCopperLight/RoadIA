@@ -15,7 +15,10 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::{SimulationConfig, MAX_DURATION};
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+use crate::api::runner::map_generator::{
+    create_intersection_test_map, create_scheduled_simulation_seed,
+};
+use crate::api::runner::scheduler::{ShiftProfileInput, ShiftScheduler};
 use crate::scoring::Score;
 
 #[derive(Clone)]
@@ -56,10 +59,31 @@ pub struct SimulationInstance {
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
     pub speed_multiplier: AtomicU32,
+    scheduler: Option<Arc<Mutex<ShiftScheduler>>>,
 }
 
 impl SimulationInstance {
     pub fn new(map: crate::map::model::Map, vehicles: Vec<Vehicle>) -> Arc<Self> {
+        Self::new_internal(map, vehicles, None)
+    }
+
+    pub fn new_with_shift_profiles(
+        map: crate::map::model::Map,
+        shift_profiles: Vec<ShiftProfileInput>,
+    ) -> Result<Arc<Self>, String> {
+        let seed = create_scheduled_simulation_seed(&map, shift_profiles)?;
+        Ok(Self::new_internal(
+            map,
+            seed.vehicles,
+            Some(Arc::new(Mutex::new(seed.scheduler))),
+        ))
+    }
+
+    fn new_internal(
+        map: crate::map::model::Map,
+        vehicles: Vec<Vehicle>,
+        scheduler: Option<Arc<Mutex<ShiftScheduler>>>,
+    ) -> Arc<Self> {
         let token = generate_token();
         let time_step = 0.05;
         let max_steps = (MAX_DURATION / time_step).floor() as usize;
@@ -88,6 +112,7 @@ impl SimulationInstance {
             controller,
             active_connections: AtomicUsize::new(0),
             speed_multiplier: AtomicU32::new(3),
+            scheduler,
         });
 
         tokio::spawn({
@@ -108,19 +133,43 @@ impl SimulationInstance {
                     let start = tokio::time::Instant::now();
                     let multiplier = instance.speed_multiplier.load(Ordering::Relaxed) as usize;
 
-                    let (vehicles_data, traffic_lights_data, time_step) = {
+                    let (vehicles_data, traffic_lights_data, time_step, should_stop) = {
                         let mut eng = instance.engine.lock().await;
                         for _ in 0..multiplier {
                             eng.step();
                             eng.current_time += eng.config.time_step;
                         }
+
+                        let mut scheduler_pending = false;
+                        if let Some(scheduler) = &instance.scheduler {
+                            let mut scheduler = scheduler.lock().await;
+                            match scheduler.spawn_due_return_vehicles(
+                                eng.current_time,
+                                &eng.vehicles,
+                                &eng.config.map,
+                            ) {
+                                Ok(mut spawned_vehicles) => {
+                                    if !spawned_vehicles.is_empty() {
+                                        eng.all_vehicles_arrived = false;
+                                        eng.vehicles.append(&mut spawned_vehicles);
+                                    }
+                                }
+                                Err(error) => {
+                                    eprintln!("Failed to spawn scheduled return vehicles: {}", error);
+                                }
+                            }
+                            scheduler_pending = scheduler.has_pending_returns();
+                        }
+
                         let vehicles = eng.vehicles
                             .iter()
                             .map(|v| serialize_vehicle(v, &eng.config.map))
                             .collect::<Vec<_>>();
                         let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
                         let ts = eng.config.time_step;
-                        (vehicles, tl, ts)
+                        let should_stop = eng.current_time >= eng.config.end_time
+                            || (eng.all_vehicles_arrived && !scheduler_pending);
+                        (vehicles, tl, ts, should_stop)
                     };
 
                     let packet = ServerPacket::VehicleUpdate {
@@ -132,22 +181,20 @@ impl SimulationInstance {
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
                   
-                    {
+                    if should_stop {
                         let engine = instance.engine.lock().await;
-                        if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
-                            let score:Score = engine.get_score();
-                            let packet = ServerPacket::Score {
-                                score : score.score,
-                                total_trip_time: score.total_trip_time,
-                                total_emitted_co2: score.total_emitted_co2,
-                                network_length: score.network_length,
-                                total_distance_traveled: score.total_distance_traveled,
-                                success_rate: score.success_rate,
-                            };
-                            let _ = instance.broadcast.send(packet);
-                            instance.controller.stop();
-                            println!("Simulation finished");
-                        }
+                        let score:Score = engine.get_score();
+                        let packet = ServerPacket::Score {
+                            score : score.score,
+                            total_trip_time: score.total_trip_time,
+                            total_emitted_co2: score.total_emitted_co2,
+                            network_length: score.network_length,
+                            total_distance_traveled: score.total_distance_traveled,
+                            success_rate: score.success_rate,
+                        };
+                        let _ = instance.broadcast.send(packet);
+                        instance.controller.stop();
+                        println!("Simulation finished");
                     }
                   
                     drop(instance);
@@ -163,21 +210,24 @@ impl SimulationInstance {
     }
 
     pub fn new_default() -> Arc<Self> {
-        // let map = create_connected_map(200, 1500.0, 1500.0);
-        // let map = create_traffic_light_test_map();
+        let map = create_intersection_test_map();
+        let shift_profiles = vec![
+            ShiftProfileInput {
+                origin: 1,
+                destination: 2,
+                departure_time: 5.0,
+                dwell_time: 5.0,
+            },
+            ShiftProfileInput {
+                origin: 3,
+                destination: 4,
+                departure_time: 10.0,
+                dwell_time: 2.0,
+            },
+        ];
 
-        let map_path = "data/lannion.osm.pbf";
-        match create_osm_map(map_path) {
-            Ok(map) => {
-                println!("Successfully loaded Lannion map from OSM!");
-                let vehicles = create_random_vehicles(&map, 500);
-                Self::new(map, vehicles)
-            }
-            Err(e) => {
-                println!("Failed to load Lannion map: {:?}", e);
-                panic!("Failed to load Lannion map: {:?}", e);
-            }
-        }
+        Self::new_with_shift_profiles(map, shift_profiles)
+            .expect("default scheduled simulation should build")
     }
 }
 

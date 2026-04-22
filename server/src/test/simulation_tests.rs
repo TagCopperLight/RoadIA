@@ -1,7 +1,9 @@
 use crate::api::runner::map_generator::{
     create_intersection_test_map, create_one_intersection_congestion_map,
-    create_roundabout_test_map, create_traffic_light_test_map,
+    create_roundabout_test_map, create_scheduled_simulation_seed,
+    create_traffic_light_test_map,
 };
+use crate::api::runner::scheduler::ShiftProfileInput;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::VehicleState;
 use crate::test::{make_minimal_straight_map, make_sim_config, make_vehicle};
@@ -220,6 +222,47 @@ fn four_way_four_vehicles_no_deadlock() {
     //         "vehicle {} did not arrive", v.id
     //     );
     // }
+}
+
+#[test]
+fn scheduled_cross_map_seed_builds_and_spawns_returns() {
+    let map = create_intersection_test_map();
+    let mut seed = create_scheduled_simulation_seed(
+        &map,
+        vec![
+            ShiftProfileInput {
+                origin: 1,
+                destination: 2,
+                departure_time: 5.0,
+                dwell_time: 5.0,
+            },
+            ShiftProfileInput {
+                origin: 3,
+                destination: 4,
+                departure_time: 10.0,
+                dwell_time: 2.0,
+            },
+        ],
+    )
+    .expect("scheduled seed should build");
+
+    assert_eq!(seed.vehicles.len(), 2);
+    assert_eq!(seed.vehicles[0].trip.departure_time, 5.0);
+    assert_eq!(seed.vehicles[1].trip.departure_time, 10.0);
+
+    let mut vehicles = seed.vehicles.clone();
+    vehicles[0].state = VehicleState::Arrived;
+    vehicles[0].arrived_at = Some(10.0);
+
+    let spawned = seed
+        .scheduler
+        .spawn_due_return_vehicles(15.0, &vehicles, &map)
+        .expect("return vehicle should spawn when due");
+
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0].trip.departure_time, 15.0);
+    assert_eq!(spawned[0].trip.origin, map.find_node(2).unwrap());
+    assert_eq!(spawned[0].trip.destination, map.find_node(1).unwrap());
 }
 
 // ---- Behavior: stop sign causes waiting ----

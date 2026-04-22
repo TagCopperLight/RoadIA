@@ -7,7 +7,13 @@ use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
+use crate::api::runner::scheduler::{ShiftProfileInput, ShiftScheduler};
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+
+pub struct ScheduledSimulationSeed {
+    pub scheduler: ShiftScheduler,
+    pub vehicles: Vec<Vehicle>,
+}
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
@@ -71,6 +77,15 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
     Ok(map)
 }
 
+pub fn create_scheduled_simulation_seed(
+    map: &Map,
+    shift_profiles: Vec<ShiftProfileInput>,
+) -> Result<ScheduledSimulationSeed, String> {
+    let mut scheduler = ShiftScheduler::new(map, shift_profiles)?;
+    let vehicles = scheduler.build_initial_vehicles();
+    Ok(ScheduledSimulationSeed { scheduler, vehicles })
+}
+
 
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     let mut vehicles = Vec::new();
@@ -118,8 +133,8 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
     let mut map = Map::new();
 
     let mut nodes = Vec::with_capacity(num_nodes);
-    const MIN_NODE_SPACING: f32 = 30.0;
     let mut positions: Vec<(f32, f32)> = Vec::with_capacity(num_nodes);
+    const MIN_NODE_SPACING: f32 = 30.0;
 
     // 1. Create random nodes
     let mut i = 0;
@@ -149,10 +164,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
         i += 1;
     }
 
-    // 2. Build MST to ensure connectivity
-    // Simple Prim's like approach:
-    // Start with first node in connected set.
-    // Iteratively add the closest node not in the set to the set.
+    // 2. Build a minimum spanning tree to ensure connectivity.
     let mut connected_indices = vec![0];
     let mut available_indices: Vec<usize> = (1..num_nodes).collect();
 
@@ -184,37 +196,6 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
         let v = nodes[best_v];
         let speed_limit = rand::random_range(13..33) as f32;
         map.add_two_way_road(u, v, 1, speed_limit, min_dist);
-    }
-
-    // 3. Add extra edges for cycles (connect to k nearest neighbors)
-    let extra_connections = 2;
-
-    for (i, &u) in nodes.iter().enumerate() {
-        let mut neighbors: Vec<(usize, f32)> = nodes
-            .iter()
-            .enumerate()
-            .filter(|&(j, _)| i != j)
-            .map(|(j, &v)| {
-                let u_node = map.find_node(u).unwrap();
-                let v_node = map.find_node(v).unwrap();
-                let dist = map.intersections_euclidean_distance(u_node, v_node);
-                (j, dist)
-            })
-            .collect();
-
-        neighbors.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-        for k in 0..extra_connections.min(neighbors.len()) {
-            let (v_idx, dist) = neighbors[k];
-            let v = nodes[v_idx];
-
-            let u_node = map.find_node(u).unwrap();
-            let v_node = map.find_node(v).unwrap();
-            if map.graph.find_edge(u_node, v_node).is_none() {
-                let speed_limit = rand::random_range(13..33) as f32;
-                map.add_two_way_road(u, v, 1, speed_limit, dist);
-            }
-        }
     }
 
     intersection::build_intersections(&mut map);
