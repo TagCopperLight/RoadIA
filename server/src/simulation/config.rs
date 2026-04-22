@@ -1,5 +1,7 @@
 use crate::map::model::Map;
 
+pub const MAX_DURATION: f32 = 86_400.0;
+
 pub struct SimulationConfig {
     pub start_time: f32,
     pub end_time: f32,

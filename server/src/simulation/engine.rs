@@ -122,7 +122,11 @@ impl SimulationEngine {
             .vehicles
             .iter()
             .enumerate()
-            .filter(|(_, v)| v.state == VehicleState::WaitingToDepart && v.path.len() >= 2)
+            .filter(|(_, v)| {
+                v.state == VehicleState::WaitingToDepart
+                    && v.path.len() >= 2
+                    && self.current_time >= v.trip.departure_time
+            })
             .map(|(i, _)| i)
             .collect();
 

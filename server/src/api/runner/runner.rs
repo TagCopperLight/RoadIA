@@ -12,7 +12,7 @@ use axum::http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, serialize_traffic_lights};
-use crate::simulation::config::SimulationConfig;
+use crate::simulation::config::{SimulationConfig, MAX_DURATION};
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
 use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
@@ -61,11 +61,13 @@ pub struct SimulationInstance {
 impl SimulationInstance {
     pub fn new(map: crate::map::model::Map, vehicles: Vec<Vehicle>) -> Arc<Self> {
         let token = generate_token();
+        let time_step = 0.05;
+        let max_steps = (MAX_DURATION / time_step).floor() as usize;
 
         let config = SimulationConfig {
             start_time: 0.0,
-            end_time: 600.0,
-            time_step: 0.05,
+            end_time: max_steps as f32 * time_step,
+            time_step,
             minimum_gap: 2.0,
             map,
         };

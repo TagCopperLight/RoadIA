@@ -112,6 +112,26 @@ fn step_vehicle_departs_onto_road() {
 }
 
 #[test]
+fn step_respects_departure_time() {
+    let map = make_minimal_straight_map();
+    let hab = map.find_node(0).unwrap();
+    let work = map.find_node(2).unwrap();
+    let mut v = make_vehicle(0, hab, work);
+    v.trip.departure_time = 1.0;
+    v.update_path(&map);
+
+    let config = make_sim_config(map, 300.0);
+    let mut engine = SimulationEngine::new(config, vec![v]);
+
+    engine.step();
+    assert_eq!(engine.vehicles[0].state, VehicleState::WaitingToDepart);
+
+    engine.current_time = 1.0;
+    engine.step();
+    assert_eq!(engine.vehicles[0].state, VehicleState::OnRoad);
+}
+
+#[test]
 fn step_vehicle_advances_position() {
     let mut engine = make_engine_with_one_vehicle();
     // Run enough steps for the vehicle to depart and accelerate
