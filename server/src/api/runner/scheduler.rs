@@ -2,10 +2,18 @@ use std::collections::HashSet;
 
 use petgraph::graph::NodeIndex;
 use serde::Deserialize;
+use rand_distr::{Beta, Distribution};
 
 use crate::map::model::Map;
 use crate::simulation::config::MAX_DURATION;
 use crate::simulation::vehicle::{fastest_path, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState};
+
+const SECONDS_PER_HOUR: f32 = 3600.0;
+const SCHEDULING_WINDOW_SECONDS: f32 = 12.0 * SECONDS_PER_HOUR;
+const DEPARTURE_BETA_ALPHA: f64 = 6.33;
+const DEPARTURE_BETA_BETA: f64 = 3.67;
+const DWELL_BETA_ALPHA: f64 = 7.25;
+const DWELL_BETA_BETA: f64 = 2.75;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ShiftProfileInput {
@@ -13,6 +21,26 @@ pub struct ShiftProfileInput {
     pub destination: u32,
     pub departure_time: f32,
     pub dwell_time: f32,
+}
+
+impl ShiftProfileInput {
+    pub fn new(origin: u32, destination: u32, departure_time: f32, dwell_time: f32) -> Self {
+        Self {
+            origin,
+            destination,
+            departure_time,
+            dwell_time,
+        }
+    }
+
+    pub fn random(origin: u32, destination: u32) -> Self {
+        Self {
+            origin,
+            destination,
+            departure_time: sample_beta_seconds(DEPARTURE_BETA_ALPHA, DEPARTURE_BETA_BETA),
+            dwell_time: sample_beta_seconds(DWELL_BETA_ALPHA, DWELL_BETA_BETA),
+        }
+    }
 }
 
 struct ShiftProfileState {
@@ -217,6 +245,12 @@ fn default_vehicle_spec() -> VehicleSpec {
     VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0)
 }
 
+fn sample_beta_seconds(alpha: f64, beta: f64) -> f32 {
+    let distribution = Beta::new(alpha, beta).expect("beta parameters must be valid");
+    let mut rng = rand::rng();
+    (SCHEDULING_WINDOW_SECONDS as f64 * distribution.sample(&mut rng)) as f32
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -317,5 +351,25 @@ mod tests {
             ],
         );
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn shift_profile_new_keeps_values() {
+        let profile = ShiftProfileInput::new(11, 42, 3.25, 8.75);
+        assert_eq!(profile.origin, 11);
+        assert_eq!(profile.destination, 42);
+        assert_eq!(profile.departure_time, 3.25);
+        assert_eq!(profile.dwell_time, 8.75);
+    }
+
+    #[test]
+    fn shift_profile_random_stays_within_day_window() {
+        let profile = ShiftProfileInput::random(11, 42);
+        assert_eq!(profile.origin, 11);
+        assert_eq!(profile.destination, 42);
+        assert!(profile.departure_time >= 0.0);
+        assert!(profile.departure_time <= SCHEDULING_WINDOW_SECONDS);
+        assert!(profile.dwell_time >= 0.0);
+        assert!(profile.dwell_time <= SCHEDULING_WINDOW_SECONDS);
     }
 }

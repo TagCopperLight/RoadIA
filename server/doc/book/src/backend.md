@@ -17,21 +17,10 @@ Un véhicule en attente ne quitte pas sa position tant que le temps courant est 
 
 ## Simulation par défaut
 
-La simulation par défaut utilise désormais la carte en croix fournie par `map_generator`.
-Le scénario schedulé est défini en dur dans `SimulationInstance::new_default()`.
-À l'heure actuelle, les paramètres du scheduling ne sont pas fournis par le front: ils sont hardcodés dans le backend pour garder un comportement déterministe.
+La simulation par défaut utilise la carte en croix fournie par `map_generator`.
+Le scénario schedulé actuel est hardcodé dans `SimulationInstance::new_default()` et utilise deux profils fixes.
 
-Le scénario actuel contient deux shifts:
-
-- `1 -> 2` avec une `departure_time` à `5.0` secondes et un `dwell_time` de `5.0` secondes
-- `3 -> 4` avec une `departure_time` à `10.0` secondes et un `dwell_time` de `2.0` secondes
-
-Le scheduler interne crée d'abord les véhicules aller au démarrage. Quand un véhicule arrive à destination, le scheduler crée le véhicule retour avec:
-
-- `origin` et `destination` inversés
-- une date de départ égale à `arrived_at + dwell_time`
-
-Le scheduler interne valide toujours les paramètres lorsqu'on l'instancie: les temps doivent être positifs, les nœuds doivent exister dans la carte et un profil en double est refusé. Cette validation reste utile pour la suite, même si les valeurs sont actuellement fixées côté serveur.
+Les détails du scheduling, du constructeur aléatoire Beta, des unités en secondes et du graphe des lois sont décrits dans [Scheduling](scheduling.md).
 
 ## Remarque
 
