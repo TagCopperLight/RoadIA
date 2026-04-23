@@ -18,23 +18,22 @@ Un véhicule en attente ne quitte pas sa position tant que le temps courant est 
 ## Simulation par défaut
 
 La simulation par défaut utilise désormais la carte en croix fournie par `map_generator`.
-Le scheduler actuel est volontairement simple et déterministe.
-Il accepte une liste de profils de shifts avec:
+Le scénario schedulé est défini en dur dans `SimulationInstance::new_default()`.
+À l'heure actuelle, les paramètres du scheduling ne sont pas fournis par le front: ils sont hardcodés dans le backend pour garder un comportement déterministe.
 
-- un point de départ `origin`
-- un point d'arrivée `destination`
-- une `departure_time`
-- une `dwell_time`
+Le scénario actuel contient deux shifts:
 
-Chaque profil crée un véhicule aller au démarrage.
-Quand ce véhicule arrive à destination, le scheduler crée le véhicule retour avec:
+- `1 -> 2` avec une `departure_time` à `5.0` secondes et un `dwell_time` de `5.0` secondes
+- `3 -> 4` avec une `departure_time` à `10.0` secondes et un `dwell_time` de `2.0` secondes
+
+Le scheduler interne crée d'abord les véhicules aller au démarrage. Quand un véhicule arrive à destination, le scheduler crée le véhicule retour avec:
 
 - `origin` et `destination` inversés
 - une date de départ égale à `arrived_at + dwell_time`
 
-Les paramètres sont validés côté serveur: les temps doivent être positifs, les nœuds doivent exister dans la carte et un profil en double est refusé.
+Le scheduler interne valide toujours les paramètres lorsqu'on l'instancie: les temps doivent être positifs, les nœuds doivent exister dans la carte et un profil en double est refusé. Cette validation reste utile pour la suite, même si les valeurs sont actuellement fixées côté serveur.
 
 ## Remarque
 
-Cette documentation décrit l'état actuel du scheduler, sans génération Beta aléatoire.
+Cette documentation décrit l'état actuel du scheduler interne, sans génération Beta aléatoire ni configuration externe des profils.
 Cette partie viendra dans une étape suivante.
