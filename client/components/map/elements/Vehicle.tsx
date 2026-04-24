@@ -10,33 +10,31 @@ export function Vehicle({ data }: VehicleProps) {
     const drawCar = useCallback((g: Graphics) => {
         g.clear();
         
-        // Get size and color based on vehicle type (motorization)
-        // CITEPA/EPA/SDES sources: https://www.citepa.org/, https://www.epa.gov/
         const motorization = data.motorization || 'EssenceHybride';
-        let width = 8.0;   // default
-        let height = 5.0;  // default
-        let color = 0xA855F7; // default purple (Essence Hybrid)
+        let width = 8.0;
+        let height = 5.0;
+        let color = 0xA855F7;
         
         switch (motorization) {
             case 'Electrique':
                 width = 8.0;
                 height = 4.0;
-                color = 0x06B6D4;  // Cyan (electric)
+                color = 0x06B6D4;
                 break;
             case 'Hybride':
                 width = 10.0;
                 height = 5.0;
-                color = 0xA855F7;  // Violet (hybrid)
+                color = 0xA855F7;
                 break;
             case 'Essence':
                 width = 10.0;
                 height = 5.0;
-                color = 0xF59E0B;  // Amber (essence)
+                color = 0xF59E0B;
                 break;
             case 'Diesel':
                 width = 10.0;
                 height = 5.0;
-                color = 0x8B7355;  // Brown (diesel)
+                color = 0x8B7355;
                 break;
         }
         

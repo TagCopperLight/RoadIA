@@ -49,11 +49,9 @@ export default function MapComponent() {
 		modeRef.current = mode;
 	});
 
-	// Refs for auto-selecting newly created nodes
 	const pendingNewNodeRef = useRef(false);
 	const prevNodeIdsRef = useRef<Set<number>>(new Set());
 
-	// Refs for auto-selecting newly created roads
 	const pendingNewRoadRef = useRef(false);
 	const prevEdgeIdsRef = useRef<Set<number>>(new Set());
 	const lastAddRoadFromRef = useRef<number | null>(null);
@@ -103,7 +101,6 @@ export default function MapComponent() {
 			setMapData({ nodes: result.nodes, edges: result.edges });
 			setPendingRoadFrom(null);
 
-			// Auto-select newly created node
 			if (pendingNewNodeRef.current) {
 				pendingNewNodeRef.current = false;
 				const prevIds = prevNodeIdsRef.current;
@@ -114,7 +111,6 @@ export default function MapComponent() {
 				}
 			}
 
-			// Auto-select newly created road
 			if (pendingNewRoadRef.current) {
 				pendingNewRoadRef.current = false;
 				const prevIds = prevEdgeIdsRef.current;
@@ -122,11 +118,9 @@ export default function MapComponent() {
 				const toId = lastAddRoadToRef.current;
 
 				if (fromId !== null && toId !== null) {
-					// Find the canonical edge (from_id → to_id)
 					const canonicalEdge = result.edges.find(
 						(e: MapData['edges'][number]) => e.from === fromId && e.to === toId && !prevIds.has(e.id)
 					);
-					// Find the reverse edge (to_id → from_id) if it exists
 					const reverseEdge = result.edges.find(
 						(e: MapData['edges'][number]) => e.from === toId && e.to === fromId && !prevIds.has(e.id)
 					);
@@ -138,7 +132,6 @@ export default function MapComponent() {
 				}
 			}
 
-			// Resync road selection (handles one-way/two-way toggle and other road edits)
 			if (selectedElement?.type === 'road') {
 				const edges = result.edges as MapData['edges'];
 				const can = edges.find((e: MapData['edges'][number]) => e.id === selectedElement.canonicalId);
@@ -156,7 +149,6 @@ export default function MapComponent() {
 		}
 	});
 
-	// Dismiss error on click
 	useEffect(() => {
 		if (!editError) return;
 		const t = setTimeout(() => setEditError(null), 3000);
@@ -165,7 +157,6 @@ export default function MapComponent() {
 
 
 
-	// Clear vehicles when simulation is reset
 	const [prevResetAt, setPrevResetAt] = useState(simulationResetAt);
 	if (simulationResetAt !== prevResetAt) {
 		setPrevResetAt(simulationResetAt);
@@ -179,7 +170,6 @@ export default function MapComponent() {
 				return;
 			}
 		}
-		// Snapshot current node IDs before the add
 		prevNodeIdsRef.current = new Set(mapData?.nodes.map(n => n.id) ?? []);
 		pendingNewNodeRef.current = true;
 		ws?.send('addNode', { x, y, kind: 'Intersection' });
@@ -200,7 +190,6 @@ export default function MapComponent() {
 					}
 				}
 			}
-			// Snapshot current edge IDs before the add
 			prevEdgeIdsRef.current = new Set(mapData?.edges.map(e => e.id) ?? []);
 			lastAddRoadFromRef.current = pendingRoadFrom;
 			lastAddRoadToRef.current = nodeId;
@@ -219,13 +208,11 @@ export default function MapComponent() {
 	}, [setSelectedElement]);
 
 	const handleWaypointNodeClick = useCallback((nodeId: number) => {
-		// When in edit mode and a node is clicked, pass it to the waypoint panel
 		if (waypointPanelRef.current) {
 			waypointPanelRef.current.onNodeClick(nodeId);
 		}
 	}, []);
 
-// In edit mode, show no vehicles
 	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
 	return (

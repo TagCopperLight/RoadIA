@@ -40,19 +40,16 @@ export function MapCanvas({
 }: MapCanvasProps) {
 	const { app } = useApplication();
 
-	// Interpolation: targetRef holds raw WS positions, displayRef holds smoothed positions
 	const targetRef = useRef<Map<number, VehicleData>>(new Map());
 	const displayRef = useRef<Map<number, VehicleData>>(new Map());
 	const [displayVehicles, setDisplayVehicles] = useState<VehicleData[]>([]);
 
-	// Update targets when new WS data arrives
 	useEffect(() => {
 		const map = new Map<number, VehicleData>();
 		for (const v of vehicles) map.set(v.id, v);
 		targetRef.current = map;
 	}, [vehicles]);
 
-	// Lerp display vehicles toward targets on every Pixi frame
 	useEffect(() => {
 		const FACTOR = 0.2;
 		const tick = () => {

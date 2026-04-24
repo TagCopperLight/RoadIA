@@ -376,9 +376,6 @@ impl Vehicle {
         }
     }
 
-    // ============= Waypoint Management =============
-
-    /// Add a waypoint to the queue
     pub fn add_waypoint(&mut self, waypoint: NodeIndex) {
         self.waypoints.push(waypoint);
     }
