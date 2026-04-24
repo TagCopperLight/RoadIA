@@ -5,7 +5,7 @@ import { useState } from 'react';
 interface LegendItem {
     label: string;
     color?: string;
-    type?: 'node' | 'road-twoway' | 'road-oneway' | 'vehicle';
+    type?: 'node' | 'road-twoway' | 'road-oneway';
     subtext?: string;
 }
 
@@ -18,10 +18,6 @@ export default function Legend() {
         { label: 'Workplace', color: '#ef4444', type: 'node' },
         { label: 'Route bidirectionnelle', type: 'road-twoway' },
         { label: 'Route unidirectionnelle', type: 'road-oneway' },
-        { label: 'Hybride (45%)', color: '#A855F7', type: 'vehicle' },
-        { label: 'Électrique (30%)', color: '#06B6D4', type: 'vehicle' },
-        { label: 'Essence (15%)', color: '#F59E0B', type: 'vehicle' },
-        { label: 'Diesel (10%)', color: '#8B7355', type: 'vehicle' },
     ];
 
     const renderLegendShape = (item: LegendItem) => {
@@ -61,13 +57,6 @@ export default function Legend() {
                         <div className="absolute left-0 right-0 top-0 border-t border-white" />
                         <div className="absolute left-0 right-0 bottom-0 border-b border-white" />
                     </div>
-                );
-            case 'vehicle':
-                return (
-                    <div
-                        className="w-6 h-3 rounded-sm flex-shrink-0"
-                        style={{ backgroundColor: item.color }}
-                    />
                 );
             default:
                 return null;
