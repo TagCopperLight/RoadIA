@@ -13,28 +13,24 @@ export function Vehicle({ data }: VehicleProps) {
         const motorization = data.motorization || 'EssenceHybride';
         let width = 8.0;
         let height = 5.0;
-        let color = 0xA855F7;
+        const color = 0xA855F7;
         
         switch (motorization) {
             case 'Electrique':
                 width = 8.0;
                 height = 4.0;
-                color = 0x06B6D4;
                 break;
             case 'Hybride':
                 width = 10.0;
                 height = 5.0;
-                color = 0xA855F7;
                 break;
             case 'Essence':
                 width = 10.0;
                 height = 5.0;
-                color = 0xF59E0B;
                 break;
             case 'Diesel':
                 width = 10.0;
                 height = 5.0;
-                color = 0x8B7355;
                 break;
         }
         
