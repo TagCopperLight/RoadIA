@@ -10,29 +10,8 @@ export function Vehicle({ data }: VehicleProps) {
     const drawCar = useCallback((g: Graphics) => {
         g.clear();
         
-        const motorization = data.motorization || 'EssenceHybride';
-        let width = 8.0;
-        let height = 5.0;
+        const [width, height] = data.motorization === 'Electrique' ? [8.0, 4.0] : [10.0, 5.0];
         const color = 0xA855F7;
-        
-        switch (motorization) {
-            case 'Electrique':
-                width = 8.0;
-                height = 4.0;
-                break;
-            case 'Hybride':
-                width = 10.0;
-                height = 5.0;
-                break;
-            case 'Essence':
-                width = 10.0;
-                height = 5.0;
-                break;
-            case 'Diesel':
-                width = 10.0;
-                height = 5.0;
-                break;
-        }
         
         g.setFillStyle({ color });
         g.rect(-width / 2, -height / 2, width, height);

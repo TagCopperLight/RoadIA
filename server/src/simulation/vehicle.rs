@@ -27,13 +27,19 @@ impl VehicleType {
         }
     }
 
-    /// Size en pixels: petits (Électrique), moyens (Hybrid/Diesel), grands (Essence)
     pub fn size_pixels(&self) -> (f32, f32) {
         match self {
-            VehicleType::Electrique => (8.0, 4.0),      // Compact
-            VehicleType::Hybride => (10.0, 5.0), // Standard
-            VehicleType::Diesel => (10.0, 5.0),         // Standard 
-            VehicleType::Essence => (10.0, 5.0), // Standard
+            VehicleType::Electrique => (8.0, 4.0),
+            _ => (10.0, 5.0),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VehicleType::Hybride => "Hybride",
+            VehicleType::Electrique => "Electrique",
+            VehicleType::Essence => "Essence",
+            VehicleType::Diesel => "Diesel",
         }
     }
 

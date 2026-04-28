@@ -123,18 +123,21 @@ export default function Toolbar() {
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt,
     } = useEditMode();
 
+    const clearSelection = () => {
+        setSelectedElement(null);
+        setPendingRoadFrom(null);
+    };
+
     const switchToEdit = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
         setSimulationResetAt(prev => prev + 1);
-        setSelectedElement(null);
-        setPendingRoadFrom(null);
+        clearSelection();
         setMode('edit');
     };
 
     const switchToSimulation = () => {
-        setSelectedElement(null);
-        setPendingRoadFrom(null);
+        clearSelection();
         setMode('simulation');
     };
 
@@ -156,8 +159,7 @@ export default function Toolbar() {
 
     const selectTool = (tool: EditTool) => {
         setEditTool(tool);
-        setSelectedElement(null);
-        setPendingRoadFrom(null);
+        clearSelection();
     };
 
     return (
