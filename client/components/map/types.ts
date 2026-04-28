@@ -48,8 +48,10 @@ export interface TrafficLightData {
 export interface ScoreData {
 	score: number;
 	total_trip_time: number;
+	ref_total_trip_time: number;
 	total_emitted_co2: number;
+	ref_total_emitted_co2: number;
 	network_length: number;
-	total_distance_traveled: number;
+	ref_network_length: number;
 	success_rate: number;
 }
