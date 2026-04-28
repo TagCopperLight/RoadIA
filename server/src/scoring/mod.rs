@@ -193,9 +193,11 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
 pub struct Score {
     pub score: f32,
     pub total_trip_time: f32,
+    pub ref_total_trip_time: f32,
     pub total_emitted_co2: f32,
+    pub ref_total_emitted_co2: f32,
     pub network_length: f32,
-    pub total_distance_traveled: f32,
+    pub ref_network_length: f32,
     pub success_rate: f32,
 }
 
@@ -204,11 +206,6 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
     let success_rate = if vehicles.is_empty() { 0.0 } else { nb_arrived as f32 / vehicles.len() as f32 };
 
     let total_trip_time: f32 = vehicles
-        .iter()
-        .filter(|v| matches!(v.state, VehicleState::Arrived))
-        .filter_map(|v| v.arrived_at.map(|a| a - v.trip.departure_time))
-        .fold(0.0_f32, f32::max);
-    let sum_trip_time: f32 = vehicles
         .iter()
         .filter(|v| matches!(v.state, VehicleState::Arrived))
         .filter_map(|v| v.arrived_at.map(|a| a - v.trip.departure_time))
@@ -230,7 +227,7 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
         .map(|v| get_vehicle_min_co2(v, &config.map))
         .sum();
 
-    let best_network_length = steiner_lower_bound(&config.map);
+    let best_network_length = steiner_lower_bound(&config.map) as f32;
     let mut seen_ids: HashSet<u32> = HashSet::new();
     let network_length: f32 = config
         .map
@@ -246,8 +243,8 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
         })
         .sum();
 
-    let time_term = if sum_trip_time > 0.0 {
-        total_ref_trip_time / sum_trip_time
+    let time_term = if total_trip_time > 0.0 {
+        total_ref_trip_time / total_trip_time
     } else {
         0.0
     };
@@ -258,23 +255,20 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
         0.0
     };
 
-    let score = TIME_WEIGHT * time_term
+    // le score possède une valeur entre 0 et 100
+    let score = (TIME_WEIGHT * time_term
         + SUCCESS_WEIGHT * success_rate
         + POLLUTION_WEIGHT * pollution_term
-        + INFRASTRUCTURE_WEIGHT * (best_network_length as f32 / network_length);
-
-    let total_distance_traveled: f32 = vehicles
-        .iter()
-        .filter(|v| matches!(v.state, VehicleState::Arrived))
-        .map(|v| v.distance_traveled)
-        .sum();
+        + INFRASTRUCTURE_WEIGHT * (best_network_length / network_length)) * 100f32;
 
     Score {
         score,
         total_trip_time,
+        ref_total_trip_time: total_ref_trip_time,
         total_emitted_co2,
+        ref_total_emitted_co2: total_ref_emitted_co2,
         network_length,
-        total_distance_traveled,
+        ref_network_length: best_network_length,
         success_rate,
     }
 }
