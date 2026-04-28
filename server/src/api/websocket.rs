@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
-use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState, VehicleType};
+use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::{AppState, SimulationInstance};
 
 #[derive(Debug, Deserialize)]
@@ -115,17 +115,11 @@ async fn ws_loop(
         
         // Prepare vehicle list
         let vehicles: Vec<VehicleInfo> = eng.vehicles.iter().map(|v| {
-            let vehicle_type = match v.spec.vehicle_type {
-                VehicleType::Hybride => "Hybride",
-                VehicleType::Electrique => "Electrique",
-                VehicleType::Essence => "Essence",
-                VehicleType::Diesel => "Diesel",
-            };
             VehicleInfo {
                 id: v.id,
                 origin_node_id: v.trip.origin.index() as u32,
                 dest_node_id: v.trip.destination.index() as u32,
-                vehicle_type: vehicle_type.to_string(),
+                vehicle_type: v.spec.vehicle_type.as_str().to_string(),
             }
         }).collect();
         
@@ -305,8 +299,9 @@ async fn handle_client_packet(
                 });
 
                 // Now apply to vehicle
+                let n = waypoints.len();
                 let vehicle = &mut eng.vehicles[idx];
-                vehicle.waypoints = waypoints.clone();
+                vehicle.waypoints = waypoints;
                 vehicle.current_waypoint_index = 0;
 
                 if let Some(path) = new_path {
@@ -315,7 +310,7 @@ async fn handle_client_packet(
                     vehicle.position_on_lane = 0.0;
                 }
 
-                println!("Vehicle {} waypoints updated: {} waypoints set", vehicle.id, waypoints.len());
+                println!("Vehicle {} waypoints updated: {} waypoints set", vehicle.id, n);
             } else {
                 println!("Warning: Vehicle {} not found", vehicle_id);
             }
@@ -543,12 +538,7 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
     let heading = vehicle.get_heading(sim_map);
-    let motorization = match vehicle.spec.vehicle_type {
-        VehicleType::Hybride => "Hybride",
-        VehicleType::Electrique => "Electrique",
-        VehicleType::Essence => "Essence",
-        VehicleType::Diesel => "Diesel",
-    };
+    let motorization = vehicle.spec.vehicle_type.as_str();
     json!({
         "id": vehicle.id,
         "x": coords.x,

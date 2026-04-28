@@ -72,6 +72,19 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
 }
 
 
+fn filter_nodes_by_kind(nodes: &[NodeIndex], map: &Map, kind: IntersectionKind) -> Vec<NodeIndex> {
+    nodes.iter().filter(|&&n| map.graph[n].kind == kind).copied().collect()
+}
+
+// SDES 2025 motorization distribution (https://www.statistiques.developpement-durable.gouv.fr/)
+// Hybride: 45% | Electrique: 30% | Essence: 15% | Diesel: 10%
+fn pick_vehicle_type(rand_val: f32) -> (VehicleType, f32) {
+    if rand_val < 45.0      { (VehicleType::Hybride,    45.0) }
+    else if rand_val < 75.0 { (VehicleType::Electrique, 40.0) }
+    else if rand_val < 90.0 { (VehicleType::Essence,    50.0) }
+    else                    { (VehicleType::Diesel,      48.0) }
+}
+
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     let mut vehicles = Vec::new();
     let mut ids = 0..;
@@ -81,15 +94,8 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         return vehicles;
     }
 
-    let habitations: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
-        .copied()
-        .collect();
-
-    let workplaces: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
-        .copied()
-        .collect();
+    let habitations = filter_nodes_by_kind(&nodes, map, IntersectionKind::Habitation);
+    let workplaces = filter_nodes_by_kind(&nodes, map, IntersectionKind::Workplace);
 
     if habitations.is_empty() || workplaces.is_empty() {
         println!("Warning: Cannot create vehicles, missing Habitation or Workplace nodes");
@@ -100,27 +106,16 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         let origin = habitations[rand::random_range(0..habitations.len())];
         let destination = workplaces[rand::random_range(0..workplaces.len())];
 
-        // SDES 2025 motorization distribution (https://www.statistiques.developpement-durable.gouv.fr/)
-        // Essence Hybride: 45% | Electric: 30% | Thermique: 15% | Diesel: 10%
-        let rand_val = rand::random_range(0.0..100.0);
-        let (vehicle_type, max_speed) = if rand_val < 45.0 {
-            (VehicleType::Hybride, 45.0)  // Modern hybrid cars
-        } else if rand_val < 75.0 {
-            (VehicleType::Electrique, 40.0)      // Electric slightly more efficient
-        } else if rand_val < 90.0 {
-            (VehicleType::Essence, 50.0)  // Essence cars faster
-        } else {
-            (VehicleType::Diesel, 48.0)          // Diesel trucks/utility
-        };
+        let (vehicle_type, max_speed) = pick_vehicle_type(rand::random_range(0.0..100.0));
 
         let spec = VehicleSpec::new(
             VehicleKind::Car,
             vehicle_type,
             max_speed,
-            4.0,  // acceleration
-            3.0,  // comfortable_deceleration
-            1.0,  // reaction_time
-            10.0, // length
+            4.0,
+            3.0,
+            1.0,
+            10.0,
         );
 
         let trip = TripRequest {
@@ -148,15 +143,8 @@ pub fn create_test_vehicles_with_waypoints(map: &Map, count: usize) -> Vec<Vehic
         return create_random_vehicles(map, count);
     }
 
-    let habitations: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
-        .copied()
-        .collect();
-
-    let workplaces: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
-        .copied()
-        .collect();
+    let habitations = filter_nodes_by_kind(&nodes, map, IntersectionKind::Habitation);
+    let workplaces = filter_nodes_by_kind(&nodes, map, IntersectionKind::Workplace);
 
     if habitations.is_empty() || workplaces.is_empty() {
         println!("Warning: Cannot create test vehicles, missing Habitation or Workplace nodes");
@@ -164,10 +152,7 @@ pub fn create_test_vehicles_with_waypoints(map: &Map, count: usize) -> Vec<Vehic
     }
 
     // Pick 2-3 random intermediate waypoints that will be common to all vehicles
-    let intermediate_candidates: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Intersection))
-        .copied()
-        .collect();
+    let intermediate_candidates = filter_nodes_by_kind(&nodes, map, IntersectionKind::Intersection);
 
     let num_waypoints = if intermediate_candidates.len() >= 3 { 3 } else if intermediate_candidates.len() >= 2 { 2 } else { 1 };
     let common_waypoints: Vec<NodeIndex> = intermediate_candidates.iter()
@@ -184,17 +169,7 @@ pub fn create_test_vehicles_with_waypoints(map: &Map, count: usize) -> Vec<Vehic
         let origin = habitations[i % habitations.len()];
         let destination = workplaces[i % workplaces.len()];
 
-        // Rotate motorization types for diversity
-        let rand_val = (i as f32 % 100.0) + 25.0;
-        let (vehicle_type, max_speed) = if rand_val < 45.0 {
-            (VehicleType::Hybride, 45.0)
-        } else if rand_val < 75.0 {
-            (VehicleType::Electrique, 40.0)
-        } else if rand_val < 90.0 {
-            (VehicleType::Essence, 50.0)
-        } else {
-            (VehicleType::Diesel, 48.0)
-        };
+        let (vehicle_type, max_speed) = pick_vehicle_type((i as f32 % 100.0) + 25.0);
 
         let spec = VehicleSpec::new(
             VehicleKind::Car,
