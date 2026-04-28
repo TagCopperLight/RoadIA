@@ -248,7 +248,6 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
     } else {
         0.0
     };
-    print!("{}", time_term);
 
     let pollution_term = if total_emitted_co2 > 0.0 {
         total_ref_emitted_co2 / total_emitted_co2
