@@ -9,10 +9,14 @@ interface VehicleProps {
 export function Vehicle({ data }: VehicleProps) {
     const drawCar = useCallback((g: Graphics) => {
         g.clear();
-        g.setFillStyle({ color: 'purple' });
-        g.rect(-10, -2, 8, 5);
+        
+        const [width, height] = data.motorization === 'Electrique' ? [8.0, 4.0] : [10.0, 5.0];
+        const color = 0xA855F7;
+        
+        g.setFillStyle({ color });
+        g.rect(-width / 2, -height / 2, width, height);
         g.fill();
-    }, []);
+    }, [data.motorization]);
 
     if (data.state === 'Arrived' || data.state === 'Waiting') {
         return null;

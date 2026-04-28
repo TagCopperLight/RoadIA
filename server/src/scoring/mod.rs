@@ -1,31 +1,93 @@
 use crate::map::model::Map;
 use crate::simulation::config::SimulationConfig;
-use crate::simulation::vehicle::{Vehicle, VehicleState};
+use crate::simulation::vehicle::{Vehicle, VehicleState, VehicleType};
 use petgraph::graph::EdgeIndex;
 use crate::map::intersection::IntersectionKind;
 use std::collections::{BinaryHeap, HashSet};
 use std::cmp::Ordering;
 
-// Typical passenger car constants for CO2 estimation
-const VEHICLE_MASS: f32 = 1680.0; // kg
-const ENGINE_THERMAL_EFFICIENCY: f32 = 0.35;
-const DRIVE_TRAIN_EFFICIENCY: f32 = 0.9;
-const IDLE_POWER: f32 = 2500.0; // W
-const LOWER_HEATING_VALUE_FOR_FUEL: f32 = 43_200_000.0; // J/kg
-const AERODYNAMIC_DRAG_COEFFICIENT: f32 = 0.3;
-const FRONT_AREA: f32 = 2.0; // m²
-const ROLLING_RESISTANCE_COEFFICIENT: f32 = 0.01;
-const STOICHIOMETRIC_CO2_FACTOR: f32 = 3.16;
-
-// Physics
+const VEHICLE_MASS: f32 = 1680.0; // kg - typical passenger car
 const AIR_DENSITY: f32 = 1.225; // kg/m³
 const GRAVITY: f32 = 9.81; // m/s²
+
+const DRAG_COEFFICIENT_HYBRID: f32 = 0.30;
+const DRAG_COEFFICIENT_ELECTRIC: f32 = 0.28;
+const DRAG_COEFFICIENT_THERMAL: f32 = 0.32;
+const DRAG_COEFFICIENT_DIESEL: f32 = 0.31;
+
+const FRONT_AREA: f32 = 2.0;
+
+const ROLLING_RESISTANCE: f32 = 0.01;
+
+const EFFICIENCY_THERMAL: f32 = 0.32;
+const EFFICIENCY_DIESEL: f32 = 0.40;
+const EFFICIENCY_HYBRID: f32 = 0.75;
+const EFFICIENCY_ELECTRIC: f32 = 0.90;
+
+const IDLE_POWER_THERMAL: f32 = 2500.0;
+const IDLE_POWER_DIESEL: f32 = 2800.0;
+const IDLE_POWER_HYBRID: f32 = 500.0;
+const IDLE_POWER_ELECTRIC: f32 = 50.0;
+
+const CO2_PER_LITER_THERMAL: f32 = 2.31;
+const CO2_PER_LITER_DIESEL: f32 = 2.68;
+const CO2_PER_KWH_ELECTRIC: f32 = 0.10;
+
+const ENERGY_CONTENT_THERMAL: f32 = 43.2;
+const ENERGY_CONTENT_DIESEL: f32 = 45.5;
+const ENERGY_CONTENT_BATTERY: f32 = 0.0036;
 
 // Score weights (must sum to 1.0)
 const TIME_WEIGHT: f32 = 0.4;
 const SUCCESS_WEIGHT: f32 = 0.2;
 const POLLUTION_WEIGHT: f32 = 0.2;
 const INFRASTRUCTURE_WEIGHT: f32 = 0.2;
+
+fn get_drag_coefficient(vehicle_type: VehicleType) -> f32 {
+    match vehicle_type {
+        VehicleType::Electrique => DRAG_COEFFICIENT_ELECTRIC,
+        VehicleType::Hybride => DRAG_COEFFICIENT_HYBRID,
+        VehicleType::Essence => DRAG_COEFFICIENT_THERMAL,
+        VehicleType::Diesel => DRAG_COEFFICIENT_DIESEL,
+    }
+}
+
+fn get_efficiency(vehicle_type: VehicleType) -> f32 {
+    match vehicle_type {
+        VehicleType::Electrique => EFFICIENCY_ELECTRIC,
+        VehicleType::Hybride => EFFICIENCY_HYBRID,
+        VehicleType::Essence => EFFICIENCY_THERMAL,
+        VehicleType::Diesel => EFFICIENCY_DIESEL,
+    }
+}
+
+fn get_idle_power(vehicle_type: VehicleType) -> f32 {
+    match vehicle_type {
+        VehicleType::Electrique => IDLE_POWER_ELECTRIC,
+        VehicleType::Hybride => IDLE_POWER_HYBRID,
+        VehicleType::Essence => IDLE_POWER_THERMAL,
+        VehicleType::Diesel => IDLE_POWER_DIESEL,
+    }
+}
+
+fn get_co2_conversion_factor(vehicle_type: VehicleType) -> (f32, f32) {
+    match vehicle_type {
+        VehicleType::Electrique => {
+            (CO2_PER_KWH_ELECTRIC / 3.6, ENERGY_CONTENT_BATTERY)
+        }
+        VehicleType::Hybride => {
+            let thermal_factor = CO2_PER_LITER_THERMAL / ENERGY_CONTENT_THERMAL;
+            let electric_factor = CO2_PER_KWH_ELECTRIC / (ENERGY_CONTENT_BATTERY * 3600.0);
+            ((thermal_factor + electric_factor) / 2.0, ENERGY_CONTENT_THERMAL)
+        }
+        VehicleType::Essence => {
+            (CO2_PER_LITER_THERMAL / ENERGY_CONTENT_THERMAL, ENERGY_CONTENT_THERMAL)
+        }
+        VehicleType::Diesel => {
+            (CO2_PER_LITER_DIESEL / ENERGY_CONTENT_DIESEL, ENERGY_CONTENT_DIESEL)
+        }
+    }
+}
 
 pub fn get_minimal_time_travel_by_road(map: &Map, road_index: EdgeIndex, acceleration: f32, vehicle_max_speed: f32) -> f32 {
     let road = map
@@ -42,26 +104,29 @@ pub fn get_minimal_time_travel_by_road(map: &Map, road_index: EdgeIndex, acceler
     }
 }
 
-pub fn get_minimal_co2_by_road(map: &Map, road_index: EdgeIndex) -> f32 {
+pub fn get_minimal_co2_by_road(map: &Map, road_index: EdgeIndex, vehicle_type: VehicleType) -> f32 {
     match map.graph.edge_weight(road_index) {
         Some(road) => {
-            let cruise_speed = ((IDLE_POWER * DRIVE_TRAIN_EFFICIENCY)
-                / (AIR_DENSITY * AERODYNAMIC_DRAG_COEFFICIENT * FRONT_AREA))
-                .powf(1.0 / 3.0);
-            let fuel_conversion_factor = STOICHIOMETRIC_CO2_FACTOR
-                / (ENGINE_THERMAL_EFFICIENCY * LOWER_HEATING_VALUE_FOR_FUEL);
-            let aerodynamic_drag_force = 0.5
-                * AIR_DENSITY
-                * AERODYNAMIC_DRAG_COEFFICIENT
-                * FRONT_AREA
-                * cruise_speed
-                * cruise_speed;
-            let rolling_resistance_force =
-                VEHICLE_MASS * GRAVITY * ROLLING_RESISTANCE_COEFFICIENT;
-            road.length
-                * fuel_conversion_factor
-                * (IDLE_POWER / cruise_speed
-                    + (aerodynamic_drag_force + rolling_resistance_force) / DRIVE_TRAIN_EFFICIENCY)
+            let drag_coeff = get_drag_coefficient(vehicle_type);
+            let efficiency = get_efficiency(vehicle_type);
+            let idle_power = get_idle_power(vehicle_type);
+            let (co2_factor, _) = get_co2_conversion_factor(vehicle_type);
+            
+            let cruise_speed = (road.speed_limit * 0.8).min(130.0 / 3.6);
+            
+            if cruise_speed < 0.1 {
+                return 0.0;
+            }
+            
+            let aerodynamic_force = 0.5 * AIR_DENSITY * drag_coeff * FRONT_AREA * cruise_speed * cruise_speed;
+            let rolling_resistance_force = VEHICLE_MASS * GRAVITY * ROLLING_RESISTANCE;
+            let cruise_power_w = (aerodynamic_force + rolling_resistance_force) * cruise_speed + idle_power;
+            
+            let time_hours = road.length / (cruise_speed * 3.6);
+            let energy_mj = cruise_power_w * time_hours * 3.6 / 1000.0;
+            let energy_input_mj = energy_mj / efficiency;
+            
+            (energy_input_mj * co2_factor).max(0.0)
         }
         None => 0.0,
     }
@@ -105,27 +170,45 @@ pub fn get_vehicle_min_co2(vehicle: &Vehicle, map: &Map) -> f32 {
             .ok_or("Edge not in map")
             .unwrap();
 
-        total_co2 += get_minimal_co2_by_road(map, edge);
+        total_co2 += get_minimal_co2_by_road(map, edge, vehicle.spec.vehicle_type);
     }
 
     total_co2
 }
 
 pub fn update_co2_emissions(vehicle: &mut Vehicle, time_step: f32) {
-    let acceleration = (vehicle.velocity - vehicle.previous_velocity) / time_step;
-    let tractive_force = (0.5
-        * AIR_DENSITY
-        * AERODYNAMIC_DRAG_COEFFICIENT
-        * FRONT_AREA
-        * vehicle.velocity
-        * vehicle.velocity
-        + VEHICLE_MASS * GRAVITY * ROLLING_RESISTANCE_COEFFICIENT
-        + VEHICLE_MASS * acceleration)
-        / DRIVE_TRAIN_EFFICIENCY;
-    let current_emissions = (tractive_force * vehicle.velocity + IDLE_POWER)
-        * STOICHIOMETRIC_CO2_FACTOR
-        / (ENGINE_THERMAL_EFFICIENCY * LOWER_HEATING_VALUE_FOR_FUEL);
-    vehicle.emitted_co2 += current_emissions * time_step;
+    let vehicle_type = vehicle.spec.vehicle_type;
+    let velocity = vehicle.velocity;
+    
+    if velocity < 0.1 && (vehicle.velocity - vehicle.previous_velocity).abs() < 0.1 {
+        let idle_power = get_idle_power(vehicle_type);
+        let efficiency = get_efficiency(vehicle_type);
+        let (co2_factor, _) = get_co2_conversion_factor(vehicle_type);
+        
+        let energy_mj = idle_power * time_step / 3_600_000.0;
+        let co2_grams = (energy_mj / efficiency) * co2_factor;
+        vehicle.emitted_co2 += co2_grams;
+        return;
+    }
+    
+    // Physics-based power calculation
+    let drag_coeff = get_drag_coefficient(vehicle_type);
+    let efficiency = get_efficiency(vehicle_type);
+    let idle_power = get_idle_power(vehicle_type);
+    let (co2_factor, _) = get_co2_conversion_factor(vehicle_type);
+    
+    let acceleration = (velocity - vehicle.previous_velocity) / time_step;
+    let aerodynamic_drag = 0.5 * AIR_DENSITY * drag_coeff * FRONT_AREA * velocity * velocity;
+    let rolling_resistance = VEHICLE_MASS * GRAVITY * ROLLING_RESISTANCE;
+    let tractive_force = VEHICLE_MASS * acceleration + aerodynamic_drag + rolling_resistance;
+    let motive_power = (tractive_force * velocity).max(0.0) + idle_power;
+    
+    let energy_consumed_joules = motive_power * time_step;
+    let energy_consumed_mj = energy_consumed_joules / 1_000_000.0;
+    let energy_input_mj = energy_consumed_mj / efficiency;
+    let co2_grams = energy_input_mj * co2_factor;
+    
+    vehicle.emitted_co2 += co2_grams.max(0.0);
 }
 
 #[derive(PartialEq)]

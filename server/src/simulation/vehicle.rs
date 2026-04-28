@@ -3,15 +3,61 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::map::{model::Coordinates, model::Map};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum VehicleKind {
     Car,
     Bus,
+}
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum VehicleType {
+    Hybride,
+    Electrique,
+    Essence,
+    Diesel,
+}
+
+impl VehicleType {
+    /// Retourne (co2_min, co2_max) en g/km
+    pub fn co2_range(&self) -> (f32, f32) {
+        match self {
+            VehicleType::Hybride => (100.0, 140.0),
+            VehicleType::Electrique => (0.0, 60.0),
+            VehicleType::Essence => (140.0, 180.0),
+            VehicleType::Diesel => (110.0, 150.0),
+        }
+    }
+
+    pub fn size_pixels(&self) -> (f32, f32) {
+        match self {
+            VehicleType::Electrique => (8.0, 4.0),
+            _ => (10.0, 5.0),
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            VehicleType::Hybride => "Hybride",
+            VehicleType::Electrique => "Electrique",
+            VehicleType::Essence => "Essence",
+            VehicleType::Diesel => "Diesel",
+        }
+    }
+
+    /// Couleur repr. motorisation (approx)
+    pub fn color(&self) -> u32 {
+        match self {
+            VehicleType::Hybride => 0xA855F7,   // Violet
+            VehicleType::Electrique => 0x06B6D4,       // Cyan
+            VehicleType::Essence => 0xF59E0B,   // Ambre
+            VehicleType::Diesel => 0x8B7355,           // Marron
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
 pub struct VehicleSpec {
     pub kind: VehicleKind,
+    pub vehicle_type: VehicleType,
     pub max_speed: f32,
     pub max_acceleration: f32,
     pub comfortable_deceleration: f32,
@@ -20,9 +66,18 @@ pub struct VehicleSpec {
 }
 
 impl VehicleSpec {
-    pub fn new(kind: VehicleKind, max_speed: f32, max_acceleration: f32, comfortable_deceleration: f32, reaction_time: f32, length: f32) -> Self {
+    pub fn new(
+        kind: VehicleKind,
+        vehicle_type: VehicleType,
+        max_speed: f32,
+        max_acceleration: f32,
+        comfortable_deceleration: f32,
+        reaction_time: f32,
+        length: f32,
+    ) -> Self {
         Self {
             kind,
+            vehicle_type,
             max_speed,
             max_acceleration,
             comfortable_deceleration,
@@ -91,6 +146,10 @@ pub struct Vehicle {
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,
+    
+    // Waypoints system: intermediate points the vehicle must visit
+    pub waypoints: Vec<NodeIndex>,        // Queue of waypoints to visit (in order)
+    pub current_waypoint_index: usize,    // Index of the next waypoint to reach
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
@@ -124,6 +183,8 @@ impl Vehicle {
             emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
+            waypoints: Vec::new(),
+            current_waypoint_index: 0,
         }
     }
 
@@ -145,6 +206,10 @@ impl Vehicle {
         vehicle_ahead_distance: f32,
         vehicle_ahead_velocity: f32,
     ) -> f32 {
+        if self.velocity >= self.spec.max_speed {
+            return 0.0; // Don't accelerate if at max speed
+        }
+
         if minimum_gap == 0.0 {
             minimum_gap = 0.1;
         }
@@ -315,6 +380,58 @@ impl Vehicle {
                 .graph
                 .find_edge(self.get_current_node(), self.get_next_node()),
         }
+    }
+
+    pub fn add_waypoint(&mut self, waypoint: NodeIndex) {
+        self.waypoints.push(waypoint);
+    }
+
+    /// Add multiple waypoints at once
+    pub fn add_waypoints(&mut self, waypoints: Vec<NodeIndex>) {
+        self.waypoints.extend(waypoints);
+    }
+
+    /// Get the next destination (either the next waypoint or the final destination)
+    pub fn get_current_destination(&self) -> NodeIndex {
+        if self.current_waypoint_index < self.waypoints.len() {
+            self.waypoints[self.current_waypoint_index]
+        } else {
+            self.trip.destination
+        }
+    }
+
+    /// Check if vehicle has waypoints remaining
+    pub fn has_waypoints(&self) -> bool {
+        self.current_waypoint_index < self.waypoints.len()
+    }
+
+    /// Check if vehicle has reached the current destination
+    pub fn is_at_destination(&self) -> bool {
+        self.path_index >= self.path.len() - 1
+    }
+
+    /// Move to the next waypoint in the queue, recalculating the path
+    pub fn advance_to_next_waypoint(&mut self, map: &Map) {
+        if self.has_waypoints() {
+            self.current_waypoint_index += 1;
+            // Recalculate path to the new destination
+            let current_pos = self.get_current_node();
+            let next_dest = self.get_current_destination();
+            match fastest_path(map, current_pos, next_dest) {
+                Some(path) => self.path = path,
+                None => eprintln!(
+                    "Warning: no path found for vehicle {} (waypoint {:?} → {:?})",
+                    self.id, current_pos, next_dest
+                ),
+            }
+            self.path_index = 0;
+        }
+    }
+
+    /// Clear all waypoints
+    pub fn clear_waypoints(&mut self) {
+        self.waypoints.clear();
+        self.current_waypoint_index = 0;
     }
 
 }

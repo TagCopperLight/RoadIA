@@ -7,7 +7,7 @@ use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
-use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
@@ -72,6 +72,19 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
 }
 
 
+fn filter_nodes_by_kind(nodes: &[NodeIndex], map: &Map, kind: IntersectionKind) -> Vec<NodeIndex> {
+    nodes.iter().filter(|&&n| map.graph[n].kind == kind).copied().collect()
+}
+
+// SDES 2025 motorization distribution (https://www.statistiques.developpement-durable.gouv.fr/)
+// Hybride: 45% | Electrique: 30% | Essence: 15% | Diesel: 10%
+fn pick_vehicle_type(rand_val: f32) -> (VehicleType, f32) {
+    if rand_val < 45.0      { (VehicleType::Hybride,    45.0) }
+    else if rand_val < 75.0 { (VehicleType::Electrique, 40.0) }
+    else if rand_val < 90.0 { (VehicleType::Essence,    50.0) }
+    else                    { (VehicleType::Diesel,      48.0) }
+}
+
 pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     let mut vehicles = Vec::new();
     let mut ids = 0..;
@@ -81,15 +94,8 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         return vehicles;
     }
 
-    let habitations: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
-        .copied()
-        .collect();
-
-    let workplaces: Vec<NodeIndex> = nodes.iter()
-        .filter(|&&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
-        .copied()
-        .collect();
+    let habitations = filter_nodes_by_kind(&nodes, map, IntersectionKind::Habitation);
+    let workplaces = filter_nodes_by_kind(&nodes, map, IntersectionKind::Workplace);
 
     if habitations.is_empty() || workplaces.is_empty() {
         println!("Warning: Cannot create vehicles, missing Habitation or Workplace nodes");
@@ -100,7 +106,17 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         let origin = habitations[rand::random_range(0..habitations.len())];
         let destination = workplaces[rand::random_range(0..workplaces.len())];
 
-        let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
+        let (vehicle_type, max_speed) = pick_vehicle_type(rand::random_range(0.0..100.0));
+
+        let spec = VehicleSpec::new(
+            VehicleKind::Car,
+            vehicle_type,
+            max_speed,
+            4.0,
+            3.0,
+            1.0,
+            10.0,
+        );
 
         let trip = TripRequest {
             origin,
@@ -109,6 +125,76 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         };
 
         vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip));
+    }
+
+    vehicles
+}
+
+/// Create test vehicles with common waypoints for visualization
+/// Creates a scenario where multiple vehicles pass through the same intermediate nodes
+/// This allows testing waypoint system with visual confirmation
+pub fn create_test_vehicles_with_waypoints(map: &Map, count: usize) -> Vec<Vehicle> {
+    let mut vehicles = Vec::new();
+    let mut ids = 0..;
+
+    let nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
+    if nodes.len() < 4 {
+        println!("Warning: map needs at least 4 nodes for waypoint test. Falling back to random.");
+        return create_random_vehicles(map, count);
+    }
+
+    let habitations = filter_nodes_by_kind(&nodes, map, IntersectionKind::Habitation);
+    let workplaces = filter_nodes_by_kind(&nodes, map, IntersectionKind::Workplace);
+
+    if habitations.is_empty() || workplaces.is_empty() {
+        println!("Warning: Cannot create test vehicles, missing Habitation or Workplace nodes");
+        return vehicles;
+    }
+
+    // Pick 2-3 random intermediate waypoints that will be common to all vehicles
+    let intermediate_candidates = filter_nodes_by_kind(&nodes, map, IntersectionKind::Intersection);
+
+    let num_waypoints = if intermediate_candidates.len() >= 3 { 3 } else if intermediate_candidates.len() >= 2 { 2 } else { 1 };
+    let common_waypoints: Vec<NodeIndex> = intermediate_candidates.iter()
+        .take(num_waypoints)
+        .copied()
+        .collect();
+
+    println!(
+        "Creating {} test vehicles with {} common waypoints: {:?}",
+        count, common_waypoints.len(), common_waypoints
+    );
+
+    for i in 0..count {
+        let origin = habitations[i % habitations.len()];
+        let destination = workplaces[i % workplaces.len()];
+
+        let (vehicle_type, max_speed) = pick_vehicle_type((i as f32 % 100.0) + 25.0);
+
+        let spec = VehicleSpec::new(
+            VehicleKind::Car,
+            vehicle_type,
+            max_speed,
+            4.0,
+            3.0,
+            1.0,
+            10.0,
+        );
+
+        let trip = TripRequest {
+            origin,
+            destination,
+            departure_time: (i as f32) * 0.5, // Stagger departures by 0.5s
+        };
+
+        let mut vehicle = Vehicle::new(ids.next().unwrap(), spec, trip);
+        
+        // Add common waypoints to vehicle
+        vehicle.add_waypoints(common_waypoints.clone());
+        
+        println!("Vehicle {} with waypoints: {:?}", vehicle.id, vehicle.waypoints);
+        
+        vehicles.push(vehicle);
     }
 
     vehicles

@@ -9,16 +9,32 @@ import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
 import ScoreModal from './ScoreModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
+import { WaypointPanel } from './WaypointPanel';
 import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
+
+interface VehicleInfo {
+	id: number;
+	origin_node_id: number;
+	dest_node_id: number;
+	vehicle_type: string;
+}
+
+interface WaypointPanelHandle {
+	onNodeClick: (nodeId: number) => void;
+	getSelectedVehicleId: () => number | null;
+	getPendingWaypoints: () => number[];
+}
 
 export default function MapComponent() {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const [vehicleList, setVehicleList] = useState<VehicleInfo[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [showScore, setShowScore] = useState(false);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [editError, setEditError] = useState<string | null>(null);
+	const waypointPanelRef = useRef<WaypointPanelHandle | null>(null);
 
 	const ws = useWs();
 	const {
@@ -33,9 +49,13 @@ export default function MapComponent() {
 		modeRef.current = mode;
 	});
 
-	// Refs for auto-selecting newly created nodes
 	const pendingNewNodeRef = useRef(false);
 	const prevNodeIdsRef = useRef<Set<number>>(new Set());
+
+	const pendingNewRoadRef = useRef(false);
+	const prevEdgeIdsRef = useRef<Set<number>>(new Set());
+	const lastAddRoadFromRef = useRef<number | null>(null);
+	const lastAddRoadToRef = useRef<number | null>(null);
 
 	const onRefChange = useCallback((node: HTMLDivElement) => {
 		setContainer(node);
@@ -63,6 +83,13 @@ export default function MapComponent() {
 		}
 	});
 
+	usePacket("vehicleList", (data) => {
+		const list = data as { vehicles: VehicleInfo[] };
+		if (list && Array.isArray(list.vehicles)) {
+			setVehicleList(list.vehicles);
+		}
+	});
+
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
 		setShowScore(true);
@@ -74,7 +101,6 @@ export default function MapComponent() {
 			setMapData({ nodes: result.nodes, edges: result.edges });
 			setPendingRoadFrom(null);
 
-			// Auto-select newly created node
 			if (pendingNewNodeRef.current) {
 				pendingNewNodeRef.current = false;
 				const prevIds = prevNodeIdsRef.current;
@@ -85,7 +111,27 @@ export default function MapComponent() {
 				}
 			}
 
-			// Resync road selection (handles one-way/two-way toggle and other road edits)
+			if (pendingNewRoadRef.current) {
+				pendingNewRoadRef.current = false;
+				const prevIds = prevEdgeIdsRef.current;
+				const fromId = lastAddRoadFromRef.current;
+				const toId = lastAddRoadToRef.current;
+
+				if (fromId !== null && toId !== null) {
+					const canonicalEdge = result.edges.find(
+						(e: MapData['edges'][number]) => e.from === fromId && e.to === toId && !prevIds.has(e.id)
+					);
+					const reverseEdge = result.edges.find(
+						(e: MapData['edges'][number]) => e.from === toId && e.to === fromId && !prevIds.has(e.id)
+					);
+
+					if (canonicalEdge) {
+						setSelectedElement({ type: 'road', canonicalId: canonicalEdge.id, reverseId: reverseEdge?.id });
+						setEditTool('select');
+					}
+				}
+			}
+
 			if (selectedElement?.type === 'road') {
 				const edges = result.edges as MapData['edges'];
 				const can = edges.find((e: MapData['edges'][number]) => e.id === selectedElement.canonicalId);
@@ -103,14 +149,14 @@ export default function MapComponent() {
 		}
 	});
 
-	// Dismiss error on click
 	useEffect(() => {
 		if (!editError) return;
 		const t = setTimeout(() => setEditError(null), 3000);
 		return () => clearTimeout(t);
 	}, [editError]);
 
-	// Clear vehicles when simulation is reset
+
+
 	const [prevResetAt, setPrevResetAt] = useState(simulationResetAt);
 	if (simulationResetAt !== prevResetAt) {
 		setPrevResetAt(simulationResetAt);
@@ -124,7 +170,6 @@ export default function MapComponent() {
 				return;
 			}
 		}
-		// Snapshot current node IDs before the add
 		prevNodeIdsRef.current = new Set(mapData?.nodes.map(n => n.id) ?? []);
 		pendingNewNodeRef.current = true;
 		ws?.send('addNode', { x, y, kind: 'Intersection' });
@@ -145,6 +190,10 @@ export default function MapComponent() {
 					}
 				}
 			}
+			prevEdgeIdsRef.current = new Set(mapData?.edges.map(e => e.id) ?? []);
+			lastAddRoadFromRef.current = pendingRoadFrom;
+			lastAddRoadToRef.current = nodeId;
+			pendingNewRoadRef.current = true;
 			ws?.send('addRoad', { from_id: pendingRoadFrom, to_id: nodeId, lane_count: 2, speed_limit: 13.9 });
 			setPendingRoadFrom(null);
 		}
@@ -158,7 +207,12 @@ export default function MapComponent() {
 		setSelectedElement({ type: 'road', canonicalId, reverseId });
 	}, [setSelectedElement]);
 
-// In edit mode, show no vehicles
+	const handleWaypointNodeClick = useCallback((nodeId: number) => {
+		if (waypointPanelRef.current) {
+			waypointPanelRef.current.onNodeClick(nodeId);
+		}
+	}, []);
+
 	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
 	return (
@@ -178,7 +232,8 @@ export default function MapComponent() {
 						onSelectRoad={handleSelectRoad}
 						onAddNode={handleAddNode}
 						onAddRoad={handleAddRoad}
-					/>
+					onWaypointNodeClick={handleWaypointNodeClick}
+				/>
 				)}
 				<BudgetHUD mapData={mapData} />
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
@@ -204,6 +259,16 @@ export default function MapComponent() {
 					onClose={() => setSelectedElement(null)}
 					onSendPacket={(id, data) => ws?.send(id, data)}
 				/>
+			)}
+
+			{/* Waypoint panel sidebar - visible when waypoints tool is selected */}
+			{mode === 'edit' && editTool === 'waypoints' && (
+				<div className="w-80 h-full flex flex-col">
+					<WaypointPanel
+						ref={waypointPanelRef}
+						vehicles={vehicleList}
+					/>
+				</div>
 			)}
 		</div>
 	);

@@ -7,7 +7,7 @@ use crate::map::model::{Coordinates, Map};
 use crate::map::road::{FoeLink, Link, LinkType};
 use crate::simulation::vehicle::{LaneId, Vehicle};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,
