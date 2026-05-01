@@ -60,7 +60,7 @@ pub struct ApproachData {
     pub will_pass: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct LinkState {
     pub approaching: HashMap<u64, ApproachData>, // vehicle_id -> data
 }

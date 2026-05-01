@@ -16,7 +16,6 @@ use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
 use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
-use crate::scoring::Score;
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -56,6 +55,7 @@ pub struct SimulationInstance {
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
     pub speed_multiplier: AtomicU32,
+    pub final_score: Mutex<crate::scoring::Score>,
 }
 
 impl SimulationInstance {
@@ -75,6 +75,8 @@ impl SimulationInstance {
             vehicle.update_path(&simulation.config.map);
         }
 
+        let final_score = crate::scoring::Score::default();
+
         let engine = Arc::new(Mutex::new(simulation));
         let (broadcast, _) = broadcast::channel(100);
         let controller = SimulationController::new();
@@ -86,6 +88,7 @@ impl SimulationInstance {
             controller,
             active_connections: AtomicUsize::new(0),
             speed_multiplier: AtomicU32::new(3),
+            final_score: Mutex::new(final_score),
         });
 
         tokio::spawn({
@@ -106,7 +109,7 @@ impl SimulationInstance {
                     let start = tokio::time::Instant::now();
                     let multiplier = instance.speed_multiplier.load(Ordering::Relaxed) as usize;
 
-                    let (vehicles_data, traffic_lights_data, time_step) = {
+                    let (vehicles_data, traffic_lights_data, current_score, time_step) = {
                         let mut eng = instance.engine.lock().await;
                         for _ in 0..multiplier {
                             eng.step();
@@ -117,8 +120,9 @@ impl SimulationInstance {
                             .map(|v| serialize_vehicle(v, &eng.config.map))
                             .collect::<Vec<_>>();
                         let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
+                        let score = *instance.final_score.lock().await;
                         let ts = eng.config.time_step;
-                        (vehicles, tl, ts)
+                        (vehicles, tl, score, ts)
                     };
 
                     let packet = ServerPacket::VehicleUpdate {
@@ -127,25 +131,26 @@ impl SimulationInstance {
                     };
                     let _ = instance.broadcast.send(packet);
 
+                    let score_packet = ServerPacket::Score {
+                        score: current_score.score,
+                        total_trip_time: current_score.total_trip_time,
+                        ref_total_trip_time: current_score.ref_total_trip_time,
+                        total_emitted_co2: current_score.total_emitted_co2,
+                        ref_total_emitted_co2: current_score.ref_total_emitted_co2,
+                        network_length: current_score.network_length,
+                        ref_network_length: current_score.ref_network_length,
+                        success_rate: current_score.success_rate,
+                    };
+                    let _ = instance.broadcast.send(score_packet);
+
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
                   
                     {
                         let engine = instance.engine.lock().await;
                         if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
-                            let score:Score = engine.get_score();
-                            let packet = ServerPacket::Score {
-                                score : score.score,
-                                total_trip_time: score.total_trip_time,
-                                ref_total_trip_time: score.ref_total_trip_time,
-                                total_emitted_co2: score.total_emitted_co2,
-                                ref_total_emitted_co2: score.ref_total_emitted_co2,
-                                network_length: score.network_length,
-                                ref_network_length: score.ref_network_length,
-                                success_rate: score.success_rate,
-                            };
-                            let _ = instance.broadcast.send(packet);
                             instance.controller.stop();
+                            let _ = instance.broadcast.send(ServerPacket::SimulationFinished {});
                             println!("Simulation finished");
                         }
                     }

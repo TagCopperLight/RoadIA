@@ -78,6 +78,16 @@ function IconModeSimulation() {
     );
 }
 
+function IconStatistics() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 20V10" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 20V4" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 20V14" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+    );
+}
+
 function ToolButton({
     onClick,
     isSelected,
@@ -108,13 +118,14 @@ function Separator() {
 export default function Toolbar() {
     const ws = useWs();
     const {
-        mode, editTool, simState,
-        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt,
+        mode, editTool, simState, showScore,
+        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore, setIsScoringLoading,
     } = useEditMode();
 
     const switchToEdit = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
+        setShowScore(false);
         setSimulationResetAt(prev => prev + 1);
         setSelectedElement(null);
         setPendingRoadFrom(null);
@@ -133,6 +144,11 @@ export default function Toolbar() {
             setSimState('paused');
         } else {
             ws?.send('startSimulation', {});
+            // Only show loading if simulation is starting from the beginning
+            if (simState === 'stopped') {
+                setIsScoringLoading(true);
+                setShowScore(false);
+            }
             setSimState('running');
         }
     };
@@ -140,6 +156,7 @@ export default function Toolbar() {
     const handleReset = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
+        setShowScore(false);
         setSimulationResetAt(prev => prev + 1);
     };
 
@@ -176,6 +193,10 @@ export default function Toolbar() {
                             <Separator />
                             <ToolButton onClick={handleReset} title="Reset">
                                 <IconReset />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => setShowScore(!showScore)} isSelected={showScore} title="Statistics">
+                                <IconStatistics />
                             </ToolButton>
                         </>
                     )}
