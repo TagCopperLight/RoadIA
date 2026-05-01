@@ -13,6 +13,7 @@ use std::collections::HashSet;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
+use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::{AppState, SimulationInstance};
 
@@ -54,6 +55,7 @@ pub enum ServerPacket {
         network_length: f32,
         ref_network_length: f32,
         success_rate: f32, },
+    SimulationFinished {},
 }
 
 pub async fn ws_handler(
@@ -199,6 +201,38 @@ async fn handle_client_packet(
         ClientPacket::StartSimulation {} => {
             println!("Client started simulation");
             instance.controller.start();
+
+            // Recalculate score on start ONLY if simulation is at the beginning
+            let eng = instance.engine.lock().await;
+            let should_recalculate = eng.current_time == 0.0;
+            drop(eng);
+
+            if should_recalculate {
+                let instance_clone = instance.clone();
+                tokio::spawn(async move {
+                    let final_score = {
+                        let eng = instance_clone.engine.lock().await;
+                        let mut sim_clone = eng.clone();
+                        drop(eng);
+                        sim_clone.run();
+                        sim_clone.get_score()
+                    };
+
+                    *instance_clone.final_score.lock().await = final_score;
+
+                    let score_packet = ServerPacket::Score {
+                        score: final_score.score,
+                        total_trip_time: final_score.total_trip_time,
+                        ref_total_trip_time: final_score.ref_total_trip_time,
+                        total_emitted_co2: final_score.total_emitted_co2,
+                        ref_total_emitted_co2: final_score.ref_total_emitted_co2,
+                        network_length: final_score.network_length,
+                        ref_network_length: final_score.ref_network_length,
+                        success_rate: final_score.success_rate,
+                    };
+                    let _ = instance_clone.broadcast.send(score_packet);
+                });
+            }
         }
 
         ClientPacket::StopSimulation {} => {

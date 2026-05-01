@@ -17,17 +17,20 @@ pub trait Simulation {
     fn get_score(&self) -> Score;
 }
 
+#[derive(Clone)]
 struct PendingTransfer {
     vehicle_idx: usize,
     from_lane: LaneId,
     to_lane: Option<LaneId>,
 }
 
+#[derive(Clone)]
 struct TrafficLightRuntimeState {
     phase_index: usize,
     time_in_phase: f32,
 }
 
+#[derive(Clone)]
 pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,

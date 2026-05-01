@@ -23,6 +23,10 @@ interface EditModeContextType {
     setSelectedElement: (e: SelectedElement) => void;
     setPendingRoadFrom: (id: number | null) => void;
     setSimulationResetAt: Dispatch<SetStateAction<number>>;
+    showScore: boolean;
+    setShowScore: (show: boolean) => void;
+    isScoringLoading: boolean;
+    setIsScoringLoading: (loading: boolean) => void;
 }
 
 const EditModeContext = createContext<EditModeContextType | null>(null);
@@ -34,10 +38,13 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
     const [selectedElement, setSelectedElement] = useState<SelectedElement>(null);
     const [pendingRoadFrom, setPendingRoadFrom] = useState<number | null>(null);
     const [simulationResetAt, setSimulationResetAt] = useState(0);
+    const [showScore, setShowScore] = useState(false);
+    const [isScoringLoading, setIsScoringLoading] = useState(false);
 
     return (
         <EditModeContext.Provider value={{
             mode, editTool, simState, selectedElement, pendingRoadFrom, simulationResetAt,
+            showScore, setShowScore, isScoringLoading, setIsScoringLoading,
             setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt,
         }}>
             {children}

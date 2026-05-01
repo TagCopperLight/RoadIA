@@ -190,6 +190,7 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
     (3.0_f64.sqrt() / 2.0) * mst_length(&points)
 }
 
+#[derive(Clone, Copy, Default)]
 pub struct Score {
     pub score: f32,
     pub total_trip_time: f32,
