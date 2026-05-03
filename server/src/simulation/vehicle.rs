@@ -3,7 +3,7 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::map::{model::Coordinates, model::Map};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum VehicleKind {
     Car,
     Bus,
@@ -17,10 +17,15 @@ pub struct VehicleSpec {
     pub comfortable_deceleration: f32,
     pub reaction_time: f32,
     pub length: f32,
+    pub passenger_capacity: u32, // 1 for cars, 30 for buses
 }
 
 impl VehicleSpec {
     pub fn new(kind: VehicleKind, max_speed: f32, max_acceleration: f32, comfortable_deceleration: f32, reaction_time: f32, length: f32) -> Self {
+        let passenger_capacity = match kind {
+            VehicleKind::Car => 1,
+            VehicleKind::Bus => 30,
+        };
         Self {
             kind,
             max_speed,
@@ -28,6 +33,7 @@ impl VehicleSpec {
             comfortable_deceleration,
             reaction_time,
             length,
+            passenger_capacity,
         }
     }
 }

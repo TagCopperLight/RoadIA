@@ -2,15 +2,15 @@ import { useCallback } from 'react';
 import { Graphics } from 'pixi.js';
 import { VehicleData } from '../types';
 
-interface VehicleProps {
+interface BusProps {
     data: VehicleData;
 }
 
-export function Vehicle({ data }: VehicleProps) {
-    const drawCar = useCallback((g: Graphics) => {
+export function Bus({ data }: BusProps) {
+    const drawBus = useCallback((g: Graphics) => {
         g.clear();
-        g.setFillStyle({ color: 0x777777 }); // Gray
-        g.rect(-8, -2, 6, 4);
+        g.setFillStyle({ color: 0x0066CC }); // Blue
+        g.rect(-18, -4, 16, 8);
         g.fill();
     }, []);
 
@@ -19,7 +19,8 @@ export function Vehicle({ data }: VehicleProps) {
             x={data.x} 
             y={data.y} 
             rotation={data.heading ?? 0}
-            draw={drawCar} 
+            draw={drawBus} 
+            zIndex={100}
         />
     );
 }

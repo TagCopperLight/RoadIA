@@ -15,7 +15,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map, create_simple_buses};
 use crate::scoring::Score;
 
 #[derive(Clone)]
@@ -163,15 +163,32 @@ impl SimulationInstance {
     }
 
     pub fn new_default() -> Arc<Self> {
-        // let map = create_connected_map(200, 1500.0, 1500.0);
-        // let map = create_traffic_light_test_map();
-
         let map_path = "data/lannion.osm.pbf";
         match create_osm_map(map_path) {
             Ok(map) => {
                 println!("Successfully loaded Lannion map from OSM!");
-                let vehicles = create_random_vehicles(&map, 500);
-                Self::new(map, vehicles)
+                println!("Map has {} nodes and {} edges", map.graph.node_count(), map.graph.edge_count());
+                
+                // Create regular vehicles (cars)
+                let mut vehicles = create_random_vehicles(&map, 500);
+                
+                // Create buses - same amount as cars
+                let (bus_vehicles, bus_states) = create_simple_buses(&map, 500);
+                
+                // Combine all vehicles
+                vehicles.extend(bus_vehicles);
+                
+                let instance = Self::new(map, vehicles);
+                
+                // Initialize bus states in the engine
+                {
+                    let mut engine = instance.engine.try_lock().ok();
+                    if let Some(ref mut eng) = engine {
+                        eng.set_bus_states(bus_states);
+                    }
+                }
+                
+                instance
             }
             Err(e) => {
                 println!("Failed to load Lannion map: {:?}", e);

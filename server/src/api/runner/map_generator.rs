@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::collections::HashMap;
 
 use petgraph::graph::NodeIndex;
 
@@ -8,6 +9,8 @@ use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::bus::BusSpecifications;
+use crate::simulation::bus::BusVehicleState;
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
@@ -112,6 +115,43 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     }
 
     vehicles
+}
+
+/// Create simple buses distributed randomly on the map  
+pub fn create_simple_buses(map: &Map, num_buses: usize) -> (Vec<Vehicle>, HashMap<u64, BusVehicleState>) {
+    let mut vehicles = Vec::new();
+    let mut bus_states = HashMap::new();
+    
+    let nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
+    if nodes.is_empty() {
+        println!("No nodes available for buses");
+        return (vehicles, bus_states);
+    }
+
+    let mut bus_id = 1000u64;
+
+    for _ in 0..num_buses {
+        let origin = nodes[rand::random_range(0..nodes.len())];
+        let destination = nodes[rand::random_range(0..nodes.len())];
+
+        let trip = TripRequest {
+            origin,
+            destination,
+            departure_time: 0.0,
+        };
+
+        let spec = BusSpecifications::default_spec();
+        let bus = Vehicle::new(bus_id, spec, trip);
+        
+        println!("Created bus {} from node {} to node {}", bus_id, origin.index(), destination.index());
+        
+        vehicles.push(bus);
+        bus_states.insert(bus_id, BusVehicleState::new(bus_id));
+        bus_id += 1;
+    }
+
+    println!("Created {} buses total", vehicles.len());
+    (vehicles, bus_states)
 }
 
 pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {

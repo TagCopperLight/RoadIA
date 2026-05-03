@@ -108,7 +108,8 @@ pub fn get_vehicle_min_co2(vehicle: &Vehicle, map: &Map) -> f32 {
         total_co2 += get_minimal_co2_by_road(map, edge);
     }
 
-    total_co2
+    // Divide by passenger capacity for buses
+    total_co2 / vehicle.spec.passenger_capacity as f32
 }
 
 pub fn update_co2_emissions(vehicle: &mut Vehicle, time_step: f32) {
@@ -125,7 +126,8 @@ pub fn update_co2_emissions(vehicle: &mut Vehicle, time_step: f32) {
     let current_emissions = (tractive_force * vehicle.velocity + IDLE_POWER)
         * STOICHIOMETRIC_CO2_FACTOR
         / (ENGINE_THERMAL_EFFICIENCY * LOWER_HEATING_VALUE_FOR_FUEL);
-    vehicle.emitted_co2 += current_emissions * time_step;
+    // Divide emissions by passenger capacity (1 for cars, 30 for buses)
+    vehicle.emitted_co2 += (current_emissions * time_step) / vehicle.spec.passenger_capacity as f32;
 }
 
 #[derive(PartialEq)]

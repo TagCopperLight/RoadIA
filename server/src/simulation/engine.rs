@@ -7,6 +7,7 @@ use crate::simulation::config::{
 use crate::map::intersection::{ApproachData, LinkState, is_link_open};
 use crate::simulation::kinematics;
 use crate::simulation::vehicle::{DrivePlanEntry, LaneId, Vehicle, VehicleState};
+use crate::simulation::bus::BusVehicleState;
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use crate::scoring::Score;
 
@@ -39,6 +40,7 @@ pub struct SimulationEngine {
     pending_transfers: Vec<PendingTransfer>,
     traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
     link_directory: HashMap<u32, crate::map::road::Link>,
+    pub bus_states: HashMap<u64, BusVehicleState>,
 }
 
 impl Simulation for SimulationEngine {
@@ -71,6 +73,7 @@ impl Simulation for SimulationEngine {
             all_vehicles_arrived: false,
             traffic_light_states,
             link_directory,
+            bus_states: HashMap::new(),
         }
     }
 
@@ -97,6 +100,8 @@ impl Simulation for SimulationEngine {
             v.previous_velocity = v.velocity;
         }
         self.handle_departures();
+        self.handle_bus_updates(); // Update bus stop timers
+        self.handle_bus_arrivals(); // Give buses new destinations when they arrive
         self.plan_movements();
         self.register_approaches();
         self.advance_traffic_lights();
@@ -110,6 +115,53 @@ impl Simulation for SimulationEngine {
             }
             if v.state == VehicleState::Arrived && v.arrived_at.is_none() {
                 v.arrived_at = Some(t);
+            }
+        }
+    }
+}
+
+impl SimulationEngine {
+    /// Set bus states for the simulation
+    pub fn set_bus_states(&mut self, bus_states: HashMap<u64, BusVehicleState>) {
+        self.bus_states = bus_states;
+    }
+
+    /// Updates bus-specific logic (stop timers, etc.)
+    fn handle_bus_updates(&mut self) {
+        let dt = self.config.time_step;
+        
+        for bus_state in self.bus_states.values_mut() {
+            // Update stop timer
+            bus_state.update_stop_time(dt);
+        }
+    }
+
+    fn handle_bus_arrivals(&mut self) {
+        // Give buses new destinations when they arrive
+        use crate::simulation::vehicle::VehicleKind;
+        
+        let nodes: Vec<petgraph::graph::NodeIndex> = self.config.map.graph.node_indices().collect();
+        if nodes.is_empty() {
+            return;
+        }
+
+        for v in &mut self.vehicles {
+            if v.spec.kind == VehicleKind::Bus && v.state == VehicleState::Arrived {
+                // Bus arrived at destination - give it a new random destination
+                let new_dest_idx = rand::random_range(0..nodes.len());
+                let new_destination = nodes[new_dest_idx];
+                
+                // Reset vehicle to WaitingToDepart with new destination
+                v.trip.destination = new_destination;
+                v.path.clear();
+                v.path_index = 0;
+                v.position_on_lane = 0.0;
+                v.state = VehicleState::WaitingToDepart;
+                v.velocity = 0.0;
+                v.previous_velocity = 0.0;
+                
+                // Compute new path
+                v.update_path(&self.config.map);
             }
         }
     }

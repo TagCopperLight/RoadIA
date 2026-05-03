@@ -6,6 +6,7 @@ import { AppMode, EditTool, SelectedElement } from '../EditModeContext';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
 import { Vehicle } from './elements/Vehicle';
+import { Bus } from './elements/Bus';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
 
 interface MapCanvasProps {
@@ -74,7 +75,12 @@ export function MapCanvas({
 				if (!targets.has(id)) { display.delete(id); changed = true; }
 			}
 
-			if (changed) setDisplayVehicles([...display.values()]);
+			if (changed) {
+				const allVehicles = [...display.values()];
+				const buses = allVehicles.filter(v => v.kind === 'Bus');
+				const cars = allVehicles.filter(v => v.kind === 'Car');
+				setDisplayVehicles(allVehicles);
+			}
 		};
 
 		if (!app?.ticker) return;
@@ -201,10 +207,19 @@ export function MapCanvas({
 				/>
 				{staticMapElements}
 
-				{/* Pass 4: Vehicles (interpolated) */}
-				{displayVehicles.map((vehicle) => (
-					<Vehicle key={`vehicle-${vehicle.id}`} data={vehicle} />
-				))}
+				{/* Pass 4: Vehicles (interpolated) - Cars */}
+				{displayVehicles
+					.filter(v => v.kind !== 'Bus')
+					.map((vehicle) => (
+						<Vehicle key={`vehicle-${vehicle.id}`} data={vehicle} />
+					))}
+
+				{/* Pass 5: Buses (interpolated) - Always visible */}
+				{displayVehicles
+					.filter(v => v.kind === 'Bus')
+					.map((vehicle) => (
+						<Bus key={`bus-${vehicle.id}`} data={vehicle} />
+					))}
 			</pixiContainer>
 		</pixiCustomViewport>
 	);
