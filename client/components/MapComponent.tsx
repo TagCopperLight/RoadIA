@@ -267,6 +267,7 @@ export default function MapComponent() {
 					<WaypointPanel
 						ref={waypointPanelRef}
 						vehicles={vehicleList}
+						mapData={mapData}
 					/>
 				</div>
 			)}
