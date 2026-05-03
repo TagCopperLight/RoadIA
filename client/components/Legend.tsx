@@ -52,7 +52,7 @@ export default function Legend() {
                         {/* White center line */}
                         <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white transform -translate-y-1/2" />
                         {/* Direction arrow */}
-                        <div className="absolute right-1 text-gray-400 text-xs">▶</div>
+                        <div className="absolute right-1 text-gray-400 text-xs">&gt;</div>
                         {/* White edges */}
                         <div className="absolute left-0 right-0 top-0 border-t border-white" />
                         <div className="absolute left-0 right-0 bottom-0 border-b border-white" />
@@ -64,7 +64,7 @@ export default function Legend() {
     };
 
     return (
-        <div className="fixed bottom-[calc(20px+60px)] right-[15px] bg-black rounded-[10px] border border-gray-700 text-white z-40" style={{ maxWidth: '300px' }}>
+        <div className="fixed bottom-[100px] left-[15px] bg-black rounded-[10px] border border-gray-700 text-white z-40" style={{ maxWidth: '300px' }}>
             {/* Header - Always visible */}
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
@@ -72,7 +72,7 @@ export default function Legend() {
             >
                 <span className="text-sm font-semibold">Légende</span>
                 <span className="text-lg transition-transform" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
-                    ▼
+                    v
                 </span>
             </button>
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { useWs } from '@/app/websocket/websocket';
+import { MapData } from './map/types';
 
 interface VehicleInfo {
   id: number;
@@ -12,10 +13,12 @@ interface VehicleInfo {
 
 interface WaypointPanelProps {
   vehicles: VehicleInfo[];
+  mapData?: MapData | null;
 }
 
 export const WaypointPanel = forwardRef(function WaypointPanel({
   vehicles,
+  mapData,
 }: WaypointPanelProps, ref) {
   const ws = useWs();
   
@@ -93,7 +96,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
     return (
       <div className="flex flex-col h-full bg-black border-l border-gray-600">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
-          <h3 className="text-sm font-semibold text-white uppercase tracking-wide">🚗 Waypoints</h3>
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wide">Waypoints</h3>
         </div>
         <div className="flex-1 flex items-center justify-center p-4">
           <p className="text-xs text-gray-400 text-center">
@@ -110,13 +113,13 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
       <div className="flex flex-col h-full bg-black border-l border-gray-600">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
-            📍 Node {clickedNodeId} - Vehicles
+            Node {clickedNodeId} - Vehicles
           </h3>
           <button
             onClick={() => setClickedNodeId(null)}
             className="text-xs text-gray-400 hover:text-gray-300 mt-2"
           >
-            ← Back
+            Back
           </button>
         </div>
 
@@ -139,19 +142,56 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
     );
   }
 
+  // INTERSECTION VIEW - Show when clicking on an intersection (no vehicles for this node)
+  if (clickedNodeId && vehiclesForNode.length === 0 && !selectedVehicleId) {
+    const node = mapData?.nodes.find(n => n.id === clickedNodeId);
+    return (
+      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+        <div className="p-4 border-b border-gray-600 flex-shrink-0">
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
+            Intersection
+          </h3>
+          <button
+            onClick={() => setClickedNodeId(null)}
+            className="text-xs text-gray-400 hover:text-gray-300 mt-2"
+          >
+            Back
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <p className="text-lg font-semibold text-white mb-2">
+              Node {clickedNodeId}
+            </p>
+            {node && (
+              <>
+                <p className="text-sm text-gray-400 mb-4">
+                  {node.kind}
+                </p>
+              </>
+            )}
+            <p className="text-xs text-gray-500">
+              No vehicles starting from this node
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // VEHICLE DETAIL VIEW
   if (selectedVehicle) {
     return (
       <div className="flex flex-col h-full bg-black border-l border-gray-600">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
-            🚗 Vehicle #{selectedVehicle.id}
+            Vehicle #{selectedVehicle.id}
           </h3>
           <button
             onClick={handleCancel}
             className="text-xs text-gray-400 hover:text-gray-300 mt-2"
           >
-            ← Back
+            Back
           </button>
         </div>
 
@@ -193,14 +233,14 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
                       onClick={() => handleRemoveWaypoint(idx)}
                       className="text-red-500 hover:text-red-400 font-bold"
                     >
-                      ✕
+                      x
                     </button>
                   </div>
                 ))}
               </div>
             )}
             <p className="text-xs text-gray-500 mt-2">
-              💡 Click nodes on the map to add waypoints
+              Click nodes on the map to add waypoints
             </p>
           </div>
         </div>
