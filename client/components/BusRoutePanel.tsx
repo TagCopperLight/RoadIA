@@ -47,7 +47,7 @@ export const BusRoutePanel = forwardRef(function BusRoutePanel({ mapData,}: BusR
     // Start editing a route
     const handleStartEdit = (routeId: number) => {
         setEditingRouteId(routeId);
-        const route = busRoutes.find(r => r.id === routeId);
+        const route = busRoutes.find((r: BusRoute) => r.id === routeId);
         if (route) {
             setPendingStops([...route.stops]);
             setSelectedBusRoute(routeId);
@@ -64,7 +64,7 @@ export const BusRoutePanel = forwardRef(function BusRoutePanel({ mapData,}: BusR
     const handleSaveRoute = () => {
         if (editingRouteId === null) return;
         
-        const updatedRoutes = busRoutes.map(r =>
+        const updatedRoutes = busRoutes.map((r: BusRoute) =>
             r.id === editingRouteId
                 ? { ...r, stops: pendingStops }
                 : r
@@ -72,7 +72,7 @@ export const BusRoutePanel = forwardRef(function BusRoutePanel({ mapData,}: BusR
         setBusRoutes(updatedRoutes);
 
         // Send to server
-        const route = updatedRoutes.find(r => r.id === editingRouteId);
+        const route = updatedRoutes.find((r: BusRoute) => r.id === editingRouteId);
         if (route && route.stops.length > 0) {
             ws?.send('setBusRoute', {
                 route_id: route.id,
@@ -86,7 +86,7 @@ export const BusRoutePanel = forwardRef(function BusRoutePanel({ mapData,}: BusR
 
     // Delete a route
     const handleDeleteRoute = (routeId: number) => {
-        setBusRoutes(busRoutes.filter(r => r.id !== routeId));
+        setBusRoutes(busRoutes.filter((r: BusRoute) => r.id !== routeId));
         if (selectedBusRoute === routeId) {
             setSelectedBusRoute(null);
         }
@@ -207,7 +207,7 @@ export const BusRoutePanel = forwardRef(function BusRoutePanel({ mapData,}: BusR
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
-                    {busRoutes.map(route => (
+                    {busRoutes.map((route: BusRoute) => (
                         <div
                             key={route.id}
                             className={`p-3 bg-gray-900 rounded border-l-4 transition ${
@@ -254,7 +254,7 @@ export const BusRoutePanel = forwardRef(function BusRoutePanel({ mapData,}: BusR
     }
 
     // EDIT ROUTE VIEW
-    const editingRoute = busRoutes.find(r => r.id === editingRouteId);
+    const editingRoute = busRoutes.find((r: BusRoute) => r.id === editingRouteId);
     if (editingRoute && editingRouteId !== null) {
         return (
             <div className="flex flex-col h-full bg-black border-l border-gray-600">
