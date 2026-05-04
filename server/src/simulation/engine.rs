@@ -77,7 +77,6 @@ impl Simulation for SimulationEngine {
         }
     }
 
-    // Code possiblement mort à supprimer (la fonction run n'est jamais appelée)
     fn run(&mut self) {
         for v in &mut self.vehicles {
             v.update_path(&self.config.map);

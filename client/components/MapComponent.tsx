@@ -22,7 +22,7 @@ export default function MapComponent() {
 	const {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
-		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
+		showScore, setShowScore, isScoringLoading, setIsScoringLoading, scoreReady, setScoreReady,
 	} = useEditMode();
 
 	const simStateRef = useRef(simState);
@@ -65,6 +65,7 @@ export default function MapComponent() {
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
 		setIsScoringLoading(false);
+		setScoreReady(true);
 	});
 
 	usePacket("simulationFinished", () => {

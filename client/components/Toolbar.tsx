@@ -91,11 +91,13 @@ function IconStatistics() {
 function ToolButton({
     onClick,
     isSelected,
+    disabled,
     title,
     children,
 }: {
     onClick: () => void;
     isSelected?: boolean;
+    disabled?: boolean;
     title: string;
     children: React.ReactNode;
 }) {
@@ -103,8 +105,9 @@ function ToolButton({
         <button
             onClick={onClick}
             title={title}
-            className={`flex items-center justify-center p-[10px] cursor-pointer transition-opacity text-white
-                ${isSelected ? 'opacity-75' : 'opacity-100 hover:opacity-50'}`}
+            disabled={disabled}
+            className={`flex items-center justify-center p-[10px] transition-opacity text-white
+                ${disabled ? 'opacity-25 cursor-not-allowed' : isSelected ? 'opacity-75 cursor-pointer' : 'opacity-100 hover:opacity-50 cursor-pointer'}`}
         >
             {children}
         </button>
@@ -118,14 +121,15 @@ function Separator() {
 export default function Toolbar() {
     const ws = useWs();
     const {
-        mode, editTool, simState, showScore,
-        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore, setIsScoringLoading,
+        mode, editTool, simState, showScore, scoreReady,
+        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore, setIsScoringLoading, setScoreReady,
     } = useEditMode();
 
     const switchToEdit = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
         setShowScore(false);
+        setScoreReady(false);
         setSimulationResetAt(prev => prev + 1);
         setSelectedElement(null);
         setPendingRoadFrom(null);
@@ -157,6 +161,7 @@ export default function Toolbar() {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
         setShowScore(false);
+        setScoreReady(false);
         setSimulationResetAt(prev => prev + 1);
     };
 
@@ -195,7 +200,7 @@ export default function Toolbar() {
                                 <IconReset />
                             </ToolButton>
                             <Separator />
-                            <ToolButton onClick={() => setShowScore(!showScore)} isSelected={showScore} title="Statistics">
+                            <ToolButton onClick={() => setShowScore(!showScore)} isSelected={showScore} disabled={!scoreReady} title="Statistics">
                                 <IconStatistics />
                             </ToolButton>
                         </>

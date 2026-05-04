@@ -208,29 +208,30 @@ async fn handle_client_packet(
             drop(eng);
 
             if should_recalculate {
-                let instance_clone = instance.clone();
+                let broadcast = instance.broadcast.clone();
+                let engine = instance.engine.clone();
                 tokio::spawn(async move {
-                    let final_score = {
-                        let eng = instance_clone.engine.lock().await;
-                        let mut sim_clone = eng.clone();
-                        drop(eng);
-                        sim_clone.run();
-                        sim_clone.get_score()
+                    let sim_clone = {
+                        let eng = engine.lock().await;
+                        eng.clone()
                     };
 
-                    *instance_clone.final_score.lock().await = final_score;
+                    let score = tokio::task::spawn_blocking(move || {
+                        let mut sim = sim_clone;
+                        sim.run();
+                        sim.get_score()
+                    }).await.expect("score computation panicked");
 
-                    let score_packet = ServerPacket::Score {
-                        score: final_score.score,
-                        total_trip_time: final_score.total_trip_time,
-                        ref_total_trip_time: final_score.ref_total_trip_time,
-                        total_emitted_co2: final_score.total_emitted_co2,
-                        ref_total_emitted_co2: final_score.ref_total_emitted_co2,
-                        network_length: final_score.network_length,
-                        ref_network_length: final_score.ref_network_length,
-                        success_rate: final_score.success_rate,
-                    };
-                    let _ = instance_clone.broadcast.send(score_packet);
+                    let _ = broadcast.send(ServerPacket::Score {
+                        score: score.score,
+                        total_trip_time: score.total_trip_time,
+                        ref_total_trip_time: score.ref_total_trip_time,
+                        total_emitted_co2: score.total_emitted_co2,
+                        ref_total_emitted_co2: score.ref_total_emitted_co2,
+                        network_length: score.network_length,
+                        ref_network_length: score.ref_network_length,
+                        success_rate: score.success_rate,
+                    });
                 });
             }
         }
