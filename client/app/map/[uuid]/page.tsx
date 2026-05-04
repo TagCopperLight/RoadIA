@@ -1,9 +1,14 @@
+'use client';
+
 import Image from 'next/image';
 import MapShell from '@/components/MapShell';
+import { useEditMode } from '@/components/EditModeContext';
+import { use } from 'react';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
+    const { setShowScore } = useEditMode();
     return (
         <div className="flex items-center w-full p-[15px]">
             <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} loading='eager' />
@@ -11,7 +16,11 @@ function Header() {
                 <p className='text-[17px]'>Lannion - 2026</p>
                 <div className='flex text-[15px] font-medium'>
                     {MENU_ITEMS.map((item) => (
-                        <p key={item} className='mr-[14px] cursor-pointer hover:opacity-50 transition-opacity select-none'>
+                        <p 
+                            key={item} 
+                            onClick={() => item === 'Statistiques' && setShowScore(true)}
+                            className='mr-[14px] cursor-pointer hover:opacity-50 transition-opacity select-none'
+                        >
                             {item}
                         </p>
                     ))}
@@ -26,12 +35,19 @@ function Header() {
 }
 
 
-export default async function MapPage({ params }: { params: Promise<{ uuid: string }> }) {
-  const { uuid } = await params;
+export default function MapPage({ params }: { params: Promise<{ uuid: string }> }) {
+  const { uuid } = use(params);
   return (
-    <div className="flex flex-col h-screen w-screen items-center">
-        <Header />
-        <MapShell uuid={uuid} />
-    </div>
+    <EditModeProviderWrapper uuid={uuid} />
   );
+}
+
+function EditModeProviderWrapper({ uuid }: { uuid: string }) {
+    return (
+        <div className="flex flex-col h-screen w-screen items-center">
+            <MapShell uuid={uuid}>
+                <Header />
+            </MapShell>
+        </div>
+    )
 }

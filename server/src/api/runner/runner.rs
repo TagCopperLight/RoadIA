@@ -16,7 +16,6 @@ use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
 use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
-use crate::scoring::Score;
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -133,19 +132,8 @@ impl SimulationInstance {
                     {
                         let engine = instance.engine.lock().await;
                         if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
-                            let score:Score = engine.get_score();
-                            let packet = ServerPacket::Score {
-                                score : score.score,
-                                total_trip_time: score.total_trip_time,
-                                ref_total_trip_time: score.ref_total_trip_time,
-                                total_emitted_co2: score.total_emitted_co2,
-                                ref_total_emitted_co2: score.ref_total_emitted_co2,
-                                network_length: score.network_length,
-                                ref_network_length: score.ref_network_length,
-                                success_rate: score.success_rate,
-                            };
-                            let _ = instance.broadcast.send(packet);
                             instance.controller.stop();
+                            let _ = instance.broadcast.send(ServerPacket::SimulationFinished {});
                             println!("Simulation finished");
                         }
                     }
