@@ -7,14 +7,16 @@ use crate::map::model::{Coordinates, Map};
 use crate::map::road::{FoeLink, Link, LinkType};
 use crate::simulation::vehicle::{LaneId, Vehicle};
 
-#[derive(Debug, Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,
     Workplace,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InternalLane {
     pub id: u32,
     pub from_lane_id: u32,
@@ -25,7 +27,7 @@ pub struct InternalLane {
     pub exit: (f32, f32),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Intersection {
     pub id: u32,
     pub kind: IntersectionKind,

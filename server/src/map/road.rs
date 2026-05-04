@@ -1,6 +1,7 @@
+use serde::{Serialize, Deserialize};
 use crate::simulation::config::{LANE_WIDTH, MAX_SPEED};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum LinkType {
     Yield,
     Priority,
@@ -8,7 +9,7 @@ pub enum LinkType {
     TrafficLight,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Road {
     pub id: u32,
     pub length: f32,
@@ -18,7 +19,7 @@ pub struct Road {
     pub lanes: Vec<Lane>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Lane {
     pub id: u32,
     pub road_id: u32,
@@ -28,14 +29,14 @@ pub struct Lane {
     pub links: Vec<Link>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FoeLink {
     pub id: u32,
     pub link_type: LinkType,
     pub entry: (f32, f32),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Link {
     pub id: u32,
     pub lane_origin_id: u32,
