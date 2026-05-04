@@ -136,3 +136,33 @@ export async function createSimulation(): Promise<{ uuid: string; token: string 
     if (!res.ok) throw new Error(`Failed to create simulation: ${res.status}`);
     return res.json();
 }
+
+export async function saveMap(uuid: string, token: string, filename: string): Promise<{ status: string; path: string }> {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/simulations/save-map`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uuid, token, filename }),
+    });
+    if (!res.ok) throw new Error(`Failed to save map: ${res.status}`);
+    return res.json();
+}
+
+export async function loadMap(filename: string): Promise<{ uuid: string; token: string }> {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/simulations/load-map`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filename }),
+    });
+    if (!res.ok) throw new Error(`Failed to load map: ${res.status}`);
+    return res.json();
+}
+
+export async function listMaps(): Promise<{ maps: string[] }> {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/maps`);
+    if (!res.ok) throw new Error(`Failed to list maps: ${res.status}`);
+    return res.json();
+}

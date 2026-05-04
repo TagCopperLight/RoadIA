@@ -150,6 +150,12 @@ impl SimulationInstance {
         instance
     }
 
+    pub fn from_file(path: &str) -> Result<Arc<Self>, String> {
+        let map = crate::map::model::Map::load(path).map_err(|e| e.to_string())?;
+        let vehicles = create_random_vehicles(&map, 500);
+        Ok(Self::new(map, vehicles))
+    }
+
     pub fn new_default() -> Arc<Self> {
         // let map = create_connected_map(200, 1500.0, 1500.0);
         // let map = create_traffic_light_test_map();
@@ -191,6 +197,78 @@ async fn create_simulation_handler(
     Json(serde_json::json!({ "uuid": uuid, "token": token }))
 }
 
+#[derive(serde::Deserialize)]
+struct SaveMapRequest {
+    uuid: Uuid,
+    token: String,
+    filename: String,
+}
+
+async fn save_map_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<SaveMapRequest>,
+) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let simulations = state.simulations.read().await;
+    let instance = simulations.get(&payload.uuid).ok_or(axum::http::StatusCode::NOT_FOUND)?;
+
+    if instance.token != payload.token {
+        return Err(axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    let engine = instance.engine.lock().await;
+    let map = &engine.config.map;
+
+    let path = format!("data/{}", payload.filename);
+    if let Err(e) = map.save(&path) {
+        println!("Failed to save map: {:?}", e);
+        return Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(Json(serde_json::json!({ "status": "success", "path": path })))
+}
+
+#[derive(serde::Deserialize)]
+struct LoadMapRequest {
+    filename: String,
+}
+
+async fn load_map_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<LoadMapRequest>,
+) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let path = format!("data/{}", payload.filename);
+    match SimulationInstance::from_file(&path) {
+        Ok(instance) => {
+            let uuid = Uuid::new_v4();
+            let token = instance.token.clone();
+            state.simulations.write().await.insert(uuid, instance);
+            Ok(Json(serde_json::json!({ "uuid": uuid, "token": token })))
+        }
+        Err(e) => {
+            println!("Failed to load map from {}: {:?}", path, e);
+            Err(axum::http::StatusCode::NOT_FOUND)
+        }
+    }
+}
+
+async fn list_maps_handler() -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let data_dir = "data";
+    let mut maps = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(data_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
+                    maps.push(filename.to_string());
+                }
+            }
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "maps": maps })))
+}
+
 pub async fn run() -> io::Result<()> {
     let shared_state = Arc::new(AppState {
         simulations: Arc::new(RwLock::new(HashMap::new())),
@@ -210,6 +288,9 @@ pub async fn run() -> io::Result<()> {
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/api/simulations", post(create_simulation_handler))
+        .route("/api/simulations/save-map", post(save_map_handler))
+        .route("/api/simulations/load-map", post(load_map_handler))
+        .route("/api/maps", get(list_maps_handler))
         .layer(cors)
         .with_state(shared_state);
 
