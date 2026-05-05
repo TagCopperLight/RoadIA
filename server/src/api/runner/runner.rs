@@ -142,6 +142,12 @@ impl SimulationInstance {
         instance
     }
 
+    pub fn from_file(path: &str) -> Result<Arc<Self>, String> {
+        let map = crate::map::model::Map::load(path).map_err(|e| e.to_string())?;
+        let vehicles = create_random_vehicles(&map, 500);
+        Ok(Self::new(map, vehicles))
+    }
+
     pub fn new_default() -> Arc<Self> {
         // let map = create_connected_map(200, 1500.0, 1500.0);
         // let map = create_traffic_light_test_map();

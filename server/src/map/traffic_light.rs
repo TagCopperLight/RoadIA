@@ -1,11 +1,13 @@
-#[derive(Clone)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SignalPhase {
     pub green_link_ids: Vec<u32>,
     pub green_duration: f32,
     pub yellow_duration: f32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TrafficLightController {
     pub id: u32,
     pub intersection_id: u32,

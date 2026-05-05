@@ -3,3 +3,4 @@ server/target/
 server/static/
 server/src/main.rs
 server/data/tmp/
+server/data/*.json
