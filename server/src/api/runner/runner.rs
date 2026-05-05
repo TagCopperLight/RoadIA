@@ -1,17 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use tokio::io;
-use tokio::net::TcpListener;
-use tokio::sync::{Mutex, RwLock};
-use tokio::sync::broadcast;
+use tokio::sync::{Mutex, broadcast};
 use tokio::time::{sleep, Duration};
-use axum::{Router, routing::{get, post}, extract::State, Json};
-use uuid::Uuid;
-use axum::http::{HeaderValue, Method, header::CONTENT_TYPE};
-use tower_http::cors::{AllowOrigin, CorsLayer};
 
-use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, serialize_traffic_lights};
+use crate::api::websocket::{ServerPacket, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
@@ -128,7 +120,7 @@ impl SimulationInstance {
 
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
-                  
+
                     {
                         let engine = instance.engine.lock().await;
                         if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
@@ -137,12 +129,12 @@ impl SimulationInstance {
                             println!("Simulation finished");
                         }
                     }
-                  
+
                     drop(instance);
-                    
+
                     if elapsed < step_duration {
                         sleep(step_duration - elapsed).await;
-                    }                  
+                    }
                 }
             }
         });
@@ -173,49 +165,4 @@ fn generate_token() -> String {
     use rand::Rng;
     let mut rng = rand::rng();
     (0..32).map(|_| format!("{:02x}", rng.random::<u8>())).collect()
-}
-
-pub struct AppState {
-    pub simulations: Arc<RwLock<HashMap<Uuid, Arc<SimulationInstance>>>>,
-}
-
-async fn create_simulation_handler(
-    State(state): State<Arc<AppState>>,
-) -> Json<serde_json::Value> {
-    let uuid = Uuid::new_v4();
-    let instance = SimulationInstance::new_default();
-    let token = instance.token.clone();
-
-    state.simulations.write().await.insert(uuid, instance);
-
-    Json(serde_json::json!({ "uuid": uuid, "token": token }))
-}
-
-pub async fn run() -> io::Result<()> {
-    let shared_state = Arc::new(AppState {
-        simulations: Arc::new(RwLock::new(HashMap::new())),
-    });
-
-    let allowed_origins: Vec<HeaderValue> = std::env::var("ALLOWED_ORIGINS")
-        .expect("ALLOWED_ORIGINS must be set (comma-separated list, e.g. http://localhost:3000)")
-        .split(',')
-        .filter_map(|o| o.trim().parse().ok())
-        .collect();
-
-    let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::list(allowed_origins))
-        .allow_methods([Method::GET, Method::POST])
-        .allow_headers([CONTENT_TYPE]);
-
-    let app = Router::new()
-        .route("/ws", get(ws_handler))
-        .route("/api/simulations", post(create_simulation_handler))
-        .layer(cors)
-        .with_state(shared_state);
-
-    let listener = TcpListener::bind("0.0.0.0:8080").await?;
-    println!("Listening on {}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
-
-    Ok(())
 }
