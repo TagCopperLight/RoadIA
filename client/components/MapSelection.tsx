@@ -105,11 +105,16 @@ export default function MapSelection() {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(errorText || "Failed to create custom map simulation");
+        setError(errorText || "Failed to create custom map simulation");
+        setLoading(false);
+        return;
       }
 
       const data = await response.json();
       sessionStorage.setItem('sim_token', data.token);
+      sessionStorage.removeItem('map_name');
+      sessionStorage.removeItem('map_saved');
+      sessionStorage.removeItem('map_file_uuid');
       router.push(`/map/${data.uuid}`);
     } catch (err: unknown) {
       console.error(err);
@@ -125,6 +130,9 @@ export default function MapSelection() {
         zoom={defaultZoom}
         style={{ height: '100%', width: '100%' }}
         dragging={false}
+        zoomAnimation={false}
+        fadeAnimation={false}
+        markerZoomAnimation={false}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
