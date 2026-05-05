@@ -198,6 +198,22 @@ async fn rename_map_handler(
     Ok(Json(serde_json::json!({ "status": "success" })))
 }
 
+#[derive(serde::Deserialize)]
+struct DeleteMapRequest {
+    filename: String,
+}
+
+async fn delete_map_handler(
+    Json(payload): Json<DeleteMapRequest>,
+) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let path = format!("data/{}", payload.filename);
+    std::fs::remove_file(&path).map_err(|e| {
+        println!("Failed to delete map: {:?}", e);
+        axum::http::StatusCode::NOT_FOUND
+    })?;
+    Ok(Json(serde_json::json!({ "status": "success" })))
+}
+
 async fn list_maps_handler() -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
     let data_dir = "data";
     let mut maps = Vec::new();
@@ -240,6 +256,7 @@ pub async fn run() -> io::Result<()> {
         .route("/api/simulations/load-map", post(load_map_handler))
         .route("/api/maps", get(list_maps_handler))
         .route("/api/maps/rename", post(rename_map_handler))
+        .route("/api/maps/delete", post(delete_map_handler))
         .layer(cors)
         .with_state(shared_state);
 

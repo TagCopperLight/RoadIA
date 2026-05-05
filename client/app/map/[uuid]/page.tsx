@@ -5,7 +5,7 @@ import MapShell from '@/components/MapShell';
 import { useEditMode } from '@/components/EditModeContext';
 import { use, useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { saveMap, renameMap, useWs } from '@/app/websocket/websocket';
+import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
@@ -35,6 +35,21 @@ function Header() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    const handleSupprimer = async () => {
+        setOpenMenu(null);
+        const savedNameValue = sessionStorage.getItem('map_name');
+        if (!savedNameValue || sessionStorage.getItem('map_saved') !== 'true') {
+            router.push('/');
+            return;
+        }
+        try {
+            await deleteMap(savedNameValue + '.json');
+        } catch (e) {
+            console.error('Failed to delete map:', e);
+        }
+        router.push('/');
+    };
 
     const handleSauvegarder = async () => {
         setOpenMenu(null);
@@ -96,12 +111,18 @@ function Header() {
                                 {item}
                             </p>
                             {item === 'Fichier' && openMenu === 'Fichier' && (
-                                <div className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-md z-50 min-w-[140px]'>
+                                <div className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-md z-50 min-w-[160px]'>
                                     <p
                                         onClick={handleSauvegarder}
                                         className='px-4 py-2 text-[14px] cursor-pointer hover:bg-gray-100 select-none'
                                     >
                                         Sauvegarder
+                                    </p>
+                                    <p
+                                        onClick={handleSupprimer}
+                                        className='px-4 py-2 text-[14px] cursor-pointer hover:bg-red-50 text-red-600 select-none'
+                                    >
+                                        Supprimer
                                     </p>
                                 </div>
                             )}

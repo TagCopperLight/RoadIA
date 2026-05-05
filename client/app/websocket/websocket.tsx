@@ -170,6 +170,15 @@ export async function renameMap(oldFilename: string, newFilename: string): Promi
     if (!res.ok) throw new Error(`Failed to rename map: ${res.status}`);
 }
 
+export async function deleteMap(filename: string): Promise<void> {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/maps/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename }),
+    });
+    if (!res.ok) throw new Error(`Failed to delete map: ${res.status}`);
+}
+
 export async function listMaps(): Promise<{ maps: string[] }> {
     const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/maps`);
     if (!res.ok) throw new Error(`Failed to list maps: ${res.status}`);
