@@ -93,11 +93,11 @@ export default function Home() {
                 ) : (
                   <ul className="divide-y divide-gray-200">
                     {maps.map((map) => (
-                      <li key={map} className="flex justify-between items-center p-4 hover:bg-white/80">
+                      <li key={map} className="flex justify-between items-center p-4 bg-white/80 hover:bg-gray-100">
                         <span className="font-medium">{map.replace(/\.json$/, '')}</span>
                         <button
                           onClick={() => handleLoadMap(map)}
-                          className="bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
+                          className="cursor-pointer bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
                         >
                           Charger
                         </button>
@@ -108,7 +108,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setShowMapList(false)}
-                className="mb-10 text-zinc-600 hover:text-black font-semibold"
+                className="cursor-pointer mb-10 text-zinc-600 hover:text-black font-semibold"
               >
                 ← Retour
               </button>
