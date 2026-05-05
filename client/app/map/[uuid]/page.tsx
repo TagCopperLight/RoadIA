@@ -82,7 +82,7 @@ function Header() {
                         className='col-start-1 row-start-1 min-w-0 bg-transparent border border-transparent rounded px-1 outline-none hover:border-gray-300 focus:border-gray-400 transition-colors'
                     />
                 </div>
-                <div className='flex text-[15px] font-medium' ref={menuRef}>
+                <div className='flex text-[15px] font-medium pl-1' ref={menuRef}>
                     {MENU_ITEMS.map((item) => (
                         <div key={item} className='relative mr-[14px]'>
                             <p
