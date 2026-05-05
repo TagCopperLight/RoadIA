@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { listMaps, loadMap } from "@/app/websocket/websocket";
+import { listMaps, loadMap, deleteMap } from "@/app/websocket/websocket";
 import { useState } from "react";
 
 interface MenuCardProps {
@@ -57,6 +57,15 @@ export default function Home() {
     }
   };
 
+  const handleDeleteMap = async (filename: string) => {
+    try {
+      await deleteMap(filename);
+      setMaps((prev) => prev.filter((m) => m !== filename));
+    } catch (e) {
+      console.error("Failed to delete map:", e);
+    }
+  };
+
   return (
     <div>
       <div className="fixed inset-0 bg-white">
@@ -87,12 +96,26 @@ export default function Home() {
                     {maps.map((map) => (
                       <li key={map} className="flex justify-between items-center p-4 bg-white/80 hover:bg-gray-100">
                         <span className="font-medium">{map.replace(/\.json$/, '')}</span>
-                        <button
-                          onClick={() => handleLoadMap(map)}
-                          className="cursor-pointer bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
-                        >
-                          Charger
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleLoadMap(map)}
+                            className="cursor-pointer bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
+                          >
+                            Charger
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMap(map)}
+                            title="Supprimer"
+                            className="cursor-pointer p-2 text-gray-400 hover:text-red-600 transition-colors rounded"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                            </svg>
+                          </button>
+                        </div>
                       </li>
                     ))}
                   </ul>
