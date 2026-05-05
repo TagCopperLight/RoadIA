@@ -267,6 +267,33 @@ async fn handle_client_packet(
             });
         }
 
+        ClientPacket::RequestScore {} => {
+            let engine = instance.engine.clone();
+            let sim_clone = {
+                let eng = engine.lock().await;
+                eng.clone()
+            };
+
+            let score = tokio::task::spawn_blocking(move || {
+                sim_clone.get_score()
+            }).await.expect("score computation panicked");
+
+            let packet = ServerPacket::Score {
+                score: score.score,
+                total_trip_time: score.total_trip_time,
+                ref_total_trip_time: score.ref_total_trip_time,
+                total_emitted_co2: score.total_emitted_co2,
+                ref_total_emitted_co2: score.ref_total_emitted_co2,
+                network_length: score.network_length,
+                ref_network_length: score.ref_network_length,
+                success_rate: score.success_rate,
+            };
+
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
+            }
+        }
+
         ClientPacket::StopSimulation {} => {
             println!("Client stopped simulation");
             instance.controller.stop();
