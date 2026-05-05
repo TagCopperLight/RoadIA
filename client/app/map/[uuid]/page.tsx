@@ -5,24 +5,26 @@ import MapShell from '@/components/MapShell';
 import { useEditMode } from '@/components/EditModeContext';
 import { use, useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { saveMap, renameMap } from '@/app/websocket/websocket';
+import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
-    const { setShowScore } = useEditMode();
+    const { isScoringLoading, setIsScoringLoading } = useEditMode();
+    const ws = useWs();
     const router = useRouter();
     const params = useParams();
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [mapName, setMapName] = useState(() =>
-        (typeof window !== 'undefined' ? sessionStorage.getItem('map_name') : null) ?? 'Nouvelle carte'
+        typeof window !== 'undefined' ? (sessionStorage.getItem('map_name') ?? 'Nouvelle carte') : 'Nouvelle carte'
     );
     const [savedName, setSavedName] = useState<string | null>(() => {
-        if (typeof window === 'undefined') return null;
-        return sessionStorage.getItem('map_saved') === 'true'
-            ? (sessionStorage.getItem('map_name') ?? null)
-            : null;
+        if (typeof window !== 'undefined' && sessionStorage.getItem('map_saved') === 'true') {
+            return sessionStorage.getItem('map_name');
+        }
+        return null;
     });
+
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -35,6 +37,21 @@ function Header() {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
+    const handleSupprimer = async () => {
+        setOpenMenu(null);
+        const fileUuid = sessionStorage.getItem('map_file_uuid');
+        if (!fileUuid || sessionStorage.getItem('map_saved') !== 'true') {
+            router.push('/');
+            return;
+        }
+        try {
+            await deleteMap(fileUuid);
+        } catch (e) {
+            console.error('Failed to delete map:', e);
+        }
+        router.push('/');
+    };
+
     const handleSauvegarder = async () => {
         setOpenMenu(null);
         const uuid = params.uuid as string;
@@ -44,7 +61,10 @@ function Header() {
             return;
         }
         try {
-            await saveMap(uuid, token, mapName + '.json');
+            const existingFileUuid = sessionStorage.getItem('map_file_uuid') ?? undefined;
+            const result = await saveMap(uuid, token, mapName, existingFileUuid);
+            sessionStorage.setItem('map_file_uuid', result.file_uuid);
+            sessionStorage.setItem('map_name', mapName);
             sessionStorage.setItem('map_saved', 'true');
             setSavedName(mapName);
         } catch (e) {
@@ -54,8 +74,10 @@ function Header() {
 
     const handleNameBlur = async () => {
         if (savedName === null || mapName === savedName) return;
+        const fileUuid = sessionStorage.getItem('map_file_uuid');
+        if (!fileUuid) return;
         try {
-            await renameMap(savedName + '.json', mapName + '.json');
+            await renameMap(fileUuid, mapName);
             sessionStorage.setItem('map_name', mapName);
             setSavedName(mapName);
         } catch (e) {
@@ -87,20 +109,26 @@ function Header() {
                         <div key={item} className='relative mr-[14px]'>
                             <p
                                 onClick={() => {
-                                    if (item === 'Statistiques') { setShowScore(true); return; }
+                                    if (item === 'Statistiques') { ws?.send('requestScore', {}); setIsScoringLoading(true); return; }
                                     if (item === 'Fichier') { setOpenMenu(openMenu === 'Fichier' ? null : 'Fichier'); return; }
                                 }}
-                                className='cursor-pointer hover:opacity-50 transition-opacity select-none'
+                                className={`transition-opacity select-none ${item === 'Statistiques' && isScoringLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:opacity-50'}`}
                             >
                                 {item}
                             </p>
                             {item === 'Fichier' && openMenu === 'Fichier' && (
-                                <div className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-md z-50 min-w-[140px]'>
+                                <div className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-md z-50 min-w-[160px]'>
                                     <p
                                         onClick={handleSauvegarder}
                                         className='px-4 py-2 text-[14px] cursor-pointer hover:bg-gray-100 select-none'
                                     >
                                         Sauvegarder
+                                    </p>
+                                    <p
+                                        onClick={handleSupprimer}
+                                        className='px-4 py-2 text-[14px] cursor-pointer hover:bg-red-50 text-red-600 select-none'
+                                    >
+                                        Supprimer
                                     </p>
                                 </div>
                             )}
