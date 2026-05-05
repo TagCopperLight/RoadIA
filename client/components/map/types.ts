@@ -37,6 +37,8 @@ export interface VehicleData {
     y: number;
     kind: string;
     state: string;
+    vehicle_type?: string;         // ElectricSmall | StandardHybrid | StandardDiesel | StandardThermal
+    motorization?: string;          // EssenceHybride | Electrique | EssenceThermal | Diesel
     heading?: number;
 }
 

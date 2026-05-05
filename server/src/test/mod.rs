@@ -11,10 +11,10 @@ use crate::map::intersection::{build_intersections, ApproachData, IntersectionKi
 use crate::map::model::Map;
 use crate::map::road::{FoeLink, Link, LinkType};
 use crate::simulation::config::SimulationConfig;
-use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 pub(crate) fn make_standard_spec() -> VehicleSpec {
-    VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0)
+    VehicleSpec::new(VehicleKind::Car, VehicleType::Essence, 40.0, 4.0, 3.0, 1.0, 10.0)
 }
 
 pub(crate) fn make_vehicle(id: u64, origin: NodeIndex, dest: NodeIndex) -> Vehicle {
