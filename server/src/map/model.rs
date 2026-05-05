@@ -18,6 +18,8 @@ pub struct Map {
     pub next_link_id: u32,
     pub next_controller_id: u32,
     pub traffic_lights: HashMap<u32, TrafficLightController>,
+    #[serde(default)]
+    pub name: String,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -36,6 +38,7 @@ impl Map {
             next_link_id: 0,
             next_controller_id: 0,
             traffic_lights: HashMap::new(),
+            name: String::new(),
         }
     }
 
