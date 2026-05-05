@@ -1,8 +1,7 @@
 'use client';
 
-import { useWs, saveMap } from '@/app/websocket/websocket';
+import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, EditTool } from './EditModeContext';
-import { useParams } from 'next/navigation';
 
 // Inline SVG icons
 
@@ -89,15 +88,6 @@ function IconStatistics() {
     );
 }
 
-function IconSave() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" strokeLinecap="round" strokeLinejoin="round" />
-            <polyline points="17 21 17 13 7 13 7 21" strokeLinecap="round" strokeLinejoin="round" />
-            <polyline points="7 3 7 8 15 8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
-}
 
 function ToolButton({
     onClick,
@@ -131,7 +121,6 @@ function Separator() {
 
 export default function Toolbar() {
     const ws = useWs();
-    const params = useParams();
     const {
         mode, editTool, simState, showScore, scoreReady,
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore, setIsScoringLoading, setScoreReady,
@@ -183,26 +172,6 @@ export default function Toolbar() {
         setPendingRoadFrom(null);
     };
 
-    const handleSave = async () => {
-        const uuid = params.uuid as string;
-        const token = sessionStorage.getItem('sim_token');
-        if (!uuid || !token) {
-            alert('Erreur: Identifiants de simulation manquants');
-            return;
-        }
-
-        const filename = prompt('Nom du fichier pour la sauvegarde (ex: ma_carte.json):', 'map.json');
-        if (!filename) return;
-
-        try {
-            const result = await saveMap(uuid, token, filename);
-            alert(`Carte sauvegardée avec succès dans ${result.path}`);
-        } catch (e) {
-            console.error('Failed to save map:', e);
-            alert('Erreur lors de la sauvegarde de la carte');
-        }
-    };
-
     return (
         <div className="flex items-center w-full pl-[15px] pr-[15px]">
             <div className="flex items-center justify-between bg-black rounded-[10px] w-full px-1">
@@ -220,10 +189,6 @@ export default function Toolbar() {
                             <Separator />
                             <ToolButton onClick={() => selectTool('addRoad')} isSelected={editTool === 'addRoad'} title="Add Road">
                                 <IconAddRoad />
-                            </ToolButton>
-                            <Separator />
-                            <ToolButton onClick={handleSave} title="Save Map">
-                                <IconSave />
                             </ToolButton>
                         </>
                     ) : (
