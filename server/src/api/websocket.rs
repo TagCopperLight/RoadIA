@@ -38,6 +38,7 @@ pub enum ClientPacket {
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
     SetSpeed { multiplier: u32 },
+    RequestScore {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -202,39 +203,35 @@ async fn handle_client_packet(
         ClientPacket::StartSimulation {} => {
             println!("Client started simulation");
             instance.controller.start();
+        }
 
-            // Recalculate score on start ONLY if simulation is at the beginning
-            let eng = instance.engine.lock().await;
-            let should_recalculate = eng.current_time == 0.0;
-            drop(eng);
+        ClientPacket::RequestScore {} => {
+            println!("Client requested score");
+            let broadcast = instance.broadcast.clone();
+            let engine = instance.engine.clone();
+            tokio::spawn(async move {
+                let sim_clone = {
+                    let eng = engine.lock().await;
+                    eng.clone()
+                };
 
-            if should_recalculate {
-                let broadcast = instance.broadcast.clone();
-                let engine = instance.engine.clone();
-                tokio::spawn(async move {
-                    let sim_clone = {
-                        let eng = engine.lock().await;
-                        eng.clone()
-                    };
+                let score = tokio::task::spawn_blocking(move || {
+                    let mut sim = sim_clone;
+                    sim.run();
+                    sim.get_score()
+                }).await.expect("score computation panicked");
 
-                    let score = tokio::task::spawn_blocking(move || {
-                        let mut sim = sim_clone;
-                        sim.run();
-                        sim.get_score()
-                    }).await.expect("score computation panicked");
-
-                    let _ = broadcast.send(ServerPacket::Score {
-                        score: score.score,
-                        total_trip_time: score.total_trip_time,
-                        ref_total_trip_time: score.ref_total_trip_time,
-                        total_emitted_co2: score.total_emitted_co2,
-                        ref_total_emitted_co2: score.ref_total_emitted_co2,
-                        network_length: score.network_length,
-                        ref_network_length: score.ref_network_length,
-                        success_rate: score.success_rate,
-                    });
+                let _ = broadcast.send(ServerPacket::Score {
+                    score: score.score,
+                    total_trip_time: score.total_trip_time,
+                    ref_total_trip_time: score.ref_total_trip_time,
+                    total_emitted_co2: score.total_emitted_co2,
+                    ref_total_emitted_co2: score.ref_total_emitted_co2,
+                    network_length: score.network_length,
+                    ref_network_length: score.ref_network_length,
+                    success_rate: score.success_rate,
                 });
-            }
+            });
         }
 
         ClientPacket::StopSimulation {} => {
