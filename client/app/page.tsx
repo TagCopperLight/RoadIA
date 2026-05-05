@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createSimulation } from "@/app/websocket/websocket";
 
 interface MenuCardProps {
   src: string;
@@ -28,10 +27,8 @@ function MenuCard({ src, alt, label, className = "", onClick }: MenuCardProps) {
 export default function Home() {
   const router = useRouter();
 
-  const handleNewSimulation = async () => {
-    const { uuid, token } = await createSimulation();
-    sessionStorage.setItem('sim_token', token);
-    router.push(`/map/${uuid}`);
+  const handleNewSimulation = () => {
+    router.push('/map/select');
   };
 
   return (

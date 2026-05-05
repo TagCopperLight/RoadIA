@@ -22,7 +22,7 @@ export default function MapComponent() {
 	const {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
-		showScore, setShowScore, isScoringLoading, setIsScoringLoading, scoreReady, setScoreReady,
+		showScore, setShowScore, isScoringLoading, setIsScoringLoading, setScoreReady,
 	} = useEditMode();
 
 	const simStateRef = useRef(simState);
