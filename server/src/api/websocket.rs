@@ -37,6 +37,7 @@ pub struct VehicleInfo {
 #[serde(rename_all = "camelCase")]
 pub enum ClientPacket {
     StartSimulation {},
+    RequestScore {},
     StopSimulation {},
     ResetSimulation {},
     AddNode { x: f32, y: f32, kind: String },
