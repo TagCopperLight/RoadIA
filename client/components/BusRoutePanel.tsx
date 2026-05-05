@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, forwardRef } from 'react';
 import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, BusRoute } from './EditModeContext';
 import { MapData } from './map/types';
@@ -25,7 +25,6 @@ export const BusRoutePanel = forwardRef<BusRoutePanelHandle, BusRoutePanelProps>
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [tempRouteName, setTempRouteName] = useState('');
     const [creatingStops, setCreatingStops] = useState<number[]>([]);
-    const [editingRouteId, setEditingRouteId] = useState<number | null>(null);
 
     const nodeMap = new Map(mapData?.nodes.map(n => [n.id, n]) ?? []);
 
@@ -101,7 +100,7 @@ export const BusRoutePanel = forwardRef<BusRoutePanelHandle, BusRoutePanelProps>
                 handleAddStop(nodeId);
             }
         },
-        getSelectedRouteId: () => editingRouteId,
+        getSelectedRouteId: () => null,
         getPendingStops: () => creatingStops,
     }));
 

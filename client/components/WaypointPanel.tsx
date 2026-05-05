@@ -23,7 +23,6 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   const ws = useWs();
   
   // Panel state
-  const [clickedNodeId, setClickedNodeId] = useState<number | null>(null);
   const [selectedVehicleId, setSelectedVehicleId] = useState<number | null>(null);
   const [pendingWaypoints, setPendingWaypoints] = useState<number[]>([]);
 
@@ -57,7 +56,6 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
     
     // Reset UI
     setSelectedVehicleId(null);
-    setClickedNodeId(null);
     setPendingWaypoints([]);
   };
 
@@ -73,9 +71,6 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
       // If already selecting a vehicle, add as waypoint
       if (selectedVehicleId) {
         handleAddWaypoint(nodeId);
-      } else {
-        // Otherwise, show vehicles for this node
-        setClickedNodeId(nodeId);
       }
     },
     getSelectedVehicleId: () => selectedVehicleId,
@@ -112,7 +107,6 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
               key={vehicle.id}
               onClick={() => {
                 setSelectedVehicleId(vehicle.id);
-                setClickedNodeId(null);
               }}
               className="w-full text-left p-3 bg-gray-900 rounded border border-gray-700 hover:border-blue-500 transition text-xs"
             >

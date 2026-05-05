@@ -183,7 +183,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, mode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, onWaypointNodeClick]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, mode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, onWaypointNodeClick, onBusNodeClick]);
 
 	return (
 		<pixiCustomViewport
