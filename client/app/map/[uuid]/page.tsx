@@ -5,12 +5,13 @@ import MapShell from '@/components/MapShell';
 import { useEditMode } from '@/components/EditModeContext';
 import { use, useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { saveMap, renameMap } from '@/app/websocket/websocket';
+import { saveMap, renameMap, useWs } from '@/app/websocket/websocket';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
-    const { setShowScore } = useEditMode();
+    const { isScoringLoading, setIsScoringLoading } = useEditMode();
+    const ws = useWs();
     const router = useRouter();
     const params = useParams();
     const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -87,10 +88,10 @@ function Header() {
                         <div key={item} className='relative mr-[14px]'>
                             <p
                                 onClick={() => {
-                                    if (item === 'Statistiques') { setShowScore(true); return; }
+                                    if (item === 'Statistiques') { ws?.send('requestScore', {}); setIsScoringLoading(true); return; }
                                     if (item === 'Fichier') { setOpenMenu(openMenu === 'Fichier' ? null : 'Fichier'); return; }
                                 }}
-                                className='cursor-pointer hover:opacity-50 transition-opacity select-none'
+                                className={`transition-opacity select-none ${item === 'Statistiques' && isScoringLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:opacity-50'}`}
                             >
                                 {item}
                             </p>
