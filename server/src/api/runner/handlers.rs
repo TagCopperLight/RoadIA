@@ -10,7 +10,7 @@ use axum::http::{HeaderValue, Method, header::CONTENT_TYPE};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::api::websocket::ws_handler;
-use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+use crate::api::runner::map_generator::create_osm_map;
 use super::runner::SimulationInstance;
 
 pub struct AppState {
@@ -104,9 +104,7 @@ async fn create_custom_simulation_handler(
         eprintln!("Failed to parse custom map region: {:?}", e);
         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse custom mapped region".to_string())
     })?;
-    let vehicles = create_random_vehicles(&map, 200);
-
-    let instance = SimulationInstance::new(map, vehicles);
+    let instance = SimulationInstance::new(map);
     let token = instance.token.clone();
 
     state.simulations.write().await.insert(uuid, instance);
@@ -130,7 +128,9 @@ async fn create_simulation_handler(
 struct SaveMapRequest {
     uuid: Uuid,
     token: String,
-    filename: String,
+    name: String,
+    #[serde(default)]
+    file_uuid: Option<Uuid>,
 }
 
 async fn save_map_handler(
@@ -144,34 +144,36 @@ async fn save_map_handler(
         return Err(axum::http::StatusCode::UNAUTHORIZED);
     }
 
-    let engine = instance.engine.lock().await;
-    let map = &engine.config.map;
+    let mut engine = instance.engine.lock().await;
+    engine.config.map.name = payload.name;
 
-    let path = format!("data/{}", payload.filename);
-    if let Err(e) = map.save(&path) {
+    let file_uuid = payload.file_uuid.unwrap_or_else(Uuid::new_v4);
+    let path = format!("data/{}.json", file_uuid);
+    if let Err(e) = engine.config.map.save(&path) {
         println!("Failed to save map: {:?}", e);
         return Err(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    Ok(Json(serde_json::json!({ "status": "success", "path": path })))
+    Ok(Json(serde_json::json!({ "status": "success", "file_uuid": file_uuid })))
 }
 
 #[derive(serde::Deserialize)]
 struct LoadMapRequest {
-    filename: String,
+    file_uuid: Uuid,
 }
 
 async fn load_map_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoadMapRequest>,
 ) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
-    let path = format!("data/{}", payload.filename);
+    let path = format!("data/{}.json", payload.file_uuid);
     match SimulationInstance::from_file(&path) {
         Ok(instance) => {
             let uuid = Uuid::new_v4();
             let token = instance.token.clone();
+            let name = instance.engine.lock().await.config.map.name.clone();
             state.simulations.write().await.insert(uuid, instance);
-            Ok(Json(serde_json::json!({ "uuid": uuid, "token": token })))
+            Ok(Json(serde_json::json!({ "uuid": uuid, "token": token, "name": name })))
         }
         Err(e) => {
             println!("Failed to load map from {}: {:?}", path, e);
@@ -182,17 +184,21 @@ async fn load_map_handler(
 
 #[derive(serde::Deserialize)]
 struct RenameMapRequest {
-    old_filename: String,
-    new_filename: String,
+    file_uuid: Uuid,
+    new_name: String,
 }
 
 async fn rename_map_handler(
     Json(payload): Json<RenameMapRequest>,
 ) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
-    let old_path = format!("data/{}", payload.old_filename);
-    let new_path = format!("data/{}", payload.new_filename);
-    std::fs::rename(&old_path, &new_path).map_err(|e| {
-        println!("Failed to rename map: {:?}", e);
+    let path = format!("data/{}.json", payload.file_uuid);
+    let mut map = crate::map::model::Map::load(&path).map_err(|e| {
+        println!("Failed to load map for rename: {:?}", e);
+        axum::http::StatusCode::NOT_FOUND
+    })?;
+    map.name = payload.new_name;
+    map.save(&path).map_err(|e| {
+        println!("Failed to save map after rename: {:?}", e);
         axum::http::StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(Json(serde_json::json!({ "status": "success" })))
@@ -200,13 +206,13 @@ async fn rename_map_handler(
 
 #[derive(serde::Deserialize)]
 struct DeleteMapRequest {
-    filename: String,
+    file_uuid: Uuid,
 }
 
 async fn delete_map_handler(
     Json(payload): Json<DeleteMapRequest>,
 ) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
-    let path = format!("data/{}", payload.filename);
+    let path = format!("data/{}.json", payload.file_uuid);
     std::fs::remove_file(&path).map_err(|e| {
         println!("Failed to delete map: {:?}", e);
         axum::http::StatusCode::NOT_FOUND
@@ -221,10 +227,19 @@ async fn list_maps_handler() -> Result<Json<serde_json::Value>, axum::http::Stat
     if let Ok(entries) = std::fs::read_dir(data_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                if let Some(filename) = path.file_name().and_then(|s| s.to_str()) {
-                    maps.push(filename.to_string());
-                }
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            let stem = match path.file_stem().and_then(|s| s.to_str()) {
+                Some(s) => s.to_string(),
+                None => continue,
+            };
+            let file_uuid = match Uuid::parse_str(&stem) {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+            if let Ok(map) = crate::map::model::Map::load(&path) {
+                maps.push(serde_json::json!({ "uuid": file_uuid, "name": map.name }));
             }
         }
     }

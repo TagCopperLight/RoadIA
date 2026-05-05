@@ -6,8 +6,9 @@ use tokio::time::{sleep, Duration};
 use crate::api::websocket::{ServerPacket, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::simulation::vehicle::Vehicle;
 use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+
+const VEHICLE_COUNT: usize = 500;
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -50,7 +51,8 @@ pub struct SimulationInstance {
 }
 
 impl SimulationInstance {
-    pub fn new(map: crate::map::model::Map, vehicles: Vec<Vehicle>) -> Arc<Self> {
+    pub fn new(map: crate::map::model::Map) -> Arc<Self> {
+        let vehicles = create_random_vehicles(&map, VEHICLE_COUNT);
         let token = generate_token();
 
         let config = SimulationConfig {
@@ -144,8 +146,7 @@ impl SimulationInstance {
 
     pub fn from_file(path: &str) -> Result<Arc<Self>, String> {
         let map = crate::map::model::Map::load(path).map_err(|e| e.to_string())?;
-        let vehicles = create_random_vehicles(&map, 500);
-        Ok(Self::new(map, vehicles))
+        Ok(Self::new(map))
     }
 
     pub fn new_default() -> Arc<Self> {
@@ -156,8 +157,7 @@ impl SimulationInstance {
         match create_osm_map(map_path) {
             Ok(map) => {
                 println!("Successfully loaded Lannion map from OSM!");
-                let vehicles = create_random_vehicles(&map, 500);
-                Self::new(map, vehicles)
+                Self::new(map)
             }
             Err(e) => {
                 println!("Failed to load Lannion map: {:?}", e);
