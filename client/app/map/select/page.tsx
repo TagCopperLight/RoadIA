@@ -28,7 +28,7 @@ export default function MapSelectPage() {
             <span className="text-2xl mr-2">←</span> Retour
           </Link>
           <div className="mx-auto flex gap-4">
-            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={200} height={66} loading="eager" />
+            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={200} height={67} loading="eager" />
           </div>
         </div>
 
