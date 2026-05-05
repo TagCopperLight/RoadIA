@@ -121,7 +121,7 @@ fn collect_highway_data(
 
     reader.for_each(|element| {
         if let Element::Way(way) = element {
-            let tags: Vec<(&str, &str)> = way.tags().map(|(k, v)| (k, v)).collect();
+            let tags: Vec<(&str, &str)> = way.tags().collect();
 
             let highway_type = tags
                 .iter()
@@ -184,27 +184,23 @@ fn collect_node_coords(
 
     reader.for_each(|element| {
         match element {
-            Element::Node(node) => {
-                if needed.contains(&node.id()) {
-                    coords.insert(
-                        node.id(),
-                        NodeCoord {
-                            lat: node.lat(),
-                            lon: node.lon(),
-                        },
-                    );
-                }
+            Element::Node(node) if needed.contains(&node.id()) => {
+                coords.insert(
+                    node.id(),
+                    NodeCoord {
+                        lat: node.lat(),
+                        lon: node.lon(),
+                    },
+                );
             }
-            Element::DenseNode(node) => {
-                if needed.contains(&node.id) {
-                    coords.insert(
-                        node.id,
-                        NodeCoord {
-                            lat: node.lat(),
-                            lon: node.lon(),
-                        },
-                    );
-                }
+            Element::DenseNode(node) if needed.contains(&node.id) => {
+                coords.insert(
+                    node.id,
+                    NodeCoord {
+                        lat: node.lat(),
+                        lon: node.lon(),
+                    },
+                );
             }
             _ => {}
         }

@@ -173,10 +173,7 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
     let points: Vec<(f64, f64)> = map
         .graph
         .node_indices()
-        .filter(|&n| match map.graph[n].kind {
-            IntersectionKind::Habitation | IntersectionKind::Workplace => true,
-            _ => false,
-        })
+        .filter(|&n| matches!(map.graph[n].kind, IntersectionKind::Habitation | IntersectionKind::Workplace))
         .map(|n| {
             let node = &map.graph[n];
             (node.center_coordinates.x as f64, node.center_coordinates.y as f64)

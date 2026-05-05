@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createSimulation, listMaps, loadMap } from "@/app/websocket/websocket";
+import { listMaps, loadMap } from "@/app/websocket/websocket";
 import { useState } from "react";
 
 interface MenuCardProps {
@@ -31,16 +31,8 @@ export default function Home() {
   const [showMapList, setShowMapList] = useState(false);
   const [maps, setMaps] = useState<string[]>([]);
 
-  const handleNewSimulation = async () => {
-    try {
-      const { uuid, token } = await createSimulation();
-      sessionStorage.setItem('sim_token', token);
-      sessionStorage.setItem('map_name', 'Nouvelle carte');
-      sessionStorage.setItem('map_saved', 'false');
-      router.push(`/map/${uuid}`);
-    } catch (e) {
-      console.error("Failed to create simulation:", e);
-    }
+  const handleNewSimulation = () => {
+    router.push('/map/select');
   };
 
   const handleShowMaps = async () => {
