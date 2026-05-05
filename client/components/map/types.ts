@@ -38,6 +38,7 @@ export interface VehicleData {
     kind: string;
     state: string;
     heading?: number;
+    motorization?: string;
 }
 
 export interface TrafficLightData {

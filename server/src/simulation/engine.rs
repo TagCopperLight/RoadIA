@@ -137,31 +137,21 @@ impl SimulationEngine {
     }
 
     fn handle_bus_arrivals(&mut self) {
-        // Give buses new destinations when they arrive
-        use crate::simulation::vehicle::VehicleKind;
-        
-        let nodes: Vec<petgraph::graph::NodeIndex> = self.config.map.graph.node_indices().collect();
-        if nodes.is_empty() {
-            return;
-        }
-
         for v in &mut self.vehicles {
-            if v.spec.kind == VehicleKind::Bus && v.state == VehicleState::Arrived {
-                // Bus arrived at destination - give it a new random destination
-                let new_dest_idx = rand::random_range(0..nodes.len());
-                let new_destination = nodes[new_dest_idx];
-                
-                // Reset vehicle to WaitingToDepart with new destination
-                v.trip.destination = new_destination;
-                v.path.clear();
-                v.path_index = 0;
-                v.position_on_lane = 0.0;
-                v.state = VehicleState::WaitingToDepart;
-                v.velocity = 0.0;
-                v.previous_velocity = 0.0;
-                
-                // Compute new path
-                v.update_path(&self.config.map);
+            if v.spec.kind == crate::simulation::vehicle::VehicleKind::Bus && v.state == VehicleState::Arrived {
+                if v.has_waypoints() {
+                    v.position_on_lane = 0.0;
+                    v.velocity = 0.0;
+                    v.previous_velocity = 0.0;
+                    v.state = VehicleState::WaitingToDepart;
+                    v.current_lane = None;
+                    v.drive_plan.clear();
+                    v.registered_link_ids.clear();
+                    v.waiting_time = 0.0;
+                    v.impatience = 0.0;
+                    v.arrived_at = None;
+                    v.advance_to_next_waypoint(&self.config.map);
+                }
             }
         }
     }

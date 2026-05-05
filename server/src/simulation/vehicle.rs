@@ -97,6 +97,8 @@ pub struct Vehicle {
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,
+    pub waypoints: Vec<NodeIndex>,
+    pub current_waypoint_index: usize,
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
@@ -130,18 +132,63 @@ impl Vehicle {
             emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
+            waypoints: Vec::new(),
+            current_waypoint_index: 0,
         }
     }
 
     pub fn update_path(&mut self, map: &Map) {
-        match fastest_path(map, self.trip.origin, self.trip.destination) {
+        let source = if self.path.is_empty() {
+            self.trip.origin
+        } else {
+            self.get_current_node()
+        };
+        let destination = self.get_current_destination();
+
+        match fastest_path(map, source, destination) {
             Some(path) => self.path = path,
             None => eprintln!(
                 "Warning: no path found for vehicle {} ({:?} → {:?}), vehicle will not depart",
-                self.id, self.trip.origin, self.trip.destination
+                self.id, source, destination
             ),
         }
         self.path_index = 0;
+    }
+
+    pub fn get_current_destination(&self) -> NodeIndex {
+        if self.current_waypoint_index < self.waypoints.len() {
+            self.waypoints[self.current_waypoint_index]
+        } else {
+            self.trip.destination
+        }
+    }
+
+    pub fn has_waypoints(&self) -> bool {
+        self.current_waypoint_index < self.waypoints.len()
+    }
+
+    pub fn advance_to_next_waypoint(&mut self, map: &Map) {
+        if !self.has_waypoints() {
+            return;
+        }
+
+        self.current_waypoint_index += 1;
+        let current_pos = self.get_current_node();
+        let next_dest = self.get_current_destination();
+
+        match fastest_path(map, current_pos, next_dest) {
+            Some(path) => self.path = path,
+            None => eprintln!(
+                "Warning: no path found for vehicle {} (waypoint {:?} → {:?})",
+                self.id, current_pos, next_dest
+            ),
+        }
+        self.path_index = 0;
+    }
+
+    pub fn clear_waypoints(&mut self) {
+        self.waypoints.clear();
+        self.current_waypoint_index = 0;
     }
 
     pub fn compute_acceleration(
