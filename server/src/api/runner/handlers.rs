@@ -29,7 +29,6 @@ async fn create_custom_simulation_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CustomMapRequest>,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
-    // Validate bounding box
     if payload.min_lat >= payload.max_lat || payload.min_lon >= payload.max_lon {
         return Err((axum::http::StatusCode::BAD_REQUEST, "Invalid bounding box: min must be less than max".to_string()));
     }
@@ -39,7 +38,6 @@ async fn create_custom_simulation_handler(
     if !(-180.0..=180.0).contains(&payload.min_lon) || !(-180.0..=180.0).contains(&payload.max_lon) {
         return Err((axum::http::StatusCode::BAD_REQUEST, "Longitude must be between -180 and 180".to_string()));
     }
-    // ~0.09 degrees ≈ 10 km, matching the client-side diagonal limit
     if payload.max_lat - payload.min_lat > 0.09 || payload.max_lon - payload.min_lon > 0.09 {
         return Err((axum::http::StatusCode::BAD_REQUEST, "Bounding box too large. Please select a smaller area (max ~10 km).".to_string()));
     }
@@ -48,7 +46,6 @@ async fn create_custom_simulation_handler(
     let tmp_osm_path = format!("data/tmp/{}.osm", uuid);
     let tmp_pbf_path = format!("data/tmp/{}.osm.pbf", uuid);
 
-    // Ensure the tmp directory exists
     tokio::fs::create_dir_all("data/tmp").await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to create tmp directory".to_string()))?;
 
     let overpass_query = format!(
@@ -80,7 +77,6 @@ async fn create_custom_simulation_handler(
 
     let map_data = res.text().await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to get Overpass text".to_string()))?;
 
-    // Also handle HTML errors that Overpass might return with 200 OK (sometimes they do)
     if map_data.contains("too busy") {
         return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.".to_string()));
     }
@@ -101,7 +97,6 @@ async fn create_custom_simulation_handler(
 
     let map_result = create_osm_map(&tmp_pbf_path);
 
-    // Clean up temporary files now that the map is loaded in memory
     let _ = tokio::fs::remove_file(&tmp_osm_path).await;
     let _ = tokio::fs::remove_file(&tmp_pbf_path).await;
 

@@ -4,8 +4,6 @@ import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 
-// Dynamically load the MapSelection component with SSR disabled
-// Leaflet uses window/document objects which break during Next.js SSR phase
 const MapSelection = dynamic(() => import('@/components/MapSelection'), {
   ssr: false,
   loading: () => (
@@ -32,7 +30,6 @@ export default function MapSelectPage() {
           </div>
         </div>
 
-        {/* Content */}
         <div className="bg-white p-6 shadow-xl rounded-xl">
           <h1 className="text-2xl font-bold text-gray-800 mb-2">Importer une nouvelle carte</h1>
           <p className="text-gray-600 mb-6 font-medium">
@@ -40,7 +37,6 @@ export default function MapSelectPage() {
             Maintenez la touche <kbd className="bg-gray-200 px-1 rounded">Ctrl</kbd> enfoncée et cliquez pour déplacer la carte.
           </p>
 
-          {/* Setup dynamic leaflet component */}
           <MapSelection />
         </div>
       </div>
