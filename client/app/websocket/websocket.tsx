@@ -96,7 +96,7 @@ const WsContext = createContext<WebSocketClient | null>(null);
 
 export function WsProvider({ uuid, children }: { uuid: string; children: ReactNode }) {
     const client = useMemo(() => {
-        const token = sessionStorage.getItem('sim_token') ?? '';
+        const token = typeof window !== 'undefined' ? (sessionStorage.getItem('sim_token') ?? '') : '';
         const wsUrl = process.env.NEXT_PUBLIC_API_URL!.replace(/^http/, 'ws');
         return new WebSocketClient(
             `${wsUrl}/ws?uuid=${encodeURIComponent(uuid)}&token=${encodeURIComponent(token)}`

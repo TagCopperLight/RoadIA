@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, ReactNode, Dispatch, SetStateAction } from 'react';
 
 export type AppMode = "edit" | "simulation";
-export type EditTool = "select" | "addNode" | "addRoad";
+export type EditTool = "select" | "addNode" | "addRoad" | "waypoints";
 export type SimState = "stopped" | "running" | "paused";
 export type SelectedElement =
     | { type: "node"; id: number }
