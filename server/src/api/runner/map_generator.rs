@@ -219,8 +219,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
 
         neighbors.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        for k in 0..extra_connections.min(neighbors.len()) {
-            let (v_idx, dist) = neighbors[k];
+        for &(v_idx, dist) in neighbors.iter().take(extra_connections) {
             let v = nodes[v_idx];
 
             let u_node = map.find_node(u).unwrap();

@@ -265,7 +265,7 @@ async fn handle_client_packet(
 
             let map_snapshot = eng.config.map.clone();
             for vehicle in eng.vehicles.iter_mut() {
-                let _ = vehicle.update_path(&map_snapshot);
+                vehicle.update_path(&map_snapshot);
             }
         }
 

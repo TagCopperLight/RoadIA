@@ -310,6 +310,7 @@ pub(crate) fn on_segment(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> bool {
         && r.1 >= p.1.min(q.1)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn is_link_open(
     link: &Link,
     vehicle: &Vehicle,
@@ -396,6 +397,7 @@ pub(crate) fn foe_is_to_the_right(ego: &Link, foe: &FoeLink) -> bool {
     ex * fy - ey * fx < 0.0
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn time_window_conflict(
     ego_arrival: f32,
     ego_leave: f32,

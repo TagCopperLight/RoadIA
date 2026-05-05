@@ -195,6 +195,9 @@ async fn create_custom_simulation_handler(
     let tmp_osm_path = format!("data/tmp/{}.osm", uuid);
     let tmp_pbf_path = format!("data/tmp/{}.osm.pbf", uuid);
 
+    // Ensure the tmp directory exists
+    tokio::fs::create_dir_all("data/tmp").await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to create tmp directory".to_string()))?;
+
     let overpass_query = format!(
         "[out:xml][timeout:25][maxsize:1073741824];(way[highway]({min_lat},{min_lon},{max_lat},{max_lon});>;);out body;",
         min_lat = payload.min_lat,
@@ -229,20 +232,30 @@ async fn create_custom_simulation_handler(
          return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.".to_string()));
     }
 
-    std::fs::write(&tmp_osm_path, map_data).map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to write temporary osm file".to_string()))?;
+    tokio::fs::write(&tmp_osm_path, map_data).await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to write temporary osm file".to_string()))?;
 
     // Convert with osmium
-    let osmium_status = std::process::Command::new("osmium")
-        .args(&["cat", &tmp_osm_path, "-o", &tmp_pbf_path])
+    let osmium_status = tokio::process::Command::new("osmium")
+        .args(["cat", &tmp_osm_path, "-o", &tmp_pbf_path])
         .status()
+        .await
         .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to execute osmium".to_string()))?;
 
     if !osmium_status.success() {
+        // Clean up partially written files if osmium fails
+        let _ = tokio::fs::remove_file(&tmp_osm_path).await;
+        let _ = tokio::fs::remove_file(&tmp_pbf_path).await;
         return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Osmium failed to convert the file".to_string()));
     }
 
     // Load newly created map
-    let map = create_osm_map(&tmp_pbf_path).map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse custom mapped region".to_string()))?;
+    let map_result = create_osm_map(&tmp_pbf_path);
+    
+    // Clean up temporary files now that the map is loaded in memory
+    let _ = tokio::fs::remove_file(&tmp_osm_path).await;
+    let _ = tokio::fs::remove_file(&tmp_pbf_path).await;
+
+    let map = map_result.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse custom mapped region".to_string()))?;
     let vehicles = create_random_vehicles(&map, 200);
 
     let instance = SimulationInstance::new(map, vehicles);
