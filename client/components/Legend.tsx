@@ -64,11 +64,11 @@ export default function Legend() {
     };
 
     return (
-        <div className="fixed bottom-[100px] left-[15px] bg-black rounded-[10px] border border-gray-700 text-white z-40" style={{ maxWidth: '300px' }}>
+        <div className="absolute bottom-[115px] left-[15px] bg-black rounded-[10px] border border-gray-700 text-white z-40 overflow-hidden" style={{ maxWidth: '300px' }}>
             {/* Header - Always visible */}
             <button
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full flex items-center justify-between p-3 hover:bg-gray-900 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-between p-3 hover:bg-gray-900 rounded-t-[10px] transition-colors cursor-pointer"
             >
                 <span className="text-sm font-semibold">Légende</span>
                 <span className="text-lg transition-transform" style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>

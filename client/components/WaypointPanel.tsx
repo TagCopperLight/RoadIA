@@ -96,7 +96,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   // EMPTY STATE
   if (clickedNodeId === null && selectedVehicleId === null) {
     return (
-      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+      <div className="flex flex-col h-full bg-black rounded-[10px] border border-gray-600 overflow-hidden">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">Waypoints</h3>
         </div>
@@ -112,7 +112,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   // VEHICLE SELECTION VIEW
   if (selectedVehicleId === null && vehiclesForNode.length > 0) {
     return (
-      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+      <div className="flex flex-col h-full bg-black rounded-[10px] border border-gray-600 overflow-hidden">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
             Node {clickedNodeId} - Vehicles
@@ -148,7 +148,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   if (clickedNodeId !== null && !isClickedNodePOI && selectedVehicleId === null) {
     const node = mapData?.nodes.find(n => n.id === clickedNodeId);
     return (
-      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+      <div className="flex flex-col h-full bg-black rounded-[10px] border border-gray-600 overflow-hidden">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
             Intersection
@@ -185,7 +185,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   if (clickedNodeId !== null && isClickedNodePOI && vehiclesForNode.length === 0 && selectedVehicleId === null) {
     const node = mapData?.nodes.find(n => n.id === clickedNodeId);
     return (
-      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+      <div className="flex flex-col h-full bg-black rounded-[10px] border border-gray-600 overflow-hidden">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
             {node?.kind}
@@ -214,7 +214,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   // VEHICLE DETAIL VIEW
   if (selectedVehicle) {
     return (
-      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+      <div className="flex flex-col h-full bg-black rounded-[10px] border border-gray-600 overflow-hidden">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
           <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
             Vehicle #{selectedVehicle.id}
