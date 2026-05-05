@@ -15,15 +15,17 @@ function Header() {
     const router = useRouter();
     const params = useParams();
     const [openMenu, setOpenMenu] = useState<string | null>(null);
-    const [mapName, setMapName] = useState(() =>
-        (typeof window !== 'undefined' ? sessionStorage.getItem('map_name') : null) ?? 'Nouvelle carte'
-    );
-    const [savedName, setSavedName] = useState<string | null>(() => {
-        if (typeof window === 'undefined') return null;
-        return sessionStorage.getItem('map_saved') === 'true'
-            ? (sessionStorage.getItem('map_name') ?? null)
-            : null;
-    });
+    const [mapName, setMapName] = useState('Nouvelle carte');
+    const [savedName, setSavedName] = useState<string | null>(null);
+
+    useEffect(() => {
+        const stored = sessionStorage.getItem('map_name');
+        if (stored) setMapName(stored);
+        if (sessionStorage.getItem('map_saved') === 'true') {
+            setSavedName(stored ?? null);
+        }
+    }, []);
+
     const menuRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -38,13 +40,13 @@ function Header() {
 
     const handleSupprimer = async () => {
         setOpenMenu(null);
-        const savedNameValue = sessionStorage.getItem('map_name');
-        if (!savedNameValue || sessionStorage.getItem('map_saved') !== 'true') {
+        const fileUuid = sessionStorage.getItem('map_file_uuid');
+        if (!fileUuid || sessionStorage.getItem('map_saved') !== 'true') {
             router.push('/');
             return;
         }
         try {
-            await deleteMap(savedNameValue + '.json');
+            await deleteMap(fileUuid);
         } catch (e) {
             console.error('Failed to delete map:', e);
         }
@@ -60,7 +62,10 @@ function Header() {
             return;
         }
         try {
-            await saveMap(uuid, token, mapName + '.json');
+            const existingFileUuid = sessionStorage.getItem('map_file_uuid') ?? undefined;
+            const result = await saveMap(uuid, token, mapName, existingFileUuid);
+            sessionStorage.setItem('map_file_uuid', result.file_uuid);
+            sessionStorage.setItem('map_name', mapName);
             sessionStorage.setItem('map_saved', 'true');
             setSavedName(mapName);
         } catch (e) {
@@ -70,8 +75,10 @@ function Header() {
 
     const handleNameBlur = async () => {
         if (savedName === null || mapName === savedName) return;
+        const fileUuid = sessionStorage.getItem('map_file_uuid');
+        if (!fileUuid) return;
         try {
-            await renameMap(savedName + '.json', mapName + '.json');
+            await renameMap(fileUuid, mapName);
             sessionStorage.setItem('map_name', mapName);
             setSavedName(mapName);
         } catch (e) {

@@ -29,7 +29,7 @@ function MenuCard({ src, alt, label, className = "", onClick }: MenuCardProps) {
 export default function Home() {
   const router = useRouter();
   const [showMapList, setShowMapList] = useState(false);
-  const [maps, setMaps] = useState<string[]>([]);
+  const [maps, setMaps] = useState<{ uuid: string; name: string }[]>([]);
 
   const handleNewSimulation = () => {
     router.push('/map/select');
@@ -45,11 +45,12 @@ export default function Home() {
     }
   };
 
-  const handleLoadMap = async (filename: string) => {
+  const handleLoadMap = async (fileUuid: string, name: string) => {
     try {
-      const { uuid, token } = await loadMap(filename);
+      const { uuid, token } = await loadMap(fileUuid);
       sessionStorage.setItem('sim_token', token);
-      sessionStorage.setItem('map_name', filename.replace(/\.json$/, ''));
+      sessionStorage.setItem('map_name', name);
+      sessionStorage.setItem('map_file_uuid', fileUuid);
       sessionStorage.setItem('map_saved', 'true');
       router.push(`/map/${uuid}`);
     } catch (e) {
@@ -57,10 +58,10 @@ export default function Home() {
     }
   };
 
-  const handleDeleteMap = async (filename: string) => {
+  const handleDeleteMap = async (fileUuid: string) => {
     try {
-      await deleteMap(filename);
-      setMaps((prev) => prev.filter((m) => m !== filename));
+      await deleteMap(fileUuid);
+      setMaps((prev) => prev.filter((m) => m.uuid !== fileUuid));
     } catch (e) {
       console.error("Failed to delete map:", e);
     }
@@ -94,17 +95,17 @@ export default function Home() {
                 ) : (
                   <ul className="divide-y divide-gray-200">
                     {maps.map((map) => (
-                      <li key={map} className="flex justify-between items-center p-4 bg-white/80 hover:bg-gray-100">
-                        <span className="font-medium">{map.replace(/\.json$/, '')}</span>
+                      <li key={map.uuid} className="flex justify-between items-center p-4 bg-white/80 hover:bg-gray-100">
+                        <span className="font-medium">{map.name || map.uuid}</span>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleLoadMap(map)}
+                            onClick={() => handleLoadMap(map.uuid, map.name)}
                             className="cursor-pointer bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
                           >
                             Charger
                           </button>
                           <button
-                            onClick={() => handleDeleteMap(map)}
+                            onClick={() => handleDeleteMap(map.uuid)}
                             title="Supprimer"
                             className="cursor-pointer p-2 text-gray-400 hover:text-red-600 transition-colors rounded"
                           >
