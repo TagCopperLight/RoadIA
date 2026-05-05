@@ -10,14 +10,17 @@
   },
   "dependencies": {
     "@pixi/react": "^8.0.5",
+    "leaflet": "^1.9.4",
     "next": "16.2.2",
     "pixi-viewport": "^6.0.3",
     "pixi.js": "^8.17.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",

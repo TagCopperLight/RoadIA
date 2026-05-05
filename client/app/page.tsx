@@ -28,10 +28,8 @@ function MenuCard({ src, alt, label, className = "", onClick }: MenuCardProps) {
 export default function Home() {
   const router = useRouter();
 
-  const handleNewSimulation = async () => {
-    const { uuid, token } = await createSimulation();
-    sessionStorage.setItem('sim_token', token);
-    router.push(`/map/${uuid}`);
+  const handleNewSimulation = () => {
+    router.push('/map/select');
   };
 
   return (

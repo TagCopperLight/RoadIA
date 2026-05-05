@@ -179,6 +179,80 @@ pub struct AppState {
     pub simulations: Arc<RwLock<HashMap<Uuid, Arc<SimulationInstance>>>>,
 }
 
+#[derive(serde::Deserialize)]
+pub struct CustomMapRequest {
+    pub min_lat: f64,
+    pub min_lon: f64,
+    pub max_lat: f64,
+    pub max_lon: f64,
+}
+
+async fn create_custom_simulation_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<CustomMapRequest>,
+) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
+    let uuid = Uuid::new_v4();
+    let tmp_osm_path = format!("data/tmp/{}.osm", uuid);
+    let tmp_pbf_path = format!("data/tmp/{}.osm.pbf", uuid);
+
+    let overpass_query = format!(
+        "[out:xml][timeout:25][maxsize:1073741824];(way[highway]({min_lat},{min_lon},{max_lat},{max_lon});>;);out body;",
+        min_lat = payload.min_lat,
+        min_lon = payload.min_lon,
+        max_lat = payload.max_lat,
+        max_lon = payload.max_lon
+    );
+
+    // Download map via reqwest
+    let client = reqwest::Client::builder()
+        .user_agent("RoadIA/0.1.0")
+        .build()
+        .unwrap();
+    let res = client.post("https://overpass-api.de/api/interpreter")
+        .body(overpass_query)
+        .send()
+        .await
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to fetch from Overpass API: {}", e)))?;
+
+    if !res.status().is_success() {
+        let err_text = res.text().await.unwrap_or_default();
+        if err_text.contains("too busy") {
+            return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.".to_string()));
+        }
+        return Err((axum::http::StatusCode::BAD_GATEWAY, format!("Overpass API error: {}", err_text)));
+    }
+
+    let map_data = res.text().await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to get Overpass text".to_string()))?;
+    
+    // Also handle HTML errors that Overpass might return with 200 OK (sometimes they do)
+    if map_data.contains("too busy") {
+         return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.".to_string()));
+    }
+
+    std::fs::write(&tmp_osm_path, map_data).map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to write temporary osm file".to_string()))?;
+
+    // Convert with osmium
+    let osmium_status = std::process::Command::new("osmium")
+        .args(&["cat", &tmp_osm_path, "-o", &tmp_pbf_path])
+        .status()
+        .map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to execute osmium".to_string()))?;
+
+    if !osmium_status.success() {
+        return Err((axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Osmium failed to convert the file".to_string()));
+    }
+
+    // Load newly created map
+    let map = create_osm_map(&tmp_pbf_path).map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to parse custom mapped region".to_string()))?;
+    let vehicles = create_random_vehicles(&map, 200);
+
+    let instance = SimulationInstance::new(map, vehicles);
+    let token = instance.token.clone();
+
+    state.simulations.write().await.insert(uuid, instance);
+
+    Ok(Json(serde_json::json!({ "uuid": uuid, "token": token })))
+}
+
 async fn create_simulation_handler(
     State(state): State<Arc<AppState>>,
 ) -> Json<serde_json::Value> {
@@ -210,6 +284,7 @@ pub async fn run() -> io::Result<()> {
     let app = Router::new()
         .route("/ws", get(ws_handler))
         .route("/api/simulations", post(create_simulation_handler))
+        .route("/api/custom_map", post(create_custom_simulation_handler))
         .layer(cors)
         .with_state(shared_state);
 
