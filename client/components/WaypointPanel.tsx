@@ -29,7 +29,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
 
   // Add waypoint when node is clicked
   const handleAddWaypoint = useCallback((nodeId: number) => {
-    if (!selectedVehicleId) return;
+    if (selectedVehicleId === null || selectedVehicleId === undefined) return;
     
     // Don't add if it's the current destination
     const vehicle = vehicles.find(v => v.id === selectedVehicleId);
@@ -48,7 +48,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
 
   // Apply waypoints to backend
   const handleApply = () => {
-    if (!selectedVehicleId) return;
+    if (selectedVehicleId === null || selectedVehicleId === undefined) return;
     
     ws?.send('addWaypoints', {
       vehicle_id: selectedVehicleId,
@@ -71,7 +71,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   useImperativeHandle(ref, () => ({
     onNodeClick: (nodeId: number) => {
       // If already selecting a vehicle, add as waypoint
-      if (selectedVehicleId) {
+      if (selectedVehicleId !== null && selectedVehicleId !== undefined) {
         handleAddWaypoint(nodeId);
       } else {
         // Otherwise, show vehicles for this node
@@ -82,17 +82,19 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
     getPendingWaypoints: () => pendingWaypoints,
   }));
 
-  // Get vehicles for clicked node (origin or destination)
-  const vehiclesForNode = clickedNodeId
-    ? vehicles.filter(v => v.origin_node_id === clickedNodeId)
+  // Get vehicles for clicked node (only show if it's Habitation or Workplace)
+  const clickedNode = clickedNodeId !== null ? mapData?.nodes.find(n => n.id === clickedNodeId) : null;
+  const isClickedNodePOI = clickedNode && (clickedNode.kind === 'Habitation' || clickedNode.kind === 'Workplace');
+  const vehiclesForNode = clickedNodeId !== null
+    ? vehicles.filter(v => v.origin_node_id === clickedNodeId || v.dest_node_id === clickedNodeId)
     : [];
 
-  const selectedVehicle = selectedVehicleId
+  const selectedVehicle = selectedVehicleId !== null
     ? vehicles.find(v => v.id === selectedVehicleId)
     : null;
 
   // EMPTY STATE
-  if (!clickedNodeId && !selectedVehicleId) {
+  if (clickedNodeId === null && selectedVehicleId === null) {
     return (
       <div className="flex flex-col h-full bg-black border-l border-gray-600">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
@@ -108,7 +110,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   }
 
   // VEHICLE SELECTION VIEW
-  if (!selectedVehicleId && vehiclesForNode.length > 0) {
+  if (selectedVehicleId === null && vehiclesForNode.length > 0) {
     return (
       <div className="flex flex-col h-full bg-black border-l border-gray-600">
         <div className="p-4 border-b border-gray-600 flex-shrink-0">
@@ -143,7 +145,7 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
   }
 
   // INTERSECTION VIEW - Show when clicking on an intersection (no vehicles for this node)
-  if (clickedNodeId && vehiclesForNode.length === 0 && !selectedVehicleId) {
+  if (clickedNodeId !== null && !isClickedNodePOI && selectedVehicleId === null) {
     const node = mapData?.nodes.find(n => n.id === clickedNodeId);
     return (
       <div className="flex flex-col h-full bg-black border-l border-gray-600">
@@ -171,7 +173,37 @@ export const WaypointPanel = forwardRef(function WaypointPanel({
               </>
             )}
             <p className="text-xs text-gray-500">
-              No vehicles starting from this node
+              Click on Habitation or Workplace nodes to manage waypoints
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // POI VIEW - Show when clicking on a POI (Habitation/Workplace) with no vehicles
+  if (clickedNodeId !== null && isClickedNodePOI && vehiclesForNode.length === 0 && selectedVehicleId === null) {
+    const node = mapData?.nodes.find(n => n.id === clickedNodeId);
+    return (
+      <div className="flex flex-col h-full bg-black border-l border-gray-600">
+        <div className="p-4 border-b border-gray-600 flex-shrink-0">
+          <h3 className="text-sm font-semibold text-white uppercase tracking-wide">
+            {node?.kind}
+          </h3>
+          <button
+            onClick={() => setClickedNodeId(null)}
+            className="text-xs text-gray-400 hover:text-gray-300 mt-2"
+          >
+            Back
+          </button>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <p className="text-lg font-semibold text-white mb-2">
+              Node {clickedNodeId}
+            </p>
+            <p className="text-xs text-gray-500">
+              No vehicles using this node
             </p>
           </div>
         </div>

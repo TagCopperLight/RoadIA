@@ -147,10 +147,10 @@ export function MapCanvas({
 							isSelected={isSelected}
 							isEditMode={isEditMode}
 							isPendingFrom={isPendingFrom}
-							onSelect={mode === 'edit' && onWaypointNodeClick
-								? () => onWaypointNodeClick(node.id)
-								: isEditMode && editTool === 'select'
+							onSelect={isEditMode && editTool === 'select'
 								? () => onSelectNode(node.id)
+								: mode === 'edit' && editTool === 'waypoints' && onWaypointNodeClick
+								? () => onWaypointNodeClick(node.id)
 								: undefined}
 							onAddRoad={isEditMode && editTool === 'addRoad'
 								? () => onAddRoad(node.id)
