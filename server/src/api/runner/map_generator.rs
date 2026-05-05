@@ -25,20 +25,20 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
     for idx in &node_indices {
         let in_deg = map.graph.edges_directed(*idx, petgraph::Direction::Incoming).count();
         let out_deg = map.graph.edges_directed(*idx, petgraph::Direction::Outgoing).count();
-        let total = in_deg + out_deg;
 
-        if total >= 3 {
-            map.graph[*idx].kind = IntersectionKind::Intersection;
-        } else if out_deg == 0 {
+        if out_deg == 0 && in_deg > 0 {
             map.graph[*idx].kind = IntersectionKind::Workplace;
-        } else if in_deg == 0 {
+        } else if in_deg == 0 && out_deg > 0 {
             map.graph[*idx].kind = IntersectionKind::Habitation;
         } else {
-            // Alternate between Habitation and Workplace for dead-end / degree-2 nodes
-            if map.graph[*idx].id % 2 == 0 {
+            // Distribute uniformly across the remaining nodes deterministically
+            let mod_val = map.graph[*idx].id % 10;
+            if mod_val == 0 {
                 map.graph[*idx].kind = IntersectionKind::Habitation;
-            } else {
+            } else if mod_val == 1 {
                 map.graph[*idx].kind = IntersectionKind::Workplace;
+            } else {
+                map.graph[*idx].kind = IntersectionKind::Intersection;
             }
         }
     }
@@ -96,9 +96,24 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         return vehicles;
     }
 
+    // Pre-calculate reachable pairs using BFS to avoid generating vehicles with no possible path
+    let mut valid_pairs = Vec::new();
+    for &h in &habitations {
+        let mut bfs = petgraph::visit::Bfs::new(&map.graph, h);
+        while let Some(nx) = bfs.next(&map.graph) {
+            if nx != h && matches!(map.graph[nx].kind, IntersectionKind::Workplace) {
+                valid_pairs.push((h, nx));
+            }
+        }
+    }
+
+    if valid_pairs.is_empty() {
+        println!("Warning: No valid paths exist between any Habitation and Workplace on this map");
+        return vehicles;
+    }
+
     for _ in 0..count {
-        let origin = habitations[rand::random_range(0..habitations.len())];
-        let destination = workplaces[rand::random_range(0..workplaces.len())];
+        let (origin, destination) = valid_pairs[rand::random_range(0..valid_pairs.len())];
 
         let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
 
