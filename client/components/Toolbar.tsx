@@ -89,14 +89,26 @@ function IconWaypoints() {
     );
 }
 
+function IconStatistics() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 20V10" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M12 20V4" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M6 20V14" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+    );
+}
+
 function ToolButton({
     onClick,
     isSelected,
+    disabled,
     title,
     children,
 }: {
     onClick: () => void;
     isSelected?: boolean;
+    disabled?: boolean;
     title: string;
     children: React.ReactNode;
 }) {
@@ -104,8 +116,9 @@ function ToolButton({
         <button
             onClick={onClick}
             title={title}
-            className={`flex items-center justify-center p-[16px] cursor-pointer transition-opacity text-white
-                ${isSelected ? 'opacity-35' : 'opacity-100 hover:opacity-50'}`}
+            disabled={disabled}
+            className={`flex items-center justify-center p-[10px] transition-opacity text-white
+                ${disabled ? 'opacity-25 cursor-not-allowed' : isSelected ? 'opacity-75 cursor-pointer' : 'opacity-100 hover:opacity-50 cursor-pointer'}`}
         >
             {children}
         </button>
@@ -119,8 +132,8 @@ function Separator() {
 export default function Toolbar() {
     const ws = useWs();
     const {
-        mode, editTool, simState,
-        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt,
+        mode, editTool, simState, showScore, scoreReady,
+        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore, setIsScoringLoading, setScoreReady,
     } = useEditMode();
 
     const clearSelection = () => {
@@ -131,6 +144,8 @@ export default function Toolbar() {
     const switchToEdit = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
+        setShowScore(false);
+        setScoreReady(false);
         setSimulationResetAt(prev => prev + 1);
         clearSelection();
         setMode('edit');
@@ -147,6 +162,11 @@ export default function Toolbar() {
             setSimState('paused');
         } else {
             ws?.send('startSimulation', {});
+            // Only show loading if simulation is starting from the beginning
+            if (simState === 'stopped') {
+                setIsScoringLoading(true);
+                setShowScore(false);
+            }
             setSimState('running');
         }
     };
@@ -154,6 +174,8 @@ export default function Toolbar() {
     const handleReset = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
+        setShowScore(false);
+        setScoreReady(false);
         setSimulationResetAt(prev => prev + 1);
     };
 
@@ -193,6 +215,10 @@ export default function Toolbar() {
                             <Separator />
                             <ToolButton onClick={handleReset} title="Reset">
                                 <IconReset />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => setShowScore(!showScore)} isSelected={showScore} disabled={!scoreReady} title="Statistics">
+                                <IconStatistics />
                             </ToolButton>
                         </>
                     )}

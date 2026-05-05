@@ -13,8 +13,10 @@ use std::collections::HashSet;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
+use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
-use crate::api::runner::runner::{AppState, SimulationInstance};
+use crate::api::runner::runner::SimulationInstance;
+use crate::api::runner::handlers::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -65,6 +67,7 @@ pub enum ServerPacket {
         network_length: f32,
         ref_network_length: f32,
         success_rate: f32, },
+    SimulationFinished {},
 }
 
 pub async fn ws_handler(
@@ -232,6 +235,39 @@ async fn handle_client_packet(
         ClientPacket::StartSimulation {} => {
             println!("Client started simulation");
             instance.controller.start();
+
+            // Recalculate score on start ONLY if simulation is at the beginning
+            let eng = instance.engine.lock().await;
+            let should_recalculate = eng.current_time == 0.0;
+            drop(eng);
+
+            if should_recalculate {
+                let broadcast = instance.broadcast.clone();
+                let engine = instance.engine.clone();
+                tokio::spawn(async move {
+                    let sim_clone = {
+                        let eng = engine.lock().await;
+                        eng.clone()
+                    };
+
+                    let score = tokio::task::spawn_blocking(move || {
+                        let mut sim = sim_clone;
+                        sim.run();
+                        sim.get_score()
+                    }).await.expect("score computation panicked");
+
+                    let _ = broadcast.send(ServerPacket::Score {
+                        score: score.score,
+                        total_trip_time: score.total_trip_time,
+                        ref_total_trip_time: score.ref_total_trip_time,
+                        total_emitted_co2: score.total_emitted_co2,
+                        ref_total_emitted_co2: score.ref_total_emitted_co2,
+                        network_length: score.network_length,
+                        ref_network_length: score.ref_network_length,
+                        success_rate: score.success_rate,
+                    });
+                });
+            }
         }
 
         ClientPacket::StopSimulation {} => {
@@ -265,7 +301,7 @@ async fn handle_client_packet(
 
             let map_snapshot = eng.config.map.clone();
             for vehicle in eng.vehicles.iter_mut() {
-                let _ = vehicle.update_path(&map_snapshot);
+                vehicle.update_path(&map_snapshot);
             }
         }
 

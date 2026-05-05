@@ -1,5 +1,6 @@
 use crate::map::model::Map;
 
+#[derive(Clone)]
 pub struct SimulationConfig {
     pub start_time: f32,
     pub end_time: f32,

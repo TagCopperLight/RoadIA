@@ -7,14 +7,16 @@ use crate::map::model::{Coordinates, Map};
 use crate::map::road::{FoeLink, Link, LinkType};
 use crate::simulation::vehicle::{LaneId, Vehicle};
 
-#[derive(Debug, Clone, PartialEq)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,
     Workplace,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InternalLane {
     pub id: u32,
     pub from_lane_id: u32,
@@ -25,7 +27,7 @@ pub struct InternalLane {
     pub exit: (f32, f32),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Intersection {
     pub id: u32,
     pub kind: IntersectionKind,
@@ -60,7 +62,7 @@ pub struct ApproachData {
     pub will_pass: bool,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct LinkState {
     pub approaching: HashMap<u64, ApproachData>, // vehicle_id -> data
 }
@@ -310,6 +312,7 @@ pub(crate) fn on_segment(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> bool {
         && r.1 >= p.1.min(q.1)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn is_link_open(
     link: &Link,
     vehicle: &Vehicle,
@@ -396,6 +399,7 @@ pub(crate) fn foe_is_to_the_right(ego: &Link, foe: &FoeLink) -> bool {
     ex * fy - ey * fx < 0.0
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn time_window_conflict(
     ego_arrival: f32,
     ego_leave: f32,

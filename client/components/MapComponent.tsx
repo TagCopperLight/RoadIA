@@ -31,15 +31,14 @@ export default function MapComponent() {
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [vehicleList, setVehicleList] = useState<VehicleInfo[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
-	const [showScore, setShowScore] = useState(false);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [editError, setEditError] = useState<string | null>(null);
 	const waypointPanelRef = useRef<WaypointPanelHandle | null>(null);
-
 	const ws = useWs();
 	const {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
+		showScore, setShowScore, isScoringLoading, setIsScoringLoading, setScoreReady,
 	} = useEditMode();
 
 	const simStateRef = useRef(simState);
@@ -92,6 +91,11 @@ export default function MapComponent() {
 
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
+		setIsScoringLoading(false);
+		setScoreReady(true);
+	});
+
+	usePacket("simulationFinished", () => {
 		setShowScore(true);
 	});
 
@@ -243,6 +247,13 @@ export default function MapComponent() {
 				{editError && (
 					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-red-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg">
 						{editError}
+					</div>
+				)}
+
+				{isScoringLoading && (
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
+						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+						<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
 					</div>
 				)}
 
