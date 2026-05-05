@@ -1,11 +1,15 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 
 use crate::map::intersection::{Intersection, IntersectionKind};
+use serde::{Serialize, Deserialize};
 use crate::map::road::Road;
 use crate::map::traffic_light::TrafficLightController;
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
     pub node_index_map: HashMap<u32, NodeIndex>,
@@ -16,7 +20,7 @@ pub struct Map {
     pub traffic_lights: HashMap<u32, TrafficLightController>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Coordinates{
     pub x : f32,
     pub y : f32,
@@ -190,6 +194,21 @@ impl Map {
             let id = self.graph[node_idx].id;
             self.node_index_map.insert(id, node_idx);
         }
+    }
+
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        let mut file = File::create(path)?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let mut file = File::open(path)?;
+        let mut json = String::new();
+        file.read_to_string(&mut json)?;
+        let map: Self = serde_json::from_str(&json)?;
+        Ok(map)
     }
 
 }

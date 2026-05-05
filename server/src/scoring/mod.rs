@@ -256,10 +256,7 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
     let points: Vec<(f64, f64)> = map
         .graph
         .node_indices()
-        .filter(|&n| match map.graph[n].kind {
-            IntersectionKind::Habitation | IntersectionKind::Workplace => true,
-            _ => false,
-        })
+        .filter(|&n| matches!(map.graph[n].kind, IntersectionKind::Habitation | IntersectionKind::Workplace))
         .map(|n| {
             let node = &map.graph[n];
             (node.center_coordinates.x as f64, node.center_coordinates.y as f64)
@@ -273,6 +270,7 @@ pub fn steiner_lower_bound(map: &Map) -> f64 {
     (3.0_f64.sqrt() / 2.0) * mst_length(&points)
 }
 
+#[derive(Clone, Copy, Default)]
 pub struct Score {
     pub score: f32,
     pub total_trip_time: f32,
