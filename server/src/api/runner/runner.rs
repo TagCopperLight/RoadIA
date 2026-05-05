@@ -251,6 +251,24 @@ async fn load_map_handler(
     }
 }
 
+#[derive(serde::Deserialize)]
+struct RenameMapRequest {
+    old_filename: String,
+    new_filename: String,
+}
+
+async fn rename_map_handler(
+    Json(payload): Json<RenameMapRequest>,
+) -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
+    let old_path = format!("data/{}", payload.old_filename);
+    let new_path = format!("data/{}", payload.new_filename);
+    std::fs::rename(&old_path, &new_path).map_err(|e| {
+        println!("Failed to rename map: {:?}", e);
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(serde_json::json!({ "status": "success" })))
+}
+
 async fn list_maps_handler() -> Result<Json<serde_json::Value>, axum::http::StatusCode> {
     let data_dir = "data";
     let mut maps = Vec::new();
@@ -291,6 +309,7 @@ pub async fn run() -> io::Result<()> {
         .route("/api/simulations/save-map", post(save_map_handler))
         .route("/api/simulations/load-map", post(load_map_handler))
         .route("/api/maps", get(list_maps_handler))
+        .route("/api/maps/rename", post(rename_map_handler))
         .layer(cors)
         .with_state(shared_state);
 

@@ -35,10 +35,11 @@ export default function Home() {
     try {
       const { uuid, token } = await createSimulation();
       sessionStorage.setItem('sim_token', token);
+      sessionStorage.setItem('map_name', 'Nouvelle carte');
+      sessionStorage.setItem('map_saved', 'false');
       router.push(`/map/${uuid}`);
     } catch (e) {
       console.error("Failed to create simulation:", e);
-      alert("Erreur lors de la création de la simulation");
     }
   };
 
@@ -49,7 +50,6 @@ export default function Home() {
       setShowMapList(true);
     } catch (e) {
       console.error("Failed to list maps:", e);
-      alert("Erreur lors de la récupération des cartes");
     }
   };
 
@@ -57,10 +57,11 @@ export default function Home() {
     try {
       const { uuid, token } = await loadMap(filename);
       sessionStorage.setItem('sim_token', token);
+      sessionStorage.setItem('map_name', filename.replace(/\.json$/, ''));
+      sessionStorage.setItem('map_saved', 'true');
       router.push(`/map/${uuid}`);
     } catch (e) {
       console.error("Failed to load map:", e);
-      alert("Erreur lors du chargement de la carte");
     }
   };
 
@@ -93,7 +94,7 @@ export default function Home() {
                   <ul className="divide-y divide-gray-200">
                     {maps.map((map) => (
                       <li key={map} className="flex justify-between items-center p-4 hover:bg-white/80">
-                        <span className="font-medium">{map}</span>
+                        <span className="font-medium">{map.replace(/\.json$/, '')}</span>
                         <button
                           onClick={() => handleLoadMap(map)}
                           className="bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
