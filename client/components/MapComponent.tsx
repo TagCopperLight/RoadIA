@@ -9,6 +9,7 @@ import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
 import ScoreModal from './ScoreModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
+import Legend from './Legend';
 import { WaypointPanel } from './WaypointPanel';
 import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
 
@@ -239,6 +240,7 @@ export default function MapComponent() {
 					onWaypointNodeClick={handleWaypointNodeClick}
 				/>
 				)}
+				<Legend />
 				<BudgetHUD mapData={mapData} />
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 					<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
