@@ -178,7 +178,7 @@ fn step_two_vehicles_maintain_gap() {
         engine.current_time += engine.config.time_step;
 
         // Find any lane with 2 vehicles and check gap
-        for (_, indices) in &engine.vehicles_by_lane {
+        for indices in engine.vehicles_by_lane.values() {
             if indices.len() < 2 {
                 continue;
             }

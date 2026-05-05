@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, useMapEvents, Rectangle } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { LatLngExpression, LatLngBoundsExpression, LatLngBounds } from 'leaflet';
@@ -53,6 +53,7 @@ export default function MapSelection() {
         setIsSelecting(false);
         if (startPoint && endPoint) {
           // Leaflet's LatLngBounds can be derived from two points
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const L = (window as any).L; // quick bypass for importing leafet safely in NextJS (SSR issues)
           if (L) {
              const newBounds = L.latLngBounds(startPoint, e.latlng);
@@ -93,7 +94,6 @@ export default function MapSelection() {
 
     setLoading(true);
     try {
-      const L = (window as any).L;
       // Get min and max coordinates
       const min_lat = bounds.getSouthWest().lat;
       const min_lon = bounds.getSouthWest().lng;
@@ -123,9 +123,10 @@ export default function MapSelection() {
       const data = await response.json();
       sessionStorage.setItem('sim_token', data.token);
       router.push(`/map/${data.uuid}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(`Erreur lors de l'import de la carte : ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : "Erreur inconnue";
+      alert(`Erreur lors de l'import de la carte : ${errorMessage}`);
       setLoading(false);
     }
   };
@@ -133,6 +134,7 @@ export default function MapSelection() {
   const getRectangleBounds = (): LatLngBoundsExpression | null => {
     if (bounds) return bounds;
     if (isSelecting && startPoint && endPoint) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const L = (window as any).L;
       if (L) return L.latLngBounds(startPoint, endPoint);
     }

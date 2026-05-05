@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { createSimulation } from "@/app/websocket/websocket";
+
 
 interface MenuCardProps {
   src: string;
