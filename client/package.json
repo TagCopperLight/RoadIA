@@ -10,19 +10,22 @@
   },
   "dependencies": {
     "@pixi/react": "^8.0.5",
-    "next": "16.2.2",
+    "leaflet": "^1.9.4",
+    "next": "16.2.4",
     "pixi-viewport": "^6.0.3",
     "pixi.js": "^8.17.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "react-leaflet": "^5.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.2",
+    "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

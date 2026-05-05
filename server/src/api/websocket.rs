@@ -15,7 +15,8 @@ use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
-use crate::api::runner::runner::{AppState, SimulationInstance};
+use crate::api::runner::runner::SimulationInstance;
+use crate::api::runner::handlers::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -265,7 +266,7 @@ async fn handle_client_packet(
 
             let map_snapshot = eng.config.map.clone();
             for vehicle in eng.vehicles.iter_mut() {
-                let _ = vehicle.update_path(&map_snapshot);
+                vehicle.update_path(&map_snapshot);
             }
         }
 

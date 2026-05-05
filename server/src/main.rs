@@ -1,9 +1,9 @@
 use tokio::io;
-use server::api::runner::runner;
+use server::api::runner::handlers;
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
     dotenvy::dotenv().ok();
-    runner::run().await?;
+    handlers::run().await?;
     Ok(())
 }
