@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
-
 interface MenuCardProps {
   src: string;
   alt: string;

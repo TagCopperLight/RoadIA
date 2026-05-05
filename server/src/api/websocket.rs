@@ -15,7 +15,8 @@ use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
-use crate::api::runner::runner::{AppState, SimulationInstance};
+use crate::api::runner::runner::SimulationInstance;
+use crate::api::runner::handlers::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
