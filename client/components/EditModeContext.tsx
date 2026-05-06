@@ -2,6 +2,20 @@
 
 import { createContext, useContext, useState, ReactNode, Dispatch, SetStateAction } from 'react';
 
+export interface MapSettings {
+    vehicle_count: number;
+    simulation_duration: number;
+    max_budget: number;
+    base_cost_per_meter: number;
+    intersection_cost: number;
+    habitation_cost: number;
+    workplace_cost: number;
+    time_weight: number;
+    success_weight: number;
+    pollution_weight: number;
+    infrastructure_weight: number;
+}
+
 export type AppMode = "edit" | "simulation";
 export type EditTool = "select" | "addNode" | "addRoad";
 export type SimState = "stopped" | "running" | "paused";
@@ -33,6 +47,10 @@ interface EditModeContextType {
     setIsDensityLoading: (v: boolean) => void;
     showIntersections: boolean;
     setShowIntersections: (v: boolean) => void;
+    showSettings: boolean;
+    setShowSettings: (v: boolean) => void;
+    mapSettings: MapSettings | null;
+    setMapSettings: (s: MapSettings) => void;
 }
 
 const EditModeContext = createContext<EditModeContextType | null>(null);
@@ -49,6 +67,8 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
     const [densityView, setDensityView] = useState(false);
     const [isDensityLoading, setIsDensityLoading] = useState(false);
     const [showIntersections, setShowIntersections] = useState(true);
+    const [showSettings, setShowSettings] = useState(false);
+    const [mapSettings, setMapSettings] = useState<MapSettings | null>(null);
 
     return (
         <EditModeContext.Provider value={{
@@ -56,6 +76,8 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
             showScore, setShowScore, isScoringLoading, setIsScoringLoading,
             densityView, setDensityView, isDensityLoading, setIsDensityLoading,
             showIntersections, setShowIntersections,
+            showSettings, setShowSettings,
+            mapSettings, setMapSettings,
             setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt,
         }}>
             {children}

@@ -21,11 +21,6 @@ const STOICHIOMETRIC_CO2_FACTOR: f32 = 3.16;
 const AIR_DENSITY: f32 = 1.225; // kg/m³
 const GRAVITY: f32 = 9.81; // m/s²
 
-// Score weights (must sum to 1.0)
-const TIME_WEIGHT: f32 = 0.4;
-const SUCCESS_WEIGHT: f32 = 0.2;
-const POLLUTION_WEIGHT: f32 = 0.2;
-const INFRASTRUCTURE_WEIGHT: f32 = 0.2;
 
 pub fn get_minimal_time_travel_by_road(map: &Map, road_index: EdgeIndex, acceleration: f32, vehicle_max_speed: f32) -> f32 {
     let road = map
@@ -253,11 +248,12 @@ pub fn compute_score(vehicles: &[Vehicle], config: &SimulationConfig) -> Score {
         0.0
     };
 
+    let w = &config.score_weights;
     // le score possède une valeur entre 0 et 100
-    let score = (TIME_WEIGHT * time_term
-        + SUCCESS_WEIGHT * success_rate
-        + POLLUTION_WEIGHT * pollution_term
-        + INFRASTRUCTURE_WEIGHT * (best_network_length / network_length)) * 100f32;
+    let score = (w.time * time_term
+        + w.success * success_rate
+        + w.pollution * pollution_term
+        + w.infrastructure * (best_network_length / network_length)) * 100f32;
 
     Score {
         score,

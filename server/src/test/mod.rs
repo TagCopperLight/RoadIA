@@ -44,11 +44,13 @@ pub(crate) fn make_minimal_straight_map() -> Map {
 }
 
 pub(crate) fn make_sim_config(map: Map, end_time: f32) -> SimulationConfig {
+    use crate::simulation::config::ScoreWeights;
     SimulationConfig {
         start_time: 0.0,
         end_time,
         time_step: 0.05,
         minimum_gap: 2.0,
+        score_weights: ScoreWeights::from_settings(&map.settings),
         map,
     }
 }

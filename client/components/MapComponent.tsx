@@ -7,11 +7,14 @@ import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData } from './map/types';
 import ScoreModal from './ScoreModal';
+import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
-import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
+import { calculateCost, estimateRoadCost, estimateNodeCost, DEFAULT_BUDGET_CONFIG } from './map/budget';
 
-export default function MapComponent() {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+export default function MapComponent({ uuid }: { uuid: string }) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
@@ -24,9 +27,17 @@ export default function MapComponent() {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
-		densityView, setDensityView, setIsDensityLoading,
+		densityView, setDensityView, isDensityLoading, setIsDensityLoading,
 		showIntersections,
+		showSettings, setShowSettings, mapSettings, setMapSettings,
 	} = useEditMode();
+
+	useEffect(() => {
+		fetch(`${API_URL}/api/simulations/${uuid}/settings`)
+			.then(r => r.json())
+			.then(data => setMapSettings(data))
+			.catch(() => {});
+	}, [uuid, setMapSettings]);
 
 	const simStateRef = useRef(simState);
 	const modeRef = useRef(mode);
@@ -68,10 +79,6 @@ export default function MapComponent() {
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
 		setIsScoringLoading(false);
-		setShowScore(true);
-	});
-
-	usePacket("simulationFinished", () => {
 		setShowScore(true);
 	});
 
@@ -140,7 +147,8 @@ export default function MapComponent() {
 
 	const handleAddNode = useCallback((x: number, y: number) => {
 		if (mapData) {
-			if (calculateCost(mapData) + estimateNodeCost('Intersection') > MAX_BUDGET) {
+			const cfg = mapSettings ?? DEFAULT_BUDGET_CONFIG;
+			if (calculateCost(mapData, cfg) + estimateNodeCost('Intersection', cfg) > cfg.max_budget) {
 				setEditError('Budget exceeded: not enough funds to add this intersection.');
 				return;
 			}
@@ -149,7 +157,7 @@ export default function MapComponent() {
 		prevNodeIdsRef.current = new Set(mapData?.nodes.map(n => n.id) ?? []);
 		pendingNewNodeRef.current = true;
 		ws?.send('addNode', { x, y, kind: 'Intersection' });
-	}, [ws, mapData]);
+	}, [ws, mapData, mapSettings]);
 
 	const handleAddRoad = useCallback((nodeId: number) => {
 		if (pendingRoadFrom === null) {
@@ -159,7 +167,8 @@ export default function MapComponent() {
 				const fromNode = mapData.nodes.find(n => n.id === pendingRoadFrom);
 				const toNode   = mapData.nodes.find(n => n.id === nodeId);
 				if (fromNode && toNode) {
-					if (calculateCost(mapData) + estimateRoadCost(fromNode, toNode, 2) > MAX_BUDGET) {
+					const cfg = mapSettings ?? DEFAULT_BUDGET_CONFIG;
+					if (calculateCost(mapData, cfg) + estimateRoadCost(fromNode, toNode, 2, cfg) > cfg.max_budget) {
 						setEditError('Budget exceeded: not enough funds to build this road.');
 						setPendingRoadFrom(null);
 						return;
@@ -169,7 +178,7 @@ export default function MapComponent() {
 			ws?.send('addRoad', { from_id: pendingRoadFrom, to_id: nodeId, lane_count: 2, speed_limit: 13.9 });
 			setPendingRoadFrom(null);
 		}
-	}, [ws, pendingRoadFrom, setPendingRoadFrom, mapData]);
+	}, [ws, pendingRoadFrom, setPendingRoadFrom, mapData, mapSettings]);
 
 	const handleSelectNode = useCallback((id: number) => {
 		setSelectedElement({ type: 'node', id });
@@ -222,8 +231,19 @@ export default function MapComponent() {
 					</div>
 				)}
 
+				{isDensityLoading && (
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
+						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+						<span className="text-sm font-medium text-neutral-800">Calcul de la densité...</span>
+					</div>
+				)}
+
 				{showScore && score && (
 					<ScoreModal score={score} onClose={() => setShowScore(false)} />
+				)}
+
+				{showSettings && (
+					<SettingsModal uuid={uuid} onClose={() => setShowSettings(false)} />
 				)}
 			</div>
 
