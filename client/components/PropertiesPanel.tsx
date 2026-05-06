@@ -241,7 +241,7 @@ function RoadPanel({
                             onClick={handleSwapDirection}
                             className="bg-black hover:bg-gray-800 text-white text-xs rounded px-3 py-1.5 border border-gray-600 transition-colors text-left"
                         >
-                            Swap direction
+                            Swap direction ⇄
                         </button>
                     </div>
                 )}
