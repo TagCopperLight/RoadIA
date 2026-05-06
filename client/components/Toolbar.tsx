@@ -29,7 +29,7 @@ function IconAddRoad() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="5" cy="12" r="3" fill="currentColor" stroke="none" />
             <circle cx="19" cy="12" r="3" fill="currentColor" stroke="none" />
-            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" strokeDasharray="2 2" />
+            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
         </svg>
     );
 }
@@ -78,6 +78,17 @@ function IconModeSimulation() {
     );
 }
 
+function IconWaypoints() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="5" cy="7" r="2" fill="currentColor" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="19" cy="17" r="2" fill="currentColor" />
+            <path d="M7,9 L10,10 L14,14 L17,15" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 function IconIntersection() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -97,17 +108,6 @@ function IconDensity() {
         </svg>
     );
 }
-
-function _IconStatistics() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 20V10" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M12 20V4" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M6 20V14" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-    );
-}
-
 
 function ToolButton({
     onClick,
@@ -216,6 +216,10 @@ export default function Toolbar() {
                             <Separator />
                             <ToolButton onClick={() => selectTool('addRoad')} isSelected={editTool === 'addRoad'} title="Add Road">
                                 <IconAddRoad />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('waypoints')} isSelected={editTool === 'waypoints'} title="Waypoints">
+                                <IconWaypoints />
                             </ToolButton>
                         </>
                     ) : (
