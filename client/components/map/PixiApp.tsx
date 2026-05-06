@@ -27,14 +27,12 @@ interface AppProps {
 	onSelectRoad: (canonicalId: number, reverseId?: number) => void;
 	onAddNode: (x: number, y: number) => void;
 	onAddRoad: (nodeId: number) => void;
-	onWaypointNodeClick?: (nodeId: number) => void;
 }
 
 export function PixiApp({
 	resizeTo, mapData, vehicles, trafficLights,
 	mode, editTool, selectedElement, pendingRoadFrom,
 	onSelectNode, onSelectRoad, onAddNode, onAddRoad,
-	onWaypointNodeClick,
 }: AppProps) {
 	const [isInitialized, setIsInitialized] = useState(false);
 	const handleInit = useCallback(() => setIsInitialized(true), []);
@@ -54,7 +52,6 @@ export function PixiApp({
 					onSelectRoad={onSelectRoad}
 					onAddNode={onAddNode}
 					onAddRoad={onAddRoad}
-					onWaypointNodeClick={onWaypointNodeClick}
 				/>
 			)}
 		</Application>

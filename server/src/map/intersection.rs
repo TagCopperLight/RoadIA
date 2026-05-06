@@ -9,7 +9,7 @@ use crate::simulation::vehicle::{LaneId, Vehicle};
 
 use serde::{Serialize, Deserialize};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IntersectionKind {
     Habitation,
     Intersection,

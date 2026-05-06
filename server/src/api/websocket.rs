@@ -24,20 +24,11 @@ pub struct ConnectParams {
     pub token: String,
 }
 
-#[derive(Debug, Serialize, Clone)]
-pub struct VehicleInfo {
-    pub id: u64,
-    pub origin_node_id: u32,
-    pub dest_node_id: u32,
-    pub vehicle_type: String,
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(tag = "id", content = "data")]
 #[serde(rename_all = "camelCase")]
 pub enum ClientPacket {
     StartSimulation {},
-    RequestScore {},
     StopSimulation {},
     ResetSimulation {},
     AddNode { x: f32, y: f32, kind: String },
@@ -47,8 +38,7 @@ pub enum ClientPacket {
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
     SetSpeed { multiplier: u32 },
-    AddWaypoints { vehicle_id: u64, waypoint_node_ids: Vec<u32> },
-    ClearWaypoints { vehicle_id: u64 },
+    RequestScore {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -56,7 +46,6 @@ pub enum ClientPacket {
 #[serde(rename_all = "camelCase")]
 pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
-    VehicleList { vehicles: Vec<VehicleInfo> },
     VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value> },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
     Score {
@@ -124,33 +113,11 @@ async fn ws_loop(
     {
         let eng = instance.engine.lock().await;
         let (nodes, edges) = serialize_map(&eng.config.map);
-        
-        // Prepare vehicle list
-        let vehicles: Vec<VehicleInfo> = eng.vehicles.iter().map(|v| {
-            VehicleInfo {
-                id: v.id,
-                origin_node_id: v.trip.origin.index() as u32,
-                dest_node_id: v.trip.destination.index() as u32,
-                vehicle_type: v.spec.vehicle_type.as_str().to_string(),
-            }
-        }).collect();
-        
         drop(eng);
-        
-        // Send map first
-        let map_packet = ServerPacket::Map { nodes, edges };
-        if let Ok(text) = serde_json::to_string(&map_packet) {
+        let packet = ServerPacket::Map { nodes, edges };
+        if let Ok(text) = serde_json::to_string(&packet) {
             if let Err(e) = socket.send(Message::Text(text)).await {
                 println!("Failed to send initial map: {}", e);
-                return;
-            }
-        }
-        
-        // Send vehicle list
-        let vehicle_packet = ServerPacket::VehicleList { vehicles };
-        if let Ok(text) = serde_json::to_string(&vehicle_packet) {
-            if let Err(e) = socket.send(Message::Text(text)).await {
-                println!("Failed to send vehicle list: {}", e);
                 return;
             }
         }
@@ -238,33 +205,33 @@ async fn handle_client_packet(
             instance.controller.start();
         }
 
-        
-
         ClientPacket::RequestScore {} => {
+            println!("Client requested score");
+            let broadcast = instance.broadcast.clone();
             let engine = instance.engine.clone();
-            let sim_clone = {
-                let eng = engine.lock().await;
-                eng.clone()
-            };
+            tokio::spawn(async move {
+                let sim_clone = {
+                    let eng = engine.lock().await;
+                    eng.clone()
+                };
 
-            let score = tokio::task::spawn_blocking(move || {
-                sim_clone.get_score()
-            }).await.expect("score computation panicked");
+                let score = tokio::task::spawn_blocking(move || {
+                    let mut sim = sim_clone;
+                    sim.run();
+                    sim.get_score()
+                }).await.expect("score computation panicked");
 
-            let packet = ServerPacket::Score {
-                score: score.score,
-                total_trip_time: score.total_trip_time,
-                ref_total_trip_time: score.ref_total_trip_time,
-                total_emitted_co2: score.total_emitted_co2,
-                ref_total_emitted_co2: score.ref_total_emitted_co2,
-                network_length: score.network_length,
-                ref_network_length: score.ref_network_length,
-                success_rate: score.success_rate,
-            };
-
-            if let Ok(text) = serde_json::to_string(&packet) {
-                let _ = socket.send(Message::Text(text)).await;
-            }
+                let _ = broadcast.send(ServerPacket::Score {
+                    score: score.score,
+                    total_trip_time: score.total_trip_time,
+                    ref_total_trip_time: score.ref_total_trip_time,
+                    total_emitted_co2: score.total_emitted_co2,
+                    ref_total_emitted_co2: score.ref_total_emitted_co2,
+                    network_length: score.network_length,
+                    ref_network_length: score.ref_network_length,
+                    success_rate: score.success_rate,
+                });
+            });
         }
 
         ClientPacket::StopSimulation {} => {
@@ -292,8 +259,6 @@ async fn handle_client_packet(
                 vehicle.registered_link_ids = Vec::new();
                 vehicle.waiting_time = 0.0;
                 vehicle.impatience = 0.0;
-                vehicle.waypoints = Vec::new();
-                vehicle.current_waypoint_index = 0;
             }
 
             let map_snapshot = eng.config.map.clone();
@@ -305,72 +270,6 @@ async fn handle_client_packet(
         ClientPacket::SetSpeed { multiplier } => {
             let clamped = multiplier.clamp(1, 20);
             instance.speed_multiplier.store(clamped, Ordering::Relaxed);
-        }
-
-        ClientPacket::AddWaypoints { vehicle_id, waypoint_node_ids } => {
-            if instance.controller.is_running() {
-                send_edit_error(socket, "Stop simulation before modifying waypoints").await;
-                return;
-            }
-
-            let mut eng = instance.engine.lock().await;
-
-            // Convert u32 node IDs to NodeIndex
-            let waypoints: Vec<_> = waypoint_node_ids
-                .iter()
-                .filter_map(|&node_id| {
-                    eng.config.map.node_index_map.get(&node_id).copied()
-                })
-                .collect();
-
-            if waypoints.len() != waypoint_node_ids.len() {
-                println!("Warning: Some waypoint nodes not found in map");
-            }
-
-            // Find vehicle and collect info for path calculation
-            let vehicle_idx = eng.vehicles.iter().position(|v| v.id == vehicle_id);
-            
-            if let Some(idx) = vehicle_idx {
-                let current_node = eng.vehicles[idx].get_current_node();
-                let first_waypoint = waypoints.first().copied();
-
-                // Calculate new path (before mutable borrow)
-                let new_path = first_waypoint.and_then(|dest| {
-                    crate::simulation::vehicle::fastest_path(&eng.config.map, current_node, dest)
-                });
-
-                // Now apply to vehicle
-                let n = waypoints.len();
-                let vehicle = &mut eng.vehicles[idx];
-                vehicle.waypoints = waypoints;
-                vehicle.current_waypoint_index = 0;
-
-                if let Some(path) = new_path {
-                    vehicle.path = path;
-                    vehicle.path_index = 0;
-                    vehicle.position_on_lane = 0.0;
-                }
-
-                println!("Vehicle {} waypoints updated: {} waypoints set", vehicle.id, n);
-            } else {
-                println!("Warning: Vehicle {} not found", vehicle_id);
-            }
-        }
-
-        ClientPacket::ClearWaypoints { vehicle_id } => {
-            if instance.controller.is_running() {
-                send_edit_error(socket, "Stop simulation before modifying waypoints").await;
-                return;
-            }
-
-            let mut eng = instance.engine.lock().await;
-            if let Some(vehicle) = eng.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
-                vehicle.waypoints.clear();
-                vehicle.current_waypoint_index = 0;
-                println!("Vehicle {} waypoints cleared", vehicle.id);
-            } else {
-                println!("Warning: Vehicle {} not found", vehicle_id);
-            }
         }
 
         ClientPacket::AddNode { x, y, kind } => {
@@ -579,7 +478,6 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
     let heading = vehicle.get_heading(sim_map);
-    let motorization = vehicle.spec.vehicle_type.as_str();
     json!({
         "id": vehicle.id,
         "x": coords.x,
@@ -593,8 +491,7 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
             VehicleState::WaitingToDepart => "Waiting",
             VehicleState::OnRoad => "Moving",
             VehicleState::Arrived => "Arrived",
-        },
-        "motorization": motorization,
+        }
     })
 }
 
