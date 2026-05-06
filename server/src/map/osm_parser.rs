@@ -155,7 +155,8 @@ fn collect_highway_data(
                     .unwrap_or(1);
 
                 let oneway = tags.iter().any(|(k, v)| {
-                    *k == "oneway" && (*v == "yes" || *v == "1" || *v == "true")
+                    (*k == "oneway" && (*v == "yes" || *v == "1" || *v == "true"))
+                        || (*k == "junction" && *v == "roundabout")
                 }) || hw_type == "motorway"
                     || hw_type == "motorway_link";
 
