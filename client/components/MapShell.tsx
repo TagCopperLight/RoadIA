@@ -12,7 +12,7 @@ export default function MapShell({ uuid, children }: { uuid: string, children?: 
             <EditModeProvider>
                 {children}
                 <Toolbar />
-                <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
+                <div className='flex w-full h-full p-[15px]'>
                     <MapComponent />
                 </div>
             </EditModeProvider>

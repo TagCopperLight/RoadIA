@@ -2,10 +2,10 @@ import { memo } from 'react';
 import { MapNode } from '../types';
 
 const LINK_TYPE_COLORS: Record<string, number> = {
-	Priority:     0x22c55e,  // green
-	Yield:        0xf59e0b,  // amber
-	Stop:         0xef4444,  // red
-	TrafficLight: 0x3b82f6,  // blue
+	Priority: 0x22c55e,
+	Yield: 0xf59e0b,
+	Stop: 0xef4444,
+	TrafficLight: 0x3b82f6,
 };
 
 interface IntersectionProps {
@@ -37,19 +37,16 @@ export const Intersection = memo(function Intersection({
 				g.clear();
 				g.position.set(node.x, node.y);
 
-				// Selection highlight: amber transparent fill behind intersection
-				if (isSelected) {
-					g.setFillStyle({ color: 0xfbbf24, alpha: 0.4 });
-					g.circle(0, 0, node.radius + 4);
-					g.fill();
-				}
-
-				// Intersection body
-				g.setFillStyle({ color: 0x555555 });
-				g.circle(0, 0, node.radius);
+			if (isSelected) {
+				g.setFillStyle({ color: 0xfbbf24, alpha: 0.4 });
+				g.circle(0, 0, node.radius + 4);
 				g.fill();
+			}
 
-				// Kind ring
+			g.setFillStyle({ color: 0x555555 });
+			g.circle(0, 0, node.radius);
+			g.fill();
+
 				const ringColor = node.kind === 'Habitation' ? 0x3b82f6
 					: node.kind === 'Workplace' ? 0xef4444
 					: 0x888888;
@@ -57,14 +54,12 @@ export const Intersection = memo(function Intersection({
 				g.circle(0, 0, node.radius);
 				g.stroke();
 
-				// Pending-from indicator (first node in addRoad): green outer ring
-				if (isPendingFrom) {
-					g.setStrokeStyle({ color: 0x22c55e, width: 3 });
-					g.circle(0, 0, node.radius + 4);
-					g.stroke();
-				}
+			if (isPendingFrom) {
+				g.setStrokeStyle({ color: 0x22c55e, width: 3 });
+				g.circle(0, 0, node.radius + 4);
+				g.stroke();
+			}
 
-				// Internal lanes drawn on top of intersection body
 				if (isSelected && node.internal_lanes && node.internal_lanes.length > 0) {
 					for (const lane of node.internal_lanes) {
 						const color = LINK_TYPE_COLORS[lane.link_type] ?? 0x22c55e;
@@ -78,7 +73,7 @@ export const Intersection = memo(function Intersection({
 						g.lineTo(exitX, exitY);
 						g.stroke();
 
-						// Arrowhead at exit point
+
 						const ddx = exitX - ex;
 						const ddy = exitY - ey;
 						const len = Math.sqrt(ddx * ddx + ddy * ddy);
