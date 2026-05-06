@@ -21,6 +21,7 @@ interface AppProps {
 	trafficLights: Map<number, TrafficLightData>;
 	roadDensity: Map<number, number>;
 	densityView: boolean;
+	showIntersections: boolean;
 	mode: AppMode;
 	editTool: EditTool;
 	selectedElement: SelectedElement;
@@ -33,7 +34,7 @@ interface AppProps {
 
 export function PixiApp({
 	resizeTo, mapData, vehicles, trafficLights,
-	roadDensity, densityView,
+	roadDensity, densityView, showIntersections,
 	mode, editTool, selectedElement, pendingRoadFrom,
 	onSelectNode, onSelectRoad, onAddNode, onAddRoad,
 }: AppProps) {
@@ -49,6 +50,7 @@ export function PixiApp({
 					trafficLights={trafficLights}
 					roadDensity={roadDensity}
 					densityView={densityView}
+					showIntersections={showIntersections}
 					mode={mode}
 					editTool={editTool}
 					selectedElement={selectedElement}

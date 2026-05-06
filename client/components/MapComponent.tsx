@@ -25,6 +25,7 @@ export default function MapComponent() {
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
 		densityView, setDensityView, setIsDensityLoading,
+		showIntersections,
 	} = useEditMode();
 
 	const simStateRef = useRef(simState);
@@ -128,10 +129,13 @@ export default function MapComponent() {
 	// Clear vehicles when simulation is reset
 	useEffect(() => {
 		if (simulationResetAt === 0) return;
-		setVehicles([]);
-		setRoadDensity(new Map());
-		setDensityView(false);
-		setIsDensityLoading(false);
+		const t = setTimeout(() => {
+			setVehicles([]);
+			setRoadDensity(new Map());
+			setDensityView(false);
+			setIsDensityLoading(false);
+		}, 0);
+		return () => clearTimeout(t);
 	}, [simulationResetAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const handleAddNode = useCallback((x: number, y: number) => {
@@ -189,6 +193,7 @@ export default function MapComponent() {
 						trafficLights={trafficLights}
 						roadDensity={roadDensity}
 						densityView={densityView}
+						showIntersections={showIntersections}
 						mode={mode}
 						editTool={editTool}
 						selectedElement={selectedElement}
