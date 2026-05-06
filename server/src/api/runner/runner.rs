@@ -150,18 +150,15 @@ impl SimulationInstance {
     }
 
     pub fn new_default() -> Arc<Self> {
-        // let map = create_connected_map(200, 1500.0, 1500.0);
-        // let map = create_traffic_light_test_map();
-
         let map_path = "data/lannion.osm.pbf";
         match create_osm_map(map_path) {
             Ok(map) => {
                 println!("Successfully loaded Lannion map from OSM!");
                 Self::new(map)
             }
-            Err(e) => {
-                println!("Failed to load Lannion map: {:?}", e);
-                panic!("Failed to load Lannion map: {:?}", e);
+            Err(_) => {
+                println!("Lannion map not found, starting with empty map.");
+                Self::new(crate::map::model::Map::new())
             }
         }
     }
