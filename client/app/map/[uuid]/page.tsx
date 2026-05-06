@@ -40,6 +40,7 @@ function Header() {
 
     const handleSupprimer = async () => {
         setOpenMenu(null);
+        if (!confirm(`Supprimer « ${mapName} » ? Cette action est irréversible.`)) return;
         const fileUuid = sessionStorage.getItem('map_file_uuid');
         if (!fileUuid || sessionStorage.getItem('map_saved') !== 'true') {
             router.push('/');
