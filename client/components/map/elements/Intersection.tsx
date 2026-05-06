@@ -15,6 +15,7 @@ interface IntersectionProps {
 	isPendingFrom?: boolean;
 	onSelect?: () => void;
 	onAddRoad?: () => void;
+	onWaypointClick?: () => void;
 }
 
 export const Intersection = memo(function Intersection({
@@ -24,9 +25,10 @@ export const Intersection = memo(function Intersection({
 	isPendingFrom,
 	onSelect,
 	onAddRoad,
+	onWaypointClick,
 }: IntersectionProps) {
-	const isInteractive = isEditMode && (onSelect || onAddRoad);
-	const handleTap = onSelect ?? onAddRoad;
+	const isInteractive = isEditMode && (onSelect || onAddRoad || onWaypointClick);
+	const handleTap = onSelect ?? onAddRoad ?? onWaypointClick;
 
 	return (
 		<pixiGraphics

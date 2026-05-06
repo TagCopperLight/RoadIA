@@ -14,7 +14,7 @@ use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::engine::Simulation;
-use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState};
+use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
 use crate::api::runner::map_generator::create_random_vehicles;
@@ -41,6 +41,8 @@ pub enum ClientPacket {
     SetSpeed { multiplier: u32 },
     RequestScore {},
     RequestDensity {},
+    AddWaypoints { vehicle_id: u64, node_ids: Vec<u32> },
+    RequestVehicles {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -61,6 +63,7 @@ pub enum ServerPacket {
         success_rate: f32, },
     SimulationFinished {},
     DensityMap { edges: Vec<Value> },
+    VehicleList { vehicles: Vec<Value> },
 }
 
 pub async fn ws_handler(
@@ -322,9 +325,13 @@ async fn handle_client_packet(
                 vehicle.update_path(&map_snapshot);
             }
 
+            let vehicles: Vec<Value> = eng.vehicles.iter()
+                .map(|v| serialize_vehicle_summary(v, &map_snapshot))
+                .collect();
             let snapshot = eng.clone();
             drop(eng);
             *instance.initial_engine.lock().await = snapshot;
+            let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
         }
 
         ClientPacket::SetSpeed { multiplier } => {
@@ -447,6 +454,36 @@ async fn handle_client_packet(
                 }
             }
         }
+
+        ClientPacket::AddWaypoints { vehicle_id, node_ids } => {
+            let mut eng = instance.engine.lock().await;
+            let map = eng.config.map.clone();
+            let waypoints: Vec<_> = node_ids
+                .iter()
+                .filter_map(|nid| map.node_index_map.get(nid).copied())
+                .collect();
+            if let Some(v) = eng.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+                v.waypoints = waypoints;
+                v.update_path(&map);
+            }
+            let vehicles: Vec<Value> = eng.vehicles.iter()
+                .map(|v| serialize_vehicle_summary(v, &map))
+                .collect();
+            drop(eng);
+            let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+        }
+
+        ClientPacket::RequestVehicles {} => {
+            let eng = instance.engine.lock().await;
+            let vehicles: Vec<Value> = eng.vehicles.iter()
+                .map(|v| serialize_vehicle_summary(v, &eng.config.map))
+                .collect();
+            drop(eng);
+            let packet = ServerPacket::VehicleList { vehicles };
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
+            }
+        }
     }
 }
 
@@ -538,6 +575,9 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
     let heading = vehicle.get_heading(sim_map);
+    let waypoint_ids: Vec<u32> = vehicle.waypoints.iter()
+        .map(|&ni| sim_map.graph[ni].id)
+        .collect();
     json!({
         "id": vehicle.id,
         "x": coords.x,
@@ -551,7 +591,34 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
             VehicleState::WaitingToDepart => "Waiting",
             VehicleState::OnRoad => "Moving",
             VehicleState::Arrived => "Arrived",
-        }
+        },
+        "motorization": match vehicle.motorization {
+            VehicleType::Hybride    => "Hybride",
+            VehicleType::Electrique => "Electrique",
+            VehicleType::Essence    => "Essence",
+            VehicleType::Diesel     => "Diesel",
+        },
+        "origin_id": sim_map.graph[vehicle.trip.origin].id,
+        "destination_id": sim_map.graph[vehicle.trip.destination].id,
+        "waypoint_ids": waypoint_ids,
+    })
+}
+
+pub fn serialize_vehicle_summary(vehicle: &Vehicle, map: &Map) -> Value {
+    let waypoint_ids: Vec<u32> = vehicle.waypoints.iter()
+        .map(|&ni| map.graph[ni].id)
+        .collect();
+    json!({
+        "id": vehicle.id,
+        "origin_id": map.graph[vehicle.trip.origin].id,
+        "destination_id": map.graph[vehicle.trip.destination].id,
+        "motorization": match vehicle.motorization {
+            VehicleType::Hybride    => "Hybride",
+            VehicleType::Electrique => "Electrique",
+            VehicleType::Essence    => "Essence",
+            VehicleType::Diesel     => "Diesel",
+        },
+        "waypoint_ids": waypoint_ids,
     })
 }
 

@@ -5,11 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePacket, useWs } from '@/app/websocket/websocket';
 import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData } from './map/types';
+import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary } from './map/types';
 import ScoreModal from './ScoreModal';
 import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
+import WaypointPanel from './WaypointPanel';
+import Legend from './Legend';
 import { calculateCost, estimateRoadCost, estimateNodeCost, DEFAULT_BUDGET_CONFIG } from './map/budget';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
@@ -18,6 +20,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
+	const [vehicleSummaries, setVehicleSummaries] = useState<VehicleSummary[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [roadDensity, setRoadDensity] = useState<Map<number, number>>(new Map());
@@ -30,6 +33,9 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		densityView, setDensityView, isDensityLoading, setIsDensityLoading,
 		showIntersections,
 		showSettings, setShowSettings, mapSettings, setMapSettings,
+		waypointClickedNodeId, setWaypointClickedNodeId,
+		waypointVehicleId, setWaypointVehicleId,
+		pendingWaypoints, setPendingWaypoints,
 	} = useEditMode();
 
 	useEffect(() => {
@@ -45,6 +51,13 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		simStateRef.current = simState;
 		modeRef.current = mode;
 	});
+
+	// Request vehicle list when switching to waypoints tool
+	useEffect(() => {
+		if (editTool === 'waypoints') {
+			ws?.send('requestVehicles', {});
+		}
+	}, [editTool, ws]);
 
 	// Refs for auto-selecting newly created nodes
 	const pendingNewNodeRef = useRef(false);
@@ -73,6 +86,13 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				);
 				return changed ? next : prev;
 			});
+		}
+	});
+
+	usePacket("vehicleList", (data) => {
+		const result = data as { vehicles: VehicleSummary[] };
+		if (result && Array.isArray(result.vehicles)) {
+			setVehicleSummaries(result.vehicles);
 		}
 	});
 
@@ -188,7 +208,42 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		setSelectedElement({ type: 'road', canonicalId, reverseId });
 	}, [setSelectedElement]);
 
-// In edit mode, show no vehicles
+	const handleWaypointNodeClick = useCallback((nodeId: number) => {
+		if (waypointVehicleId !== null) {
+			// Vehicle selected: add node as waypoint
+			setPendingWaypoints(prev => [...prev, nodeId]);
+		} else {
+			// No vehicle selected yet: record clicked node for vehicle selection
+			setWaypointClickedNodeId(nodeId);
+		}
+	}, [waypointVehicleId, setPendingWaypoints, setWaypointClickedNodeId]);
+
+	const handleWaypointSelectVehicle = useCallback((vehicleId: number) => {
+		const summary = vehicleSummaries.find(v => v.id === vehicleId);
+		setWaypointVehicleId(vehicleId);
+		setWaypointClickedNodeId(null);
+		setPendingWaypoints(summary?.waypoint_ids ?? []);
+	}, [vehicleSummaries, setWaypointVehicleId, setWaypointClickedNodeId, setPendingWaypoints]);
+
+	const handleWaypointRemove = useCallback((index: number) => {
+		setPendingWaypoints(prev => prev.filter((_, i) => i !== index));
+	}, [setPendingWaypoints]);
+
+	const handleWaypointApply = useCallback(() => {
+		if (waypointVehicleId === null) return;
+		ws?.send('addWaypoints', { vehicle_id: waypointVehicleId, node_ids: pendingWaypoints });
+		setWaypointVehicleId(null);
+		setWaypointClickedNodeId(null);
+		setPendingWaypoints([]);
+	}, [ws, waypointVehicleId, pendingWaypoints, setWaypointVehicleId, setWaypointClickedNodeId, setPendingWaypoints]);
+
+	const handleWaypointCancel = useCallback(() => {
+		setWaypointVehicleId(null);
+		setWaypointClickedNodeId(null);
+		setPendingWaypoints([]);
+	}, [setWaypointVehicleId, setWaypointClickedNodeId, setPendingWaypoints]);
+
+	// In edit mode, show no vehicles
 	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
 	return (
@@ -211,9 +266,11 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 						onSelectRoad={handleSelectRoad}
 						onAddNode={handleAddNode}
 						onAddRoad={handleAddRoad}
+						onWaypointNodeClick={handleWaypointNodeClick}
 					/>
 				)}
 				<BudgetHUD mapData={mapData} />
+				<Legend />
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 					<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 				</div>
@@ -248,12 +305,27 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			</div>
 
 			{/* Properties panel sidebar */}
-			{mode === 'edit' && selectedElement && mapData && (
+			{mode === 'edit' && editTool !== 'waypoints' && selectedElement && mapData && (
 				<PropertiesPanel
 					selectedElement={selectedElement}
 					mapData={mapData}
 					onClose={() => setSelectedElement(null)}
 					onSendPacket={(id, data) => ws?.send(id, data)}
+				/>
+			)}
+
+			{mode === 'edit' && editTool === 'waypoints' && (
+				<WaypointPanel
+					vehicleSummaries={vehicleSummaries}
+					mapData={mapData}
+					waypointNodeId={waypointClickedNodeId}
+					waypointVehicleId={waypointVehicleId}
+					pendingWaypoints={pendingWaypoints}
+					onSelectVehicle={handleWaypointSelectVehicle}
+					onRemoveWaypoint={handleWaypointRemove}
+					onApply={handleWaypointApply}
+					onCancel={handleWaypointCancel}
+					onClose={() => setEditTool('select')}
 				/>
 			)}
 		</div>

@@ -17,7 +17,7 @@ export interface MapSettings {
 }
 
 export type AppMode = "edit" | "simulation";
-export type EditTool = "select" | "addNode" | "addRoad";
+export type EditTool = "select" | "addNode" | "addRoad" | "waypoints";
 export type SimState = "stopped" | "running" | "paused";
 export type SelectedElement =
     | { type: "node"; id: number }
@@ -51,6 +51,13 @@ interface EditModeContextType {
     setShowSettings: (v: boolean) => void;
     mapSettings: MapSettings | null;
     setMapSettings: (s: MapSettings) => void;
+    // Waypoint state
+    waypointClickedNodeId: number | null;
+    setWaypointClickedNodeId: (id: number | null) => void;
+    waypointVehicleId: number | null;
+    setWaypointVehicleId: (id: number | null) => void;
+    pendingWaypoints: number[];
+    setPendingWaypoints: Dispatch<SetStateAction<number[]>>;
 }
 
 const EditModeContext = createContext<EditModeContextType | null>(null);
@@ -69,6 +76,9 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
     const [showIntersections, setShowIntersections] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
     const [mapSettings, setMapSettings] = useState<MapSettings | null>(null);
+    const [waypointClickedNodeId, setWaypointClickedNodeId] = useState<number | null>(null);
+    const [waypointVehicleId, setWaypointVehicleId] = useState<number | null>(null);
+    const [pendingWaypoints, setPendingWaypoints] = useState<number[]>([]);
 
     return (
         <EditModeContext.Provider value={{
@@ -79,6 +89,9 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
             showSettings, setShowSettings,
             mapSettings, setMapSettings,
             setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt,
+            waypointClickedNodeId, setWaypointClickedNodeId,
+            waypointVehicleId, setWaypointVehicleId,
+            pendingWaypoints, setPendingWaypoints,
         }}>
             {children}
         </EditModeContext.Provider>
