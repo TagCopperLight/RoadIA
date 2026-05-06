@@ -15,15 +15,16 @@ function Header() {
     const router = useRouter();
     const params = useParams();
     const [openMenu, setOpenMenu] = useState<string | null>(null);
-    const [mapName, setMapName] = useState(() =>
-        typeof window !== 'undefined' ? (sessionStorage.getItem('map_name') ?? 'Nouvelle carte') : 'Nouvelle carte'
-    );
-    const [savedName, setSavedName] = useState<string | null>(() => {
-        if (typeof window !== 'undefined' && sessionStorage.getItem('map_saved') === 'true') {
-            return sessionStorage.getItem('map_name');
+    const [mapName, setMapName] = useState('Nouvelle carte');
+    const [savedName, setSavedName] = useState<string | null>(null);
+
+    useEffect(() => {
+        const stored = sessionStorage.getItem('map_name');
+        if (stored) setMapName(stored);
+        if (sessionStorage.getItem('map_saved') === 'true') {
+            setSavedName(stored);
         }
-        return null;
-    });
+    }, []);
 
     const menuRef = useRef<HTMLDivElement>(null);
 
