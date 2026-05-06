@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { MapSettings, useEditMode } from './EditModeContext';
+import { useWs } from '@/app/websocket/websocket';
 
 interface SettingsModalProps {
     uuid: string;
@@ -13,7 +14,8 @@ type Section = 'simulation' | 'budget' | 'score';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
-    const { setMapSettings } = useEditMode();
+    const { setMapSettings, setSimState, setShowScore, setSimulationResetAt } = useEditMode();
+    const ws = useWs();
     const [form, setForm] = useState<MapSettings | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -56,6 +58,10 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                 return;
             }
             setMapSettings(form);
+            ws?.send('resetSimulation', {});
+            setSimState('stopped');
+            setShowScore(false);
+            setSimulationResetAt(prev => prev + 1);
             onClose();
         } catch {
             setError('Erreur réseau.');
@@ -123,9 +129,6 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                                             onChange={v => set('simulation_duration', v)}
                                         />
                                     </FieldRow>
-                                    <p className="text-xs text-gray-400 pt-1">
-                                        Les changements de simulation prennent effet au prochain démarrage.
-                                    </p>
                                 </div>
                             )}
 
