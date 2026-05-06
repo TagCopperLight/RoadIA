@@ -1,0 +1,7 @@
+[book]
+title = "RoadIA - feature/bus"
+src = "src"
+language = "fr"
+
+[build]
+create-missing = false
