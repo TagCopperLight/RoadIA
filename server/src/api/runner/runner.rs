@@ -44,6 +44,7 @@ impl SimulationController {
 pub struct SimulationInstance {
     pub token: String,
     pub engine: Arc<Mutex<SimulationEngine>>,
+    pub initial_engine: Arc<Mutex<SimulationEngine>>,
     pub broadcast: broadcast::Sender<ServerPacket>,
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
@@ -72,13 +73,16 @@ impl SimulationInstance {
             vehicle.update_path(&simulation.config.map);
         }
 
+        let initial_snapshot = simulation.clone();
         let engine = Arc::new(Mutex::new(simulation));
+        let initial_engine = Arc::new(Mutex::new(initial_snapshot));
         let (broadcast, _) = broadcast::channel(100);
         let controller = SimulationController::new();
 
         let instance = Arc::new(Self {
             token,
             engine,
+            initial_engine,
             broadcast,
             controller,
             active_connections: AtomicUsize::new(0),
