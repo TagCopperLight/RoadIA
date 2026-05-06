@@ -78,6 +78,15 @@ function IconModeSimulation() {
     );
 }
 
+function IconIntersection() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="7" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
 function IconDensity() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -136,6 +145,7 @@ export default function Toolbar() {
         mode, editTool, simState,
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
         densityView, setDensityView, isDensityLoading, setIsDensityLoading,
+        showIntersections, setShowIntersections,
     } = useEditMode();
 
     const switchToEdit = () => {
@@ -162,6 +172,7 @@ export default function Toolbar() {
     const switchToSimulation = () => {
         setSelectedElement(null);
         setPendingRoadFrom(null);
+        setShowIntersections(true);
         setMode('simulation');
     };
 
@@ -224,6 +235,14 @@ export default function Toolbar() {
                                 title={isDensityLoading ? 'Computing...' : densityView ? 'Hide Density' : 'Density View'}
                             >
                                 <IconDensity />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={() => setShowIntersections(!showIntersections)}
+                                isSelected={!showIntersections}
+                                title={showIntersections ? 'Hide Intersections' : 'Show Intersections'}
+                            >
+                                <IconIntersection />
                             </ToolButton>
                         </>
                     )}

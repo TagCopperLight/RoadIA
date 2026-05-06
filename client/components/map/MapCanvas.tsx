@@ -14,6 +14,7 @@ interface MapCanvasProps {
 	trafficLights: Map<number, TrafficLightData>;
 	roadDensity: Map<number, number>;
 	densityView: boolean;
+	showIntersections: boolean;
 	mode: AppMode;
 	editTool: EditTool;
 	selectedElement: SelectedElement;
@@ -30,6 +31,7 @@ export function MapCanvas({
 	trafficLights,
 	roadDensity,
 	densityView,
+	showIntersections,
 	mode,
 	editTool,
 	selectedElement,
@@ -145,6 +147,7 @@ export function MapCanvas({
 
 				{/* Pass 2: Intersections */}
 				{data.nodes.map((node) => {
+					if (!isEditMode && !showIntersections && node.kind === 'Intersection') return null;
 					const isSelected = selectedElement?.type === 'node' && selectedElement.id === node.id;
 					const isPendingFrom = pendingRoadFrom === node.id;
 					return (
@@ -184,7 +187,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, roadDensity, densityView]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, roadDensity, densityView, showIntersections]);
 
 	return (
 		<pixiCustomViewport
