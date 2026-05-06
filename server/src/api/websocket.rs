@@ -211,7 +211,7 @@ async fn handle_client_packet(
         ClientPacket::RequestScore {} => {
             println!("Client requested score");
             let broadcast = instance.broadcast.clone();
-            let engine = instance.engine.clone();
+            let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
                     let eng = engine.lock().await;
@@ -240,7 +240,7 @@ async fn handle_client_packet(
         ClientPacket::RequestDensity {} => {
             println!("Client requested density map");
             let broadcast = instance.broadcast.clone();
-            let engine = instance.engine.clone();
+            let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
                     let eng = engine.lock().await;
@@ -321,6 +321,10 @@ async fn handle_client_packet(
             for vehicle in eng.vehicles.iter_mut() {
                 vehicle.update_path(&map_snapshot);
             }
+
+            let snapshot = eng.clone();
+            drop(eng);
+            *instance.initial_engine.lock().await = snapshot;
         }
 
         ClientPacket::SetSpeed { multiplier } => {

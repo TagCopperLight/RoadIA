@@ -37,7 +37,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			.then(r => r.json())
 			.then(data => setMapSettings(data))
 			.catch(() => {});
-	}, [uuid]);
+	}, [uuid, setMapSettings]);
 
 	const simStateRef = useRef(simState);
 	const modeRef = useRef(mode);
@@ -79,10 +79,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
 		setIsScoringLoading(false);
-		setShowScore(true);
-	});
-
-	usePacket("simulationFinished", () => {
 		setShowScore(true);
 	});
 
@@ -161,7 +157,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		prevNodeIdsRef.current = new Set(mapData?.nodes.map(n => n.id) ?? []);
 		pendingNewNodeRef.current = true;
 		ws?.send('addNode', { x, y, kind: 'Intersection' });
-	}, [ws, mapData]);
+	}, [ws, mapData, mapSettings]);
 
 	const handleAddRoad = useCallback((nodeId: number) => {
 		if (pendingRoadFrom === null) {
@@ -182,7 +178,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			ws?.send('addRoad', { from_id: pendingRoadFrom, to_id: nodeId, lane_count: 2, speed_limit: 13.9 });
 			setPendingRoadFrom(null);
 		}
-	}, [ws, pendingRoadFrom, setPendingRoadFrom, mapData]);
+	}, [ws, pendingRoadFrom, setPendingRoadFrom, mapData, mapSettings]);
 
 	const handleSelectNode = useCallback((id: number) => {
 		setSelectedElement({ type: 'node', id });

@@ -31,7 +31,7 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
             })
             .catch(() => setError('Impossible de charger les paramètres.'))
             .finally(() => setLoading(false));
-    }, [uuid]);
+    }, [uuid, setMapSettings]);
 
     const set = <K extends keyof MapSettings>(key: K, value: MapSettings[K]) => {
         setForm(prev => prev ? { ...prev, [key]: value } : prev);
@@ -177,7 +177,7 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                             {section === 'score' && (
                                 <div className="space-y-5">
                                     <p className="text-sm text-gray-500">
-                                        Les poids définissent l'importance de chaque critère. Leur somme doit être égale à 1,0.
+                                        Les poids définissent l&apos;importance de chaque critère. Leur somme doit être égale à 1,0.
                                     </p>
                                     <FieldRow label="Temps de trajet">
                                         <WeightInput value={form.time_weight} onChange={v => set('time_weight', v)} />
