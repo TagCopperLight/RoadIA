@@ -114,6 +114,19 @@ impl Simulation for SimulationEngine {
     }
 }
 
+impl SimulationEngine {
+    pub fn rebuild_link_directory(&mut self) {
+        self.link_directory.clear();
+        for edge in self.config.map.graph.edge_indices() {
+            for lane in &self.config.map.graph[edge].lanes {
+                for link in &lane.links {
+                    self.link_directory.insert(link.id, link.clone());
+                }
+            }
+        }
+    }
+}
+
 // Departures
 impl SimulationEngine {
     fn handle_departures(&mut self) {

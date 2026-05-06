@@ -8,6 +8,7 @@ use uuid::Uuid;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tokio::sync::broadcast;
+use petgraph::visit::EdgeRef;
 
 use std::collections::{HashMap, HashSet};
 use crate::map::intersection::IntersectionKind;
@@ -34,7 +35,8 @@ pub enum ClientPacket {
     ResetSimulation {},
     AddNode { x: f32, y: f32, kind: String },
     DeleteNode { id: u32 },
-    UpdateNode { id: u32, kind: String },
+    UpdateNode { id: u32, kind: String, has_traffic_light: Option<bool> },
+    UpdateInternalLane { intersection_id: u32, internal_lane_id: u32, link_type: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
@@ -343,6 +345,7 @@ async fn handle_client_packet(
             };
             let mut eng = instance.engine.lock().await;
             editor::add_node(&mut eng.config.map, x, y, kind);
+            eng.rebuild_link_directory();
             let (nodes, edges) = serialize_map(&eng.config.map);
             drop(eng);
             broadcast_map_edit_success(&instance.broadcast, nodes, edges);
@@ -356,6 +359,7 @@ async fn handle_client_packet(
             let mut eng = instance.engine.lock().await;
             match editor::delete_node(&mut eng.config.map, id) {
                 Ok(()) => {
+                    eng.rebuild_link_directory();
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&instance.broadcast, nodes, edges);
@@ -368,7 +372,7 @@ async fn handle_client_packet(
         }
 
 
-        ClientPacket::UpdateNode { id, kind } => {
+        ClientPacket::UpdateNode { id, kind, has_traffic_light } => {
             if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
@@ -378,8 +382,29 @@ async fn handle_client_packet(
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
             let mut eng = instance.engine.lock().await;
-            match editor::update_node(&mut eng.config.map, id, kind) {
+            match editor::update_node(&mut eng.config.map, id, kind, has_traffic_light) {
                 Ok(()) => {
+                    eng.rebuild_link_directory();
+                    let (nodes, edges) = serialize_map(&eng.config.map);
+                    drop(eng);
+                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
+                }
+                Err(e) => {
+                    drop(eng);
+                    send_edit_error(socket, &e).await;
+                }
+            }
+        }
+
+        ClientPacket::UpdateInternalLane { intersection_id, internal_lane_id, link_type } => {
+            if instance.controller.is_running() {
+                send_edit_error(socket, "Stop simulation before editing the map").await;
+                return;
+            }
+            let mut eng = instance.engine.lock().await;
+            match editor::update_internal_lane(&mut eng.config.map, intersection_id, internal_lane_id, &link_type) {
+                Ok(()) => {
+                    eng.rebuild_link_directory();
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&instance.broadcast, nodes, edges);
@@ -399,6 +424,7 @@ async fn handle_client_packet(
             let mut eng = instance.engine.lock().await;
             match editor::add_road(&mut eng.config.map, from_id, to_id, lane_count, speed_limit) {
                 Ok(_road_id) => {
+                    eng.rebuild_link_directory();
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&instance.broadcast, nodes, edges);
@@ -418,6 +444,7 @@ async fn handle_client_packet(
             let mut eng = instance.engine.lock().await;
             match editor::delete_road(&mut eng.config.map, id) {
                 Ok(()) => {
+                    eng.rebuild_link_directory();
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&instance.broadcast, nodes, edges);
@@ -437,6 +464,7 @@ async fn handle_client_packet(
             let mut eng = instance.engine.lock().await;
             match editor::update_road(&mut eng.config.map, id, speed_limit, lane_count) {
                 Ok(()) => {
+                    eng.rebuild_link_directory();
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
                     broadcast_map_edit_success(&instance.broadcast, nodes, edges);
@@ -486,8 +514,8 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
                 .values()
                 .any(|c| c.intersection_id == n.id);
             let internal_lanes: Vec<Value> = n.internal_lanes.iter().map(|lane| {
-                let link_type = map.graph.edge_indices()
-                    .flat_map(|e| map.graph[e].lanes.iter())
+                let link_type = map.graph.edges_directed(i, petgraph::Direction::Incoming)
+                    .flat_map(|e| map.graph[e.id()].lanes.iter())
                     .flat_map(|l| l.links.iter())
                     .find(|link| link.via_internal_lane_id == lane.id)
                     .map(|link| format!("{:?}", link.link_type))

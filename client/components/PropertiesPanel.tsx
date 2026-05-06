@@ -31,6 +31,14 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
         onSendPacket('updateNode', { id: node.id, kind: newKind });
     };
 
+    const handleTrafficLightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        onSendPacket('updateNode', { id: node.id, kind: node.kind, has_traffic_light: e.target.checked });
+    };
+
+    const handleInternalLaneTypeChange = (internal_lane_id: number, link_type: string) => {
+        onSendPacket('updateInternalLane', { intersection_id: node.id, internal_lane_id, link_type });
+    };
+
     const lanes = node.internal_lanes ?? [];
 
     const handleDelete = () => {
@@ -60,7 +68,15 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
 
             <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 uppercase tracking-wide">Traffic Light</label>
-                <span className="text-white text-sm">{node.has_traffic_light ? 'Yes' : 'No'}</span>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={node.has_traffic_light || false}
+                        onChange={handleTrafficLightChange}
+                        className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800"
+                    />
+                    <span className="text-white text-sm">{node.has_traffic_light ? 'Enabled' : 'Disabled'}</span>
+                </div>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -83,8 +99,17 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
                                     className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                                     style={{ backgroundColor: LINK_TYPE_COLORS[lane.link_type] ?? '#888' }}
                                 />
-                                <span className="text-white text-xs flex-1">{lane.link_type}</span>
-                                <span className="text-gray-400 text-xs">#{lane.id}</span>
+                                <span className="text-gray-400 text-xs w-6">#{lane.id}</span>
+                                <select
+                                    value={lane.link_type}
+                                    onChange={(e) => handleInternalLaneTypeChange(lane.id, e.target.value)}
+                                    disabled={node.has_traffic_light}
+                                    className="flex-1 bg-gray-800 text-white text-xs rounded px-1 py-0.5 border border-gray-600 focus:outline-none focus:border-gray-400 disabled:opacity-50"
+                                >
+                                    <option value="Priority">Priority</option>
+                                    <option value="Yield">Yield</option>
+                                    <option value="Stop">Stop</option>
+                                </select>
                             </div>
                         ))}
                     </div>

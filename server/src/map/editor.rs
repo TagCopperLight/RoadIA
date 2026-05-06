@@ -4,6 +4,7 @@ use crate::map::road::{Lane, LinkType};
 use crate::map::roundabout::RoundaboutHandle;
 use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
+use petgraph::visit::EdgeRef;
 
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind) -> u32 {
     map.add_intersection(kind, x, y)
@@ -34,6 +35,7 @@ pub fn update_node(
     map: &mut Map,
     id: u32,
     kind: IntersectionKind,
+    has_traffic_light: Option<bool>,
 ) -> Result<(), String> {
     let idx = map
         .node_index_map
@@ -42,6 +44,113 @@ pub fn update_node(
         .ok_or_else(|| format!("Node {} not found", id))?;
 
     map.graph[idx].kind = kind;
+
+    if let Some(enable_light) = has_traffic_light {
+        let existing_controller_id = map.traffic_lights.iter()
+            .find(|(_, c)| c.intersection_id == id)
+            .map(|(cid, _)| *cid);
+        
+        if enable_light && existing_controller_id.is_none() {
+            let mut incoming_edges = Vec::new();
+            for edge in map.graph.edges_directed(idx, petgraph::Direction::Incoming) {
+                incoming_edges.push(edge.id());
+            }
+            
+            let mut phases = Vec::new();
+            let mut all_added_links = Vec::new();
+            for edge in incoming_edges {
+                let mut green_link_ids = Vec::new();
+                for lane in &map.graph[edge].lanes {
+                    for link in &lane.links {
+                        if map.graph.edge_endpoints(edge).map(|(_, to)| to) == Some(idx) {
+                             green_link_ids.push(link.id);
+                             all_added_links.push(link.id);
+                        }
+                    }
+                }
+                if !green_link_ids.is_empty() {
+                    phases.push((green_link_ids, 10.0, 3.0));
+                }
+            }
+            
+            if !phases.is_empty() {
+                add_traffic_light_controller(map, id, phases)?;
+            }
+        } else if !enable_light {
+            if let Some(cid) = existing_controller_id {
+                let controller = map.traffic_lights.remove(&cid).unwrap();
+                let all_link_ids: Vec<u32> = controller.phases.iter().flat_map(|p| p.green_link_ids.iter().copied()).collect();
+                
+                for edge_idx in map.graph.edge_indices() {
+                    for lane in &mut map.graph[edge_idx].lanes {
+                        for link in &mut lane.links {
+                            if all_link_ids.contains(&link.id) {
+                                link.link_type = LinkType::Priority;
+                            }
+                            for foe in &mut link.foe_links {
+                                if all_link_ids.contains(&foe.id) {
+                                    foe.link_type = LinkType::Priority;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn update_internal_lane(
+    map: &mut Map,
+    intersection_id: u32,
+    internal_lane_id: u32,
+    link_type_str: &str,
+) -> Result<(), String> {
+    let link_type = match link_type_str {
+        "Priority" => LinkType::Priority,
+        "Yield" => LinkType::Yield,
+        "Stop" => LinkType::Stop,
+        "TrafficLight" => LinkType::TrafficLight,
+        _ => return Err(format!("Unknown link type: {}", link_type_str)),
+    };
+
+    let idx = map
+        .node_index_map
+        .get(&intersection_id)
+        .copied()
+        .ok_or_else(|| format!("Intersection {} not found", intersection_id))?;
+
+    let mut target_link_id = None;
+    for edge in map.graph.edges_directed(idx, petgraph::Direction::Incoming) {
+        for lane in &map.graph[edge.id()].lanes {
+            for link in &lane.links {
+                if link.via_internal_lane_id == internal_lane_id {
+                    target_link_id = Some(link.id);
+                    break;
+                }
+            }
+        }
+    }
+
+    let link_id = target_link_id.ok_or_else(|| "Internal lane link not found".to_string())?;
+
+    for edge_idx in map.graph.edge_indices() {
+        for lane in &mut map.graph[edge_idx].lanes {
+            for link in &mut lane.links {
+                if link.id == link_id {
+                    link.link_type = link_type.clone();
+                    println!("Updated link {} to {:?}", link.id, link.link_type);
+                }
+                for foe in &mut link.foe_links {
+                    if foe.id == link_id {
+                        foe.link_type = link_type.clone();
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }
