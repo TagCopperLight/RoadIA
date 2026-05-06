@@ -31,6 +31,8 @@ export interface MapData {
 	edges: MapEdge[];
 }
 
+export type Motorization = "Hybride" | "Electrique" | "Essence" | "Diesel";
+
 export interface VehicleData {
     id: number;
     x: number;
@@ -38,6 +40,18 @@ export interface VehicleData {
     kind: string;
     state: string;
     heading?: number;
+    motorization?: Motorization;
+    origin_id?: number;
+    destination_id?: number;
+    waypoint_ids?: number[];
+}
+
+export interface VehicleSummary {
+    id: number;
+    origin_id: number;
+    destination_id: number;
+    motorization: Motorization;
+    waypoint_ids: number[];
 }
 
 export interface TrafficLightData {

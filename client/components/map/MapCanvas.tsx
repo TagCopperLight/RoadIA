@@ -23,6 +23,7 @@ interface MapCanvasProps {
 	onSelectRoad: (canonicalId: number, reverseId?: number) => void;
 	onAddNode: (x: number, y: number) => void;
 	onAddRoad: (nodeId: number) => void;
+	onWaypointNodeClick: (nodeId: number) => void;
 }
 
 export function MapCanvas({
@@ -40,6 +41,7 @@ export function MapCanvas({
 	onSelectRoad,
 	onAddNode,
 	onAddRoad,
+	onWaypointNodeClick,
 }: MapCanvasProps) {
 	const { app } = useApplication();
 
@@ -163,6 +165,9 @@ export function MapCanvas({
 							onAddRoad={isEditMode && editTool === 'addRoad'
 								? () => onAddRoad(node.id)
 								: undefined}
+							onWaypointClick={isEditMode && editTool === 'waypoints'
+								? () => onWaypointNodeClick(node.id)
+								: undefined}
 						/>
 					);
 				})}
@@ -187,7 +192,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, roadDensity, densityView, showIntersections]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, onWaypointNodeClick, pendingRoadFrom, roadDensity, densityView, showIntersections]);
 
 	return (
 		<pixiCustomViewport
