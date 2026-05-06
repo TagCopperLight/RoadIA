@@ -11,14 +11,16 @@ interface MenuCardProps {
   label: string;
   className?: string;
   onClick?: () => void;
+  disabled?: boolean;
 }
 
-function MenuCard({ src, alt, label, className = "", onClick }: MenuCardProps) {
+function MenuCard({ src, alt, label, className = "", onClick, disabled = false }: MenuCardProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center justify-center w-[200px] h-[200px] bg-black hover:bg-zinc-800 rounded-[10px] drop-shadow-[6px_6px_5px_rgba(0,0,0,0.35)] cursor-pointer ${className}`}
+      disabled={disabled}
+      className={`flex flex-col items-center justify-center w-[200px] h-[200px] rounded-[10px] drop-shadow-[6px_6px_5px_rgba(0,0,0,0.35)] ${disabled ? "bg-zinc-700 opacity-50 cursor-not-allowed" : "bg-black hover:bg-zinc-800 cursor-pointer"} ${className}`}
     >
       <Image src={src} alt={alt} width={130} height={130} loading="eager" />
       <p className="text-[22px] text-white text-center pt-[8px]">{label}</p>
@@ -85,7 +87,7 @@ export default function Home() {
                 <MenuCard src="/home/new.svg" alt="New" label="Nouveau" onClick={handleNewSimulation} />
                 <MenuCard src="/home/folder.svg" alt="Folder" label="Cartes" className="ml-[80px]" onClick={handleShowMaps} />
               </div>
-              <MenuCard src="/home/trophy.svg" alt="Trophy" label="Challenges" className="mt-[80px]" />
+              <MenuCard src="/home/trophy.svg" alt="Trophy" label="Challenges" className="mt-[80px]" disabled />
             </>
           ) : (
             <div className="flex flex-col items-center w-full px-10 pt-10 overflow-hidden">
