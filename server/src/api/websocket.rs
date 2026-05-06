@@ -204,15 +204,12 @@ async fn handle_client_packet(
     socket: &mut WebSocket,
     instance: &Arc<SimulationInstance>,
 ) {
-    println!("Received Packet: {:?}", packet);
     match packet {
         ClientPacket::StartSimulation {} => {
-            println!("Client started simulation");
             instance.controller.start();
         }
 
         ClientPacket::RequestScore {} => {
-            println!("Client requested score");
             let broadcast = instance.broadcast.clone();
             let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
@@ -241,7 +238,6 @@ async fn handle_client_packet(
         }
 
         ClientPacket::RequestDensity {} => {
-            println!("Client requested density map");
             let broadcast = instance.broadcast.clone();
             let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
@@ -290,12 +286,10 @@ async fn handle_client_packet(
         }
 
         ClientPacket::StopSimulation {} => {
-            println!("Client stopped simulation");
             instance.controller.stop();
         }
 
         ClientPacket::ResetSimulation {} => {
-            println!("Client reset simulation");
             instance.controller.stop();
             let mut eng = instance.engine.lock().await;
             eng.current_time = 0.0;

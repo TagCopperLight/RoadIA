@@ -164,11 +164,9 @@ impl SimulationInstance {
         let map_path = "data/lannion.osm.pbf";
         match create_osm_map(map_path) {
             Ok(map) => {
-                println!("Successfully loaded Lannion map from OSM!");
                 Self::new(map)
             }
             Err(_) => {
-                println!("Lannion map not found, starting with empty map.");
                 Self::new(crate::map::model::Map::new())
             }
         }
