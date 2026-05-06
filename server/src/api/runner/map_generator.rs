@@ -7,7 +7,7 @@ use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
-use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
@@ -25,22 +25,40 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
     for idx in &node_indices {
         let in_deg = map.graph.edges_directed(*idx, petgraph::Direction::Incoming).count();
         let out_deg = map.graph.edges_directed(*idx, petgraph::Direction::Outgoing).count();
-        let total = in_deg + out_deg;
 
-        if total >= 3 {
-            map.graph[*idx].kind = IntersectionKind::Intersection;
-        } else if out_deg == 0 {
+        if out_deg == 0 && in_deg > 0 {
             map.graph[*idx].kind = IntersectionKind::Workplace;
-        } else if in_deg == 0 {
+        } else if in_deg == 0 && out_deg > 0 {
             map.graph[*idx].kind = IntersectionKind::Habitation;
         } else {
-            // Alternate between Habitation and Workplace for dead-end / degree-2 nodes
-            if map.graph[*idx].id % 2 == 0 {
+            // Distribute uniformly across the remaining nodes deterministically
+            let mod_val = map.graph[*idx].id % 10;
+            if mod_val == 0 {
                 map.graph[*idx].kind = IntersectionKind::Habitation;
-            } else {
+            } else if mod_val == 1 {
                 map.graph[*idx].kind = IntersectionKind::Workplace;
+            } else {
+                map.graph[*idx].kind = IntersectionKind::Intersection;
             }
         }
+    }
+
+    // Reduce habitations and workplaces to 1/3 of their count.
+    let hab_indices: Vec<_> = map.graph.node_indices()
+        .filter(|&n| matches!(map.graph[n].kind, IntersectionKind::Habitation))
+        .collect();
+    let work_indices: Vec<_> = map.graph.node_indices()
+        .filter(|&n| matches!(map.graph[n].kind, IntersectionKind::Workplace))
+        .collect();
+
+    let hab_keep = (hab_indices.len() / 3).max(1);
+    let work_keep = (work_indices.len() / 3).max(1);
+
+    for &idx in &hab_indices[hab_keep..] {
+        map.graph[idx].kind = IntersectionKind::Intersection;
+    }
+    for &idx in &work_indices[work_keep..] {
+        map.graph[idx].kind = IntersectionKind::Intersection;
     }
 
     println!(
@@ -78,11 +96,36 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         return vehicles;
     }
 
-    for _ in 0..count {
-        let origin = habitations[rand::random_range(0..habitations.len())];
-        let destination = workplaces[rand::random_range(0..workplaces.len())];
+    // Pre-calculate reachable pairs using BFS to avoid generating vehicles with no possible path
+    let mut valid_pairs = Vec::new();
+    for &h in &habitations {
+        let mut bfs = petgraph::visit::Bfs::new(&map.graph, h);
+        while let Some(nx) = bfs.next(&map.graph) {
+            if nx != h && matches!(map.graph[nx].kind, IntersectionKind::Workplace) {
+                valid_pairs.push((h, nx));
+            }
+        }
+    }
 
-        let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
+    if valid_pairs.is_empty() {
+        println!("Warning: No valid paths exist between any Habitation and Workplace on this map");
+        return vehicles;
+    }
+
+    for _ in 0..count {
+        let (origin, destination) = valid_pairs[rand::random_range(0..valid_pairs.len())];
+
+        let roll: u32 = rand::random_range(0..100);
+        let (motorization, max_speed, length) = if roll < 45 {
+            (VehicleType::Hybride, 12.5, 10.0)
+        } else if roll < 75 {
+            (VehicleType::Electrique, 13.9, 8.0)
+        } else if roll < 90 {
+            (VehicleType::Essence, 11.1, 10.0)
+        } else {
+            (VehicleType::Diesel, 11.1, 10.0)
+        };
+        let spec = VehicleSpec::new(VehicleKind::Car, max_speed, 4.0, 3.0, 1.0, length);
 
         let trip = TripRequest {
             origin,
@@ -90,7 +133,7 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
             departure_time: 0.0,
         };
 
-        vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip));
+        vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip, motorization));
     }
 
     vehicles
@@ -186,8 +229,7 @@ pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {
 
         neighbors.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        for k in 0..extra_connections.min(neighbors.len()) {
-            let (v_idx, dist) = neighbors[k];
+        for &(v_idx, dist) in neighbors.iter().take(extra_connections) {
             let v = nodes[v_idx];
 
             let u_node = map.find_node(u).unwrap();

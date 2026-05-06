@@ -1,11 +1,73 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::Path;
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 
 use crate::map::intersection::{Intersection, IntersectionKind};
+use serde::{Serialize, Deserialize};
 use crate::map::road::Road;
 use crate::map::traffic_light::TrafficLightController;
 
-#[derive(Default, Clone)]
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MapSettings {
+    #[serde(default = "MapSettings::default_vehicle_count")]
+    pub vehicle_count: usize,
+    #[serde(default = "MapSettings::default_simulation_duration")]
+    pub simulation_duration: f32,
+    #[serde(default = "MapSettings::default_max_budget")]
+    pub max_budget: u64,
+    #[serde(default = "MapSettings::default_base_cost_per_meter")]
+    pub base_cost_per_meter: u32,
+    #[serde(default = "MapSettings::default_intersection_cost")]
+    pub intersection_cost: u32,
+    #[serde(default = "MapSettings::default_habitation_cost")]
+    pub habitation_cost: u32,
+    #[serde(default = "MapSettings::default_workplace_cost")]
+    pub workplace_cost: u32,
+    #[serde(default = "MapSettings::default_time_weight")]
+    pub time_weight: f32,
+    #[serde(default = "MapSettings::default_success_weight")]
+    pub success_weight: f32,
+    #[serde(default = "MapSettings::default_pollution_weight")]
+    pub pollution_weight: f32,
+    #[serde(default = "MapSettings::default_infrastructure_weight")]
+    pub infrastructure_weight: f32,
+}
+
+impl MapSettings {
+    fn default_vehicle_count() -> usize { 500 }
+    fn default_simulation_duration() -> f32 { 600.0 }
+    fn default_max_budget() -> u64 { 750_000_000 }
+    fn default_base_cost_per_meter() -> u32 { 500 }
+    fn default_intersection_cost() -> u32 { 50_000 }
+    fn default_habitation_cost() -> u32 { 150_000 }
+    fn default_workplace_cost() -> u32 { 200_000 }
+    fn default_time_weight() -> f32 { 0.4 }
+    fn default_success_weight() -> f32 { 0.2 }
+    fn default_pollution_weight() -> f32 { 0.2 }
+    fn default_infrastructure_weight() -> f32 { 0.2 }
+}
+
+impl Default for MapSettings {
+    fn default() -> Self {
+        Self {
+            vehicle_count: Self::default_vehicle_count(),
+            simulation_duration: Self::default_simulation_duration(),
+            max_budget: Self::default_max_budget(),
+            base_cost_per_meter: Self::default_base_cost_per_meter(),
+            intersection_cost: Self::default_intersection_cost(),
+            habitation_cost: Self::default_habitation_cost(),
+            workplace_cost: Self::default_workplace_cost(),
+            time_weight: Self::default_time_weight(),
+            success_weight: Self::default_success_weight(),
+            pollution_weight: Self::default_pollution_weight(),
+            infrastructure_weight: Self::default_infrastructure_weight(),
+        }
+    }
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
     pub node_index_map: HashMap<u32, NodeIndex>,
@@ -14,9 +76,13 @@ pub struct Map {
     pub next_link_id: u32,
     pub next_controller_id: u32,
     pub traffic_lights: HashMap<u32, TrafficLightController>,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub settings: MapSettings,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Coordinates{
     pub x : f32,
     pub y : f32,
@@ -32,6 +98,8 @@ impl Map {
             next_link_id: 0,
             next_controller_id: 0,
             traffic_lights: HashMap::new(),
+            name: String::new(),
+            settings: MapSettings::default(),
         }
     }
 
@@ -44,7 +112,7 @@ impl Map {
         let id = self.next_node_id;
         self.next_node_id += 1;
         
-        let intersection = Intersection::new(id, kind, Coordinates { x, y }, 1.0);
+        let intersection = Intersection::new(id, kind, Coordinates { x, y }, 5.0);
         let idx = self.graph.add_node(intersection);
         self.node_index_map.insert(id, idx);
         id
@@ -190,6 +258,21 @@ impl Map {
             let id = self.graph[node_idx].id;
             self.node_index_map.insert(id, node_idx);
         }
+    }
+
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+        let json = serde_json::to_string_pretty(self)?;
+        let mut file = File::create(path)?;
+        file.write_all(json.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn load<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let mut file = File::open(path)?;
+        let mut json = String::new();
+        file.read_to_string(&mut json)?;
+        let map: Self = serde_json::from_str(&json)?;
+        Ok(map)
     }
 
 }

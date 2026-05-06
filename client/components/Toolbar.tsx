@@ -1,46 +1,265 @@
 'use client';
 
-import Image from 'next/image';
 import { useWs } from '@/app/websocket/websocket';
+import { useEditMode, EditTool } from './EditModeContext';
 
-const TOOLS = [
-    { icon: 'Move', alt: 'Move' },
-    { icon: 'Edit', alt: 'Edit' },
-    { icon: 'House', alt: 'House' },
-    { icon: 'Building', alt: 'Building' },
-    { icon: 'Play', alt: 'Play' },
-    { icon: 'Octagon', alt: 'Stop' },
-];
+// Inline SVG icons
+
+function IconSelect() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M4 0l16 12-7 2-4 8z" />
+        </svg>
+    );
+}
+
+
+function IconAddNode() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="9" />
+            <line x1="12" y1="8" x2="12" y2="16" strokeLinecap="round" />
+            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function IconAddRoad() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="5" cy="12" r="3" fill="currentColor" stroke="none" />
+            <circle cx="19" cy="12" r="3" fill="currentColor" stroke="none" />
+            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+function IconPlay() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="5,3 19,12 5,21" />
+        </svg>
+    );
+}
+
+function IconPause() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="5" y="4" width="4" height="16" rx="1" />
+            <rect x="15" y="4" width="4" height="16" rx="1" />
+        </svg>
+    );
+}
+
+function IconReset() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 12a8 8 0 1 1 2 5.3" strokeLinecap="round" />
+            <polyline points="4,7 4,12 9,12" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+function IconModeEdit() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+function IconModeSimulation() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function IconWaypoints() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="5" cy="7" r="2" fill="currentColor" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="19" cy="17" r="2" fill="currentColor" />
+            <path d="M7,9 L10,10 L14,14 L17,15" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
+function IconIntersection() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="7" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function IconDensity() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="10" width="18" height="4" rx="1" />
+            <circle cx="7"  cy="12" r="1.5" fill="#22C55E" stroke="none" />
+            <circle cx="12" cy="12" r="1.5" fill="#EAB308" stroke="none" />
+            <circle cx="17" cy="12" r="1.5" fill="#EF4444" stroke="none" />
+        </svg>
+    );
+}
+
+function ToolButton({
+    onClick,
+    isSelected,
+    disabled,
+    title,
+    children,
+}: {
+    onClick: () => void;
+    isSelected?: boolean;
+    disabled?: boolean;
+    title: string;
+    children: React.ReactNode;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            title={title}
+            disabled={disabled}
+            className={`flex items-center justify-center p-[10px] transition-opacity text-white
+                ${disabled ? 'opacity-25 cursor-not-allowed' : isSelected ? 'opacity-75 cursor-pointer' : 'opacity-100 hover:opacity-50 cursor-pointer'}`}
+        >
+            {children}
+        </button>
+    );
+}
+
+function Separator() {
+    return <div className="w-px h-[26px] bg-white opacity-20" />;
+}
 
 export default function Toolbar() {
     const ws = useWs();
+    const {
+        mode, editTool, simState,
+        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
+        densityView, setDensityView, isDensityLoading, setIsDensityLoading,
+        showIntersections, setShowIntersections,
+    } = useEditMode();
 
-    const handleToolClick = (tool: string) => {
-        if (tool === 'Play') {
-            ws?.send('startSimulation', {});
-        } else if (tool === 'Stop') {
-            ws?.send('resetSimulation', {});
+    const switchToEdit = () => {
+        ws?.send('resetSimulation', {});
+        setSimState('stopped');
+        setShowScore(false);
+        setDensityView(false);
+        setIsDensityLoading(false);
+        setSimulationResetAt(prev => prev + 1);
+        setSelectedElement(null);
+        setPendingRoadFrom(null);
+        setMode('edit');
+    };
+
+    const handleDensityToggle = () => {
+        if (densityView) {
+            setDensityView(false);
+        } else if (!isDensityLoading) {
+            ws?.send('requestDensity', {});
+            setIsDensityLoading(true);
         }
+    };
+
+    const switchToSimulation = () => {
+        setSelectedElement(null);
+        setPendingRoadFrom(null);
+        setShowIntersections(true);
+        setMode('simulation');
+    };
+
+    const handlePlayPause = () => {
+        if (simState === 'running') {
+            ws?.send('stopSimulation', {});
+            setSimState('paused');
+        } else {
+            ws?.send('startSimulation', {});
+            setSimState('running');
+        }
+    };
+
+    const handleReset = () => {
+        ws?.send('resetSimulation', {});
+        setSimState('stopped');
+        setShowScore(false);
+        setSimulationResetAt(prev => prev + 1);
+    };
+
+    const selectTool = (tool: EditTool) => {
+        setEditTool(tool);
+        setSelectedElement(null);
+        setPendingRoadFrom(null);
     };
 
     return (
         <div className="flex items-center w-full pl-[15px] pr-[15px]">
-            <div className='flex items-center bg-black rounded-[10px] w-full'>
-                {TOOLS.map((tool, index) => (
-                    <div key={tool.alt} className="flex items-center" onClick={() => handleToolClick(tool.alt)}>
-                        <Image
-                            src={`/map/${tool.icon}.svg`}
-                            alt={tool.alt}
-                            width={24}
-                            height={24}
-                            className='m-[11px] cursor-pointer hover:opacity-50 transition-opacity'
-                        />
-                        {index < TOOLS.length - 1 && (
-                            <Image src="/map/Separator.svg" alt="Separator" height={26} width={1} />
-                        )}
-                    </div>
-                ))}
+            <div className="flex items-center justify-between bg-black rounded-[10px] w-full px-1">
+                {/* Left: mode-specific items */}
+                <div className="flex items-center">
+                    {mode === 'edit' ? (
+                        <>
+                            <ToolButton onClick={() => selectTool('select')} isSelected={editTool === 'select'} title="Select">
+                                <IconSelect />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('addNode')} isSelected={editTool === 'addNode'} title="Add Node">
+                                <IconAddNode />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('addRoad')} isSelected={editTool === 'addRoad'} title="Add Road">
+                                <IconAddRoad />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('waypoints')} isSelected={editTool === 'waypoints'} title="Waypoints">
+                                <IconWaypoints />
+                            </ToolButton>
+                        </>
+                    ) : (
+                        <>
+                            <ToolButton onClick={handlePlayPause} title={simState === 'running' ? 'Pause' : 'Play'}>
+                                {simState === 'running' ? <IconPause /> : <IconPlay />}
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={handleReset} title="Reset">
+                                <IconReset />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={handleDensityToggle}
+                                isSelected={densityView}
+                                disabled={isDensityLoading}
+                                title={isDensityLoading ? 'Computing...' : densityView ? 'Hide Density' : 'Density View'}
+                            >
+                                <IconDensity />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={() => setShowIntersections(!showIntersections)}
+                                isSelected={!showIntersections}
+                                title={showIntersections ? 'Hide Intersections' : 'Show Intersections'}
+                            >
+                                <IconIntersection />
+                            </ToolButton>
+                        </>
+                    )}
+                </div>
+
+                {/* Right: mode toggle */}
+                <ToolButton
+                    onClick={mode === 'edit' ? switchToSimulation : switchToEdit}
+                    title={mode === 'edit' ? 'Switch to Simulation Mode' : 'Switch to Edit Mode'}
+                >
+                    {mode === 'edit' ? <IconModeSimulation /> : <IconModeEdit />}
+                </ToolButton>
             </div>
         </div>
-    )
+    );
 }

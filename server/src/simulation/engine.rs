@@ -17,17 +17,20 @@ pub trait Simulation {
     fn get_score(&self) -> Score;
 }
 
+#[derive(Clone)]
 struct PendingTransfer {
     vehicle_idx: usize,
     from_lane: LaneId,
     to_lane: Option<LaneId>,
 }
 
+#[derive(Clone)]
 struct TrafficLightRuntimeState {
     phase_index: usize,
     time_in_phase: f32,
 }
 
+#[derive(Clone)]
 pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,
@@ -38,6 +41,7 @@ pub struct SimulationEngine {
     pub green_links: HashSet<u32>,
     pending_transfers: Vec<PendingTransfer>,
     traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
+    link_directory: HashMap<u32, crate::map::road::Link>,
 }
 
 impl Simulation for SimulationEngine {
@@ -49,6 +53,16 @@ impl Simulation for SimulationEngine {
             .keys()
             .map(|&id| (id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 }))
             .collect();
+            
+        let mut link_directory = HashMap::new();
+        for edge in config.map.graph.edge_indices() {
+            for lane in &config.map.graph[edge].lanes {
+                for link in &lane.links {
+                    link_directory.insert(link.id, link.clone());
+                }
+            }
+        }
+        
         Self {
             config,
             vehicles,
@@ -59,17 +73,14 @@ impl Simulation for SimulationEngine {
             pending_transfers: Vec::new(),
             all_vehicles_arrived: false,
             traffic_light_states,
+            link_directory,
         }
     }
 
-    // Code possiblement mort à supprimer (la fonction run n'est jamais appelée)
     fn run(&mut self) {
         for v in &mut self.vehicles {
             v.update_path(&self.config.map);
         }
-        let no_path = self.vehicles.iter().filter(|v| v.path.is_empty()).count();
-        let total = self.vehicles.len();
-        println!("{}/{} vehicles found a path", total - no_path, total);
         while self.current_time < self.config.end_time {
             self.step();
             self.current_time += self.config.time_step;
@@ -164,6 +175,7 @@ impl SimulationEngine {
                 if matches!(self.vehicles[vidx].current_lane, Some(LaneId::Internal(_, _))) {
                     continue; // committed to crossing
                 }
+                
                 self.rebuild_drive_plan(vidx);
             }
         }
@@ -326,7 +338,7 @@ impl SimulationEngine {
 impl SimulationEngine {
     fn advance_traffic_lights(&mut self) {
         let dt = self.config.time_step;
-        self.green_links.clear();
+        let mut any_transition = false;
 
         for (&ctrl_id, state) in &mut self.traffic_light_states {
             let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
@@ -344,12 +356,24 @@ impl SimulationEngine {
             if state.time_in_phase >= total_duration {
                 state.time_in_phase -= total_duration;
                 state.phase_index = (state.phase_index + 1) % controller.phases.len();
+                any_transition = true;
             }
+        }
 
-            let current_phase = &controller.phases[state.phase_index];
-            if state.time_in_phase < current_phase.green_duration {
-                let ids: Vec<u32> = current_phase.green_link_ids.iter().copied().collect();
-                self.green_links.extend(ids);
+        if any_transition {
+            self.green_links.clear();
+            for (&ctrl_id, state) in &self.traffic_light_states {
+                let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
+                    Some(c) => c,
+                    None => continue,
+                };
+                if controller.phases.is_empty() {
+                    continue;
+                }
+                let current_phase = &controller.phases[state.phase_index];
+                if state.time_in_phase < current_phase.green_duration {
+                    self.green_links.extend(current_phase.green_link_ids.iter().copied());
+                }
             }
         }
     }
@@ -469,14 +493,7 @@ impl SimulationEngine {
     }
 
     fn find_link(&self, link_id: u32) -> Option<crate::map::road::Link> {
-        for edge in self.config.map.graph.edge_indices() {
-            for lane in &self.config.map.graph[edge].lanes {
-                if let Some(lnk) = lane.links.iter().find(|l| l.id == link_id) {
-                    return Some(lnk.clone());
-                }
-            }
-        }
-        None
+        self.link_directory.get(&link_id).cloned()
     }
 
     fn vehicle_ahead_info(&self, vidx: usize, lane_id: LaneId) -> (f32, f32) {
