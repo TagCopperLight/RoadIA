@@ -10,7 +10,7 @@ import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket'
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
-    const { isScoringLoading, setIsScoringLoading } = useEditMode();
+    const { isScoringLoading, setIsScoringLoading, showScore } = useEditMode();
     const ws = useWs();
     const router = useRouter();
     const params = useParams();
@@ -111,10 +111,10 @@ function Header() {
                         <div key={item} className='relative mr-[14px]'>
                             <p
                                 onClick={() => {
-                                    if (item === 'Statistiques') { ws?.send('requestScore', {}); setIsScoringLoading(true); return; }
+                                    if (item === 'Statistiques') { if (!isScoringLoading && !showScore) { ws?.send('requestScore', {}); setIsScoringLoading(true); } return; }
                                     if (item === 'Fichier') { setOpenMenu(openMenu === 'Fichier' ? null : 'Fichier'); return; }
                                 }}
-                                className={`transition-opacity select-none ${item === 'Statistiques' && isScoringLoading ? 'opacity-50 cursor-wait' : 'cursor-pointer hover:opacity-50'}`}
+                                className={`transition-opacity select-none ${item === 'Statistiques' && (isScoringLoading || showScore) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-50'}`}
                             >
                                 {item}
                             </p>
