@@ -1,6 +1,6 @@
 # RoadIA
 
-Interactive road network editor and real-time traffic simulator. Design road layouts, set vehicle waypoints, and watch traffic flow — all powered by OpenStreetMap data.
+Interactive road network editor and real-time traffic simulator. Design road layouts, set vehicle waypoints, and watch traffic flow.
 
 ## Tech stack
 
@@ -70,6 +70,5 @@ Services:
 
 | Variable | Service | Default | Description |
 |---|---|---|---|
-| `NEXT_PUBLIC_API_URL` | client (build arg) | — | URL of the backend API |
+| `NEXT_PUBLIC_API_URL` | client | `http://localhost:8080` | URL of the backend API |
 | `ALLOWED_ORIGINS` | server | `http://localhost:3000` | CORS allowed origins |
-| `RUST_LOG` | server | `info` | Log level |
