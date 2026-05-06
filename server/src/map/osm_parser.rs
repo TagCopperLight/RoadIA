@@ -47,6 +47,7 @@ struct HighwayWay {
     speed_limit: Option<f32>, // m/s
     lane_count: u8,
     oneway: bool,
+    reversed: bool, // oneway=-1: one-way in reverse node order
 }
 
 /// A node's position (lat/lon in degrees).
@@ -133,6 +134,20 @@ fn collect_highway_data(
                     return;
                 }
 
+                // Skip inaccessible roads.
+                if tags.iter().any(|(k, v)| *k == "access" && (*v == "no" || *v == "private")) {
+                    return;
+                }
+
+                // Skip parking/driveway service roads.
+                if hw_type == "service" {
+                    if let Some((_, service_val)) = tags.iter().find(|(k, _)| *k == "service") {
+                        if matches!(*service_val, "driveway" | "parking_aisle" | "alley") {
+                            return;
+                        }
+                    }
+                }
+
                 let node_refs: Vec<i64> = way.refs().collect();
                 if node_refs.len() < 2 {
                     return;
@@ -154,10 +169,14 @@ fn collect_highway_data(
                     .and_then(|(_, v)| v.parse::<u8>().ok())
                     .unwrap_or(1);
 
-                let oneway = tags.iter().any(|(k, v)| {
-                    (*k == "oneway" && (*v == "yes" || *v == "1" || *v == "true"))
-                        || (*k == "junction" && *v == "roundabout")
-                }) || hw_type == "motorway"
+                let oneway_tag = tags.iter().find(|(k, _)| *k == "oneway").map(|(_, v)| *v);
+                let reversed = oneway_tag == Some("-1");
+                let oneway = reversed
+                    || oneway_tag == Some("yes")
+                    || oneway_tag == Some("1")
+                    || oneway_tag == Some("true")
+                    || tags.iter().any(|(k, v)| *k == "junction" && *v == "roundabout")
+                    || hw_type == "motorway"
                     || hw_type == "motorway_link";
 
                 ways.push(HighwayWay {
@@ -166,6 +185,7 @@ fn collect_highway_data(
                     speed_limit,
                     lane_count,
                     oneway,
+                    reversed,
                 });
             }
         }
@@ -294,7 +314,8 @@ fn build_map(
             });
 
             if way.oneway {
-                map.add_road(from_id, to_id, way.lane_count, speed, length);
+                let (src, dst) = if way.reversed { (to_id, from_id) } else { (from_id, to_id) };
+                map.add_road(src, dst, way.lane_count, speed, length);
             } else {
                 map.add_two_way_road(from_id, to_id, way.lane_count, speed, length);
             }
