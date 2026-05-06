@@ -47,6 +47,7 @@ struct HighwayWay {
     speed_limit: Option<f32>, // m/s
     lane_count: u8,
     oneway: bool,
+    reversed: bool, // oneway=-1: one-way in reverse node order
 }
 
 /// A node's position (lat/lon in degrees).
@@ -58,15 +59,6 @@ struct NodeCoord {
 
 // ── Main entry point ────────────────────────────────────────────────────
 
-/// Parse an `.osm.pbf` file and build a [`Map`].
-///
-/// # Example
-/// ```ignore
-/// use server::map::osm_parser::parse_osm_pbf;
-/// let map = parse_osm_pbf("path/to/region.osm.pbf").unwrap();
-/// println!("Intersections: {}", map.graph.node_count());
-/// println!("Roads: {}", map.graph.edge_count());
-/// ```
 pub fn parse_osm_pbf<P: AsRef<Path>>(path: P) -> Result<Map, OsmParseError> {
     // ── Pass 1: collect highway ways & count node references ────────
     let (ways, mut node_ref_count) = collect_highway_data(path.as_ref())?;
@@ -121,7 +113,7 @@ fn collect_highway_data(
 
     reader.for_each(|element| {
         if let Element::Way(way) = element {
-            let tags: Vec<(&str, &str)> = way.tags().map(|(k, v)| (k, v)).collect();
+            let tags: Vec<(&str, &str)> = way.tags().collect();
 
             let highway_type = tags
                 .iter()
@@ -131,6 +123,20 @@ fn collect_highway_data(
             if let Some(hw_type) = highway_type {
                 if !ACCEPTED_HIGHWAY_TYPES.contains(&hw_type) {
                     return;
+                }
+
+                // Skip inaccessible roads.
+                if tags.iter().any(|(k, v)| *k == "access" && (*v == "no" || *v == "private")) {
+                    return;
+                }
+
+                // Skip parking/driveway service roads.
+                if hw_type == "service" {
+                    if let Some((_, service_val)) = tags.iter().find(|(k, _)| *k == "service") {
+                        if matches!(*service_val, "driveway" | "parking_aisle" | "alley") {
+                            return;
+                        }
+                    }
                 }
 
                 let node_refs: Vec<i64> = way.refs().collect();
@@ -154,9 +160,14 @@ fn collect_highway_data(
                     .and_then(|(_, v)| v.parse::<u8>().ok())
                     .unwrap_or(1);
 
-                let oneway = tags.iter().any(|(k, v)| {
-                    *k == "oneway" && (*v == "yes" || *v == "1" || *v == "true")
-                }) || hw_type == "motorway"
+                let oneway_tag = tags.iter().find(|(k, _)| *k == "oneway").map(|(_, v)| *v);
+                let reversed = oneway_tag == Some("-1");
+                let oneway = reversed
+                    || oneway_tag == Some("yes")
+                    || oneway_tag == Some("1")
+                    || oneway_tag == Some("true")
+                    || tags.iter().any(|(k, v)| *k == "junction" && *v == "roundabout")
+                    || hw_type == "motorway"
                     || hw_type == "motorway_link";
 
                 ways.push(HighwayWay {
@@ -165,6 +176,7 @@ fn collect_highway_data(
                     speed_limit,
                     lane_count,
                     oneway,
+                    reversed,
                 });
             }
         }
@@ -184,27 +196,23 @@ fn collect_node_coords(
 
     reader.for_each(|element| {
         match element {
-            Element::Node(node) => {
-                if needed.contains(&node.id()) {
-                    coords.insert(
-                        node.id(),
-                        NodeCoord {
-                            lat: node.lat(),
-                            lon: node.lon(),
-                        },
-                    );
-                }
+            Element::Node(node) if needed.contains(&node.id()) => {
+                coords.insert(
+                    node.id(),
+                    NodeCoord {
+                        lat: node.lat(),
+                        lon: node.lon(),
+                    },
+                );
             }
-            Element::DenseNode(node) => {
-                if needed.contains(&node.id) {
-                    coords.insert(
-                        node.id,
-                        NodeCoord {
-                            lat: node.lat(),
-                            lon: node.lon(),
-                        },
-                    );
-                }
+            Element::DenseNode(node) if needed.contains(&node.id) => {
+                coords.insert(
+                    node.id,
+                    NodeCoord {
+                        lat: node.lat(),
+                        lon: node.lon(),
+                    },
+                );
             }
             _ => {}
         }
@@ -297,7 +305,8 @@ fn build_map(
             });
 
             if way.oneway {
-                map.add_road(from_id, to_id, way.lane_count, speed, length);
+                let (src, dst) = if way.reversed { (to_id, from_id) } else { (from_id, to_id) };
+                map.add_road(src, dst, way.lane_count, speed, length);
             } else {
                 map.add_two_way_road(from_id, to_id, way.lane_count, speed, length);
             }

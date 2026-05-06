@@ -6,14 +6,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use uuid::Uuid;
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 use tokio::sync::broadcast;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
-use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
-use crate::api::runner::runner::{AppState, SimulationInstance};
+use crate::simulation::engine::Simulation;
+use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
+use crate::api::runner::runner::SimulationInstance;
+use crate::api::runner::handlers::AppState;
+use crate::api::runner::map_generator::create_random_vehicles;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -30,11 +34,15 @@ pub enum ClientPacket {
     ResetSimulation {},
     AddNode { x: f32, y: f32, kind: String },
     DeleteNode { id: u32 },
-    MoveNode { id: u32, x: f32, y: f32 },
     UpdateNode { id: u32, kind: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
-    UpdateRoad { id: u32, speed_limit: f32 },
+    UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
+    SetSpeed { multiplier: u32 },
+    RequestScore {},
+    RequestDensity {},
+    AddWaypoints { vehicle_id: u64, node_ids: Vec<u32> },
+    RequestVehicles {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -44,7 +52,18 @@ pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
     VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value> },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
-    Score { score: f32, total_trip_time: f32, total_emitted_co2: f32, network_length: f32, total_distance_traveled: f32, success_rate: f32, },
+    Score {
+        score: f32,
+        total_trip_time: f32,
+        ref_total_trip_time: f32,
+        total_emitted_co2: f32,
+        ref_total_emitted_co2: f32,
+        network_length: f32,
+        ref_network_length: f32,
+        success_rate: f32, },
+    SimulationFinished {},
+    DensityMap { edges: Vec<Value> },
+    VehicleList { vehicles: Vec<Value> },
 }
 
 pub async fn ws_handler(
@@ -185,20 +204,92 @@ async fn handle_client_packet(
     socket: &mut WebSocket,
     instance: &Arc<SimulationInstance>,
 ) {
-    println!("Received Packet: {:?}", packet);
     match packet {
         ClientPacket::StartSimulation {} => {
-            println!("Client started simulation");
             instance.controller.start();
         }
 
+        ClientPacket::RequestScore {} => {
+            let broadcast = instance.broadcast.clone();
+            let engine = instance.initial_engine.clone();
+            tokio::spawn(async move {
+                let sim_clone = {
+                    let eng = engine.lock().await;
+                    eng.clone()
+                };
+
+                let score = tokio::task::spawn_blocking(move || {
+                    let mut sim = sim_clone;
+                    sim.run();
+                    sim.get_score()
+                }).await.expect("score computation panicked");
+
+                let _ = broadcast.send(ServerPacket::Score {
+                    score: score.score,
+                    total_trip_time: score.total_trip_time,
+                    ref_total_trip_time: score.ref_total_trip_time,
+                    total_emitted_co2: score.total_emitted_co2,
+                    ref_total_emitted_co2: score.ref_total_emitted_co2,
+                    network_length: score.network_length,
+                    ref_network_length: score.ref_network_length,
+                    success_rate: score.success_rate,
+                });
+            });
+        }
+
+        ClientPacket::RequestDensity {} => {
+            let broadcast = instance.broadcast.clone();
+            let engine = instance.initial_engine.clone();
+            tokio::spawn(async move {
+                let sim_clone = {
+                    let eng = engine.lock().await;
+                    eng.clone()
+                };
+
+                let edges = tokio::task::spawn_blocking(move || {
+                    let mut sim = sim_clone;
+                    let mut per_edge: HashMap<_, (f32, usize)> = HashMap::new();
+
+                    while !sim.all_vehicles_arrived && sim.current_time < sim.config.end_time {
+                        sim.step();
+                        sim.current_time += sim.config.time_step;
+
+                        for (lane_id, vehicle_indices) in &sim.vehicles_by_lane {
+                            let edge_idx = match lane_id {
+                                LaneId::Normal(edge, _) => *edge,
+                                LaneId::Internal(_, _) => continue,
+                            };
+                            for &vidx in vehicle_indices {
+                                let vel = sim.vehicles[vidx].velocity;
+                                let e = per_edge.entry(edge_idx).or_insert((0.0, 0));
+                                e.0 += vel;
+                                e.1 += 1;
+                            }
+                        }
+                    }
+
+                    per_edge.into_iter().filter_map(|(edge_idx, (sum_vel, count))| {
+                        if count == 0 { return None; }
+                        let road = &sim.config.map.graph[edge_idx];
+                        let avg_vel = sum_vel / count as f32;
+                        let speed_ratio = if road.speed_limit > 0.0 {
+                            (avg_vel / road.speed_limit).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        Some(json!({ "id": road.id, "speed_ratio": speed_ratio }))
+                    }).collect::<Vec<_>>()
+                }).await.expect("density computation panicked");
+
+                let _ = broadcast.send(ServerPacket::DensityMap { edges });
+            });
+        }
+
         ClientPacket::StopSimulation {} => {
-            println!("Client stopped simulation");
             instance.controller.stop();
         }
 
         ClientPacket::ResetSimulation {} => {
-            println!("Client reset simulation");
             instance.controller.stop();
             let mut eng = instance.engine.lock().await;
             eng.current_time = 0.0;
@@ -219,10 +310,27 @@ async fn handle_client_packet(
                 vehicle.impatience = 0.0;
             }
 
+            eng.config.end_time = eng.config.map.settings.simulation_duration;
+            let new_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();
+            eng.vehicles = create_random_vehicles(&map_snapshot, new_count);
+            eng.all_vehicles_arrived = false;
             for vehicle in eng.vehicles.iter_mut() {
-                let _ = vehicle.update_path(&map_snapshot);
+                vehicle.update_path(&map_snapshot);
             }
+
+            let vehicles: Vec<Value> = eng.vehicles.iter()
+                .map(|v| serialize_vehicle_summary(v, &map_snapshot))
+                .collect();
+            let snapshot = eng.clone();
+            drop(eng);
+            *instance.initial_engine.lock().await = snapshot;
+            let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+        }
+
+        ClientPacket::SetSpeed { multiplier } => {
+            let clamped = multiplier.clamp(1, 20);
+            instance.speed_multiplier.store(clamped, Ordering::Relaxed);
         }
 
         ClientPacket::AddNode { x, y, kind } => {
@@ -260,24 +368,6 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::MoveNode { id, x, y } => {
-            if instance.controller.is_running() {
-                send_edit_error(socket, "Stop simulation before editing the map").await;
-                return;
-            }
-            let mut eng = instance.engine.lock().await;
-            match editor::move_node(&mut eng.config.map, id, x, y) {
-                Ok(()) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
-                }
-                Err(e) => {
-                    drop(eng);
-                    send_edit_error(socket, &e).await;
-                }
-            }
-        }
 
         ClientPacket::UpdateNode { id, kind } => {
             if instance.controller.is_running() {
@@ -340,13 +430,13 @@ async fn handle_client_packet(
             }
         }
 
-        ClientPacket::UpdateRoad { id, speed_limit } => {
+        ClientPacket::UpdateRoad { id, speed_limit, lane_count } => {
             if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
             let mut eng = instance.engine.lock().await;
-            match editor::update_road(&mut eng.config.map, id, speed_limit) {
+            match editor::update_road(&mut eng.config.map, id, speed_limit, lane_count) {
                 Ok(()) => {
                     let (nodes, edges) = serialize_map(&eng.config.map);
                     drop(eng);
@@ -356,6 +446,36 @@ async fn handle_client_packet(
                     drop(eng);
                     send_edit_error(socket, &e).await;
                 }
+            }
+        }
+
+        ClientPacket::AddWaypoints { vehicle_id, node_ids } => {
+            let mut eng = instance.engine.lock().await;
+            let map = eng.config.map.clone();
+            let waypoints: Vec<_> = node_ids
+                .iter()
+                .filter_map(|nid| map.node_index_map.get(nid).copied())
+                .collect();
+            if let Some(v) = eng.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+                v.waypoints = waypoints;
+                v.update_path(&map);
+            }
+            let vehicles: Vec<Value> = eng.vehicles.iter()
+                .map(|v| serialize_vehicle_summary(v, &map))
+                .collect();
+            drop(eng);
+            let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+        }
+
+        ClientPacket::RequestVehicles {} => {
+            let eng = instance.engine.lock().await;
+            let vehicles: Vec<Value> = eng.vehicles.iter()
+                .map(|v| serialize_vehicle_summary(v, &eng.config.map))
+                .collect();
+            drop(eng);
+            let packet = ServerPacket::VehicleList { vehicles };
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
             }
         }
     }
@@ -396,13 +516,28 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
             let has_traffic_light = map.traffic_lights
                 .values()
                 .any(|c| c.intersection_id == n.id);
+            let internal_lanes: Vec<Value> = n.internal_lanes.iter().map(|lane| {
+                let link_type = map.graph.edge_indices()
+                    .flat_map(|e| map.graph[e].lanes.iter())
+                    .flat_map(|l| l.links.iter())
+                    .find(|link| link.via_internal_lane_id == lane.id)
+                    .map(|link| format!("{:?}", link.link_type))
+                    .unwrap_or_else(|| "Priority".to_string());
+                json!({
+                    "id": lane.id,
+                    "entry": [lane.entry.0, lane.entry.1],
+                    "exit": [lane.exit.0, lane.exit.1],
+                    "link_type": link_type,
+                })
+            }).collect();
             json!({
                 "id": n.id,
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
                 "y": n.center_coordinates.y,
                 "has_traffic_light": has_traffic_light,
-                "radius": n.radius
+                "radius": n.radius,
+                "internal_lanes": internal_lanes,
             })
         })
         .collect();
@@ -434,6 +569,9 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
 pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
     let coords = vehicle.get_coordinates(sim_map);
     let heading = vehicle.get_heading(sim_map);
+    let waypoint_ids: Vec<u32> = vehicle.waypoints.iter()
+        .map(|&ni| sim_map.graph[ni].id)
+        .collect();
     json!({
         "id": vehicle.id,
         "x": coords.x,
@@ -447,7 +585,34 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
             VehicleState::WaitingToDepart => "Waiting",
             VehicleState::OnRoad => "Moving",
             VehicleState::Arrived => "Arrived",
-        }
+        },
+        "motorization": match vehicle.motorization {
+            VehicleType::Hybride    => "Hybride",
+            VehicleType::Electrique => "Electrique",
+            VehicleType::Essence    => "Essence",
+            VehicleType::Diesel     => "Diesel",
+        },
+        "origin_id": sim_map.graph[vehicle.trip.origin].id,
+        "destination_id": sim_map.graph[vehicle.trip.destination].id,
+        "waypoint_ids": waypoint_ids,
+    })
+}
+
+pub fn serialize_vehicle_summary(vehicle: &Vehicle, map: &Map) -> Value {
+    let waypoint_ids: Vec<u32> = vehicle.waypoints.iter()
+        .map(|&ni| map.graph[ni].id)
+        .collect();
+    json!({
+        "id": vehicle.id,
+        "origin_id": map.graph[vehicle.trip.origin].id,
+        "destination_id": map.graph[vehicle.trip.destination].id,
+        "motorization": match vehicle.motorization {
+            VehicleType::Hybride    => "Hybride",
+            VehicleType::Electrique => "Electrique",
+            VehicleType::Essence    => "Essence",
+            VehicleType::Diesel     => "Diesel",
+        },
+        "waypoint_ids": waypoint_ids,
     })
 }
 
