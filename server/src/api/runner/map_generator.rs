@@ -7,7 +7,7 @@ use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
-use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
@@ -115,7 +115,17 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
     for _ in 0..count {
         let (origin, destination) = valid_pairs[rand::random_range(0..valid_pairs.len())];
 
-        let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0);
+        let roll: u32 = rand::random_range(0..100);
+        let (motorization, max_speed, length) = if roll < 45 {
+            (VehicleType::Hybride, 12.5, 10.0)
+        } else if roll < 75 {
+            (VehicleType::Electrique, 13.9, 8.0)
+        } else if roll < 90 {
+            (VehicleType::Essence, 11.1, 10.0)
+        } else {
+            (VehicleType::Diesel, 11.1, 10.0)
+        };
+        let spec = VehicleSpec::new(VehicleKind::Car, max_speed, 4.0, 3.0, 1.0, length);
 
         let trip = TripRequest {
             origin,
@@ -123,7 +133,7 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
             departure_time: 0.0,
         };
 
-        vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip));
+        vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip, motorization));
     }
 
     vehicles
