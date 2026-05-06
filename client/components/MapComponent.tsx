@@ -7,11 +7,14 @@ import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
 import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData } from './map/types';
 import ScoreModal from './ScoreModal';
+import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
-import { calculateCost, estimateRoadCost, estimateNodeCost, MAX_BUDGET } from './map/budget';
+import { calculateCost, estimateRoadCost, estimateNodeCost, DEFAULT_BUDGET_CONFIG } from './map/budget';
 
-export default function MapComponent() {
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+export default function MapComponent({ uuid }: { uuid: string }) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
@@ -26,7 +29,15 @@ export default function MapComponent() {
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
 		densityView, setDensityView, setIsDensityLoading,
 		showIntersections,
+		showSettings, setShowSettings, mapSettings, setMapSettings,
 	} = useEditMode();
+
+	useEffect(() => {
+		fetch(`${API_URL}/api/simulations/${uuid}/settings`)
+			.then(r => r.json())
+			.then(data => setMapSettings(data))
+			.catch(() => {});
+	}, [uuid]);
 
 	const simStateRef = useRef(simState);
 	const modeRef = useRef(mode);
@@ -140,7 +151,8 @@ export default function MapComponent() {
 
 	const handleAddNode = useCallback((x: number, y: number) => {
 		if (mapData) {
-			if (calculateCost(mapData) + estimateNodeCost('Intersection') > MAX_BUDGET) {
+			const cfg = mapSettings ?? DEFAULT_BUDGET_CONFIG;
+			if (calculateCost(mapData, cfg) + estimateNodeCost('Intersection', cfg) > cfg.max_budget) {
 				setEditError('Budget exceeded: not enough funds to add this intersection.');
 				return;
 			}
@@ -159,7 +171,8 @@ export default function MapComponent() {
 				const fromNode = mapData.nodes.find(n => n.id === pendingRoadFrom);
 				const toNode   = mapData.nodes.find(n => n.id === nodeId);
 				if (fromNode && toNode) {
-					if (calculateCost(mapData) + estimateRoadCost(fromNode, toNode, 2) > MAX_BUDGET) {
+					const cfg = mapSettings ?? DEFAULT_BUDGET_CONFIG;
+					if (calculateCost(mapData, cfg) + estimateRoadCost(fromNode, toNode, 2, cfg) > cfg.max_budget) {
 						setEditError('Budget exceeded: not enough funds to build this road.');
 						setPendingRoadFrom(null);
 						return;
@@ -224,6 +237,10 @@ export default function MapComponent() {
 
 				{showScore && score && (
 					<ScoreModal score={score} onClose={() => setShowScore(false)} />
+				)}
+
+				{showSettings && (
+					<SettingsModal uuid={uuid} onClose={() => setShowSettings(false)} />
 				)}
 			</div>
 

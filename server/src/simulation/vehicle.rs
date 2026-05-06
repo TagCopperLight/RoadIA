@@ -131,10 +131,6 @@ impl Vehicle {
         match fastest_path(map, self.trip.origin, self.trip.destination) {
             Some(path) => self.path = path,
             None => {/*pass*/},
-            // None => eprintln!(
-            //     "Warning: no path found for vehicle {} ({:?} → {:?}), vehicle will not depart",
-            //     self.id, self.trip.origin, self.trip.destination
-            // ),
         }
         self.path_index = 0;
     }

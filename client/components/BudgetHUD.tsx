@@ -1,7 +1,8 @@
 'use client';
 
 import { MapData } from './map/types';
-import { calculateCost, MAX_BUDGET } from './map/budget';
+import { calculateCost, DEFAULT_BUDGET_CONFIG } from './map/budget';
+import { useEditMode } from './EditModeContext';
 
 interface BudgetHUDProps {
     mapData: MapData | null;
@@ -14,8 +15,10 @@ function fmt(n: number): string {
 }
 
 export default function BudgetHUD({ mapData }: BudgetHUDProps) {
-    const spent = mapData ? calculateCost(mapData) : 0;
-    const ratio = Math.min(spent / MAX_BUDGET, 1);
+    const { mapSettings } = useEditMode();
+    const cfg = mapSettings ?? DEFAULT_BUDGET_CONFIG;
+    const spent = mapData ? calculateCost(mapData, cfg) : 0;
+    const ratio = Math.min(spent / cfg.max_budget, 1);
     const barColor =
         ratio > 0.9 ? 'bg-red-500' :
         ratio > 0.7 ? 'bg-amber-400' :
@@ -32,7 +35,7 @@ export default function BudgetHUD({ mapData }: BudgetHUDProps) {
             </div>
             <div className="flex justify-between items-baseline">
                 <span className="text-sm font-semibold tabular-nums">{fmt(spent)}</span>
-                <span className="text-xs text-gray-400">/ {fmt(MAX_BUDGET)}</span>
+                <span className="text-xs text-gray-400">/ {fmt(cfg.max_budget)}</span>
             </div>
         </div>
     );
