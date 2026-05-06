@@ -2,13 +2,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use tokio::sync::{Mutex, broadcast};
 use tokio::time::{sleep, Duration};
+use uuid::Uuid;
 
 use crate::api::websocket::{ServerPacket, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
 
-const VEHICLE_COUNT: usize = 500;
 
 #[derive(Clone)]
 pub struct SimulationController {
@@ -48,18 +48,22 @@ pub struct SimulationInstance {
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
     pub speed_multiplier: AtomicU32,
+    pub file_uuid: std::sync::Mutex<Option<Uuid>>,
 }
 
 impl SimulationInstance {
     pub fn new(map: crate::map::model::Map) -> Arc<Self> {
-        let vehicles = create_random_vehicles(&map, VEHICLE_COUNT);
+        let vehicle_count = map.settings.vehicle_count;
+        let end_time = map.settings.simulation_duration;
+        let vehicles = create_random_vehicles(&map, vehicle_count);
         let token = generate_token();
 
         let config = SimulationConfig {
             start_time: 0.0,
-            end_time: 600.0,
+            end_time,
             time_step: 0.05,
             minimum_gap: 2.0,
+            score_weights: crate::simulation::config::ScoreWeights::from_settings(&map.settings),
             map,
         };
 
@@ -79,6 +83,7 @@ impl SimulationInstance {
             controller,
             active_connections: AtomicUsize::new(0),
             speed_multiplier: AtomicU32::new(3),
+            file_uuid: std::sync::Mutex::new(None),
         });
 
         tokio::spawn({
@@ -144,9 +149,11 @@ impl SimulationInstance {
         instance
     }
 
-    pub fn from_file(path: &str) -> Result<Arc<Self>, String> {
+    pub fn from_file(path: &str, uuid: Uuid) -> Result<Arc<Self>, String> {
         let map = crate::map::model::Map::load(path).map_err(|e| e.to_string())?;
-        Ok(Self::new(map))
+        let instance = Self::new(map);
+        *instance.file_uuid.lock().unwrap() = Some(uuid);
+        Ok(instance)
     }
 
     pub fn new_default() -> Arc<Self> {

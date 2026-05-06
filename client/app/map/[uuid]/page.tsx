@@ -10,7 +10,7 @@ import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket'
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
-    const { isScoringLoading, setIsScoringLoading, showScore } = useEditMode();
+    const { isScoringLoading, setIsScoringLoading, showScore, setShowSettings } = useEditMode();
     const ws = useWs();
     const router = useRouter();
     const params = useParams();
@@ -113,6 +113,7 @@ function Header() {
                                 onClick={() => {
                                     if (item === 'Statistiques') { if (!isScoringLoading && !showScore) { ws?.send('requestScore', {}); setIsScoringLoading(true); } return; }
                                     if (item === 'Fichier') { setOpenMenu(openMenu === 'Fichier' ? null : 'Fichier'); return; }
+                                    if (item === 'Paramètres') { setOpenMenu(null); setShowSettings(true); return; }
                                 }}
                                 className={`transition-opacity select-none ${item === 'Statistiques' && (isScoringLoading || showScore) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-50'}`}
                             >
