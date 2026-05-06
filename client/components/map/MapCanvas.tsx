@@ -12,6 +12,8 @@ interface MapCanvasProps {
 	data: MapData;
 	vehicles: VehicleData[];
 	trafficLights: Map<number, TrafficLightData>;
+	roadDensity: Map<number, number>;
+	densityView: boolean;
 	mode: AppMode;
 	editTool: EditTool;
 	selectedElement: SelectedElement;
@@ -26,6 +28,8 @@ export function MapCanvas({
 	data,
 	vehicles,
 	trafficLights,
+	roadDensity,
+	densityView,
 	mode,
 	editTool,
 	selectedElement,
@@ -129,6 +133,9 @@ export function MapCanvas({
 							endNode={endNode}
 							isSelected={isSelected}
 							isEditMode={isEditMode}
+							densityView={densityView}
+							speedRatio={densityView ? roadDensity.get(canonical.id) : undefined}
+							reverseSpeedRatio={densityView && reverse ? roadDensity.get(reverse.id) : undefined}
 							onSelect={isEditMode && editTool === 'select'
 								? () => onSelectRoad(canonical.id, reverse?.id)
 								: undefined}
@@ -177,7 +184,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom]);
+	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, pendingRoadFrom, roadDensity, densityView]);
 
 	return (
 		<pixiCustomViewport

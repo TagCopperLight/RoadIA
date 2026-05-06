@@ -10,6 +10,17 @@ interface RoadProps {
 	isSelected?: boolean;
 	isEditMode?: boolean;
 	onSelect?: () => void;
+	densityView?: boolean;
+	speedRatio?: number;
+	reverseSpeedRatio?: number;
+}
+
+function speedRatioToColor(ratio: number): number {
+	// ratio=0 (stuck): #EF4444 red  →  ratio=1 (flowing): #22C55E green
+	const r = Math.round(0xEF + (0x22 - 0xEF) * ratio);
+	const g = Math.round(0x44 + (0xC5 - 0x44) * ratio);
+	const b = Math.round(0x44 + (0x5E - 0x44) * ratio);
+	return (r << 16) | (g << 8) | b;
 }
 
 function drawDashedLine(
@@ -42,7 +53,7 @@ function drawDashedLine(
 	}
 }
 
-export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, endNode, isSelected, isEditMode, onSelect }: RoadProps) {
+export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, endNode, isSelected, isEditMode, onSelect, densityView, speedRatio, reverseSpeedRatio }: RoadProps) {
 	return (
 		<pixiGraphics
 			eventMode={isEditMode && onSelect ? 'static' : 'none'}
@@ -73,10 +84,24 @@ export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, 
 					g.fill();
 				}
 
-				// Road surface (asphalt gray)
-				g.setFillStyle({ color: 0x555555 });
-				g.rect(0, -bwWidth, length, fwWidth + bwWidth);
-				g.fill();
+				// Road surface
+				if (densityView && isTwoWay) {
+					const fwColor = speedRatio !== undefined ? speedRatioToColor(speedRatio) : 0x555555;
+					const bwColor = reverseSpeedRatio !== undefined ? speedRatioToColor(reverseSpeedRatio) : 0x555555;
+					g.setFillStyle({ color: fwColor });
+					g.rect(0, 0, length, fwWidth);
+					g.fill();
+					g.setFillStyle({ color: bwColor });
+					g.rect(0, -bwWidth, length, bwWidth);
+					g.fill();
+				} else {
+					const surfaceColor = densityView && speedRatio !== undefined
+						? speedRatioToColor(speedRatio)
+						: 0x555555;
+					g.setFillStyle({ color: surfaceColor });
+					g.rect(0, -bwWidth, length, fwWidth + bwWidth);
+					g.fill();
+				}
 
 				// Lane dividers (dashed white)
 				for (let i = 1; i < fwCount; i++) {
