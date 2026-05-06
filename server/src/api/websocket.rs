@@ -9,12 +9,12 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tokio::sync::broadcast;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::engine::Simulation;
-use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
+use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
 
@@ -39,6 +39,7 @@ pub enum ClientPacket {
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
     SetSpeed { multiplier: u32 },
     RequestScore {},
+    RequestDensity {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -58,6 +59,7 @@ pub enum ServerPacket {
         ref_network_length: f32,
         success_rate: f32, },
     SimulationFinished {},
+    DensityMap { edges: Vec<Value> },
 }
 
 pub async fn ws_handler(
@@ -231,6 +233,55 @@ async fn handle_client_packet(
                     ref_network_length: score.ref_network_length,
                     success_rate: score.success_rate,
                 });
+            });
+        }
+
+        ClientPacket::RequestDensity {} => {
+            println!("Client requested density map");
+            let broadcast = instance.broadcast.clone();
+            let engine = instance.engine.clone();
+            tokio::spawn(async move {
+                let sim_clone = {
+                    let eng = engine.lock().await;
+                    eng.clone()
+                };
+
+                let edges = tokio::task::spawn_blocking(move || {
+                    let mut sim = sim_clone;
+                    let mut per_edge: HashMap<_, (f32, usize)> = HashMap::new();
+
+                    while !sim.all_vehicles_arrived && sim.current_time < sim.config.end_time {
+                        sim.step();
+                        sim.current_time += sim.config.time_step;
+
+                        for (lane_id, vehicle_indices) in &sim.vehicles_by_lane {
+                            let edge_idx = match lane_id {
+                                LaneId::Normal(edge, _) => *edge,
+                                LaneId::Internal(_, _) => continue,
+                            };
+                            for &vidx in vehicle_indices {
+                                let vel = sim.vehicles[vidx].velocity;
+                                let e = per_edge.entry(edge_idx).or_insert((0.0, 0));
+                                e.0 += vel;
+                                e.1 += 1;
+                            }
+                        }
+                    }
+
+                    per_edge.into_iter().filter_map(|(edge_idx, (sum_vel, count))| {
+                        if count == 0 { return None; }
+                        let road = &sim.config.map.graph[edge_idx];
+                        let avg_vel = sum_vel / count as f32;
+                        let speed_ratio = if road.speed_limit > 0.0 {
+                            (avg_vel / road.speed_limit).clamp(0.0, 1.0)
+                        } else {
+                            0.0
+                        };
+                        Some(json!({ "id": road.id, "speed_ratio": speed_ratio }))
+                    }).collect::<Vec<_>>()
+                }).await.expect("density computation panicked");
+
+                let _ = broadcast.send(ServerPacket::DensityMap { edges });
             });
         }
 

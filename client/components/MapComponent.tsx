@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePacket, useWs } from '@/app/websocket/websocket';
 import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData, ScoreData, TrafficLightData } from './map/types';
+import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData } from './map/types';
 import ScoreModal from './ScoreModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
@@ -17,12 +17,15 @@ export default function MapComponent() {
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
+	const [roadDensity, setRoadDensity] = useState<Map<number, number>>(new Map());
 	const [editError, setEditError] = useState<string | null>(null);
 	const ws = useWs();
 	const {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
+		densityView, setDensityView, setIsDensityLoading,
+		showIntersections,
 	} = useEditMode();
 
 	const simStateRef = useRef(simState);
@@ -72,6 +75,15 @@ export default function MapComponent() {
 		setShowScore(true);
 	});
 
+	usePacket("densityMap", (data) => {
+		const result = data as { edges: RoadMetricData[] };
+		const next = new Map<number, number>();
+		for (const m of result.edges) next.set(m.id, m.speed_ratio);
+		setRoadDensity(next);
+		setIsDensityLoading(false);
+		setDensityView(true);
+	});
+
 	usePacket("mapEdit", (data) => {
 		const result = data as { success: boolean; error?: string; nodes: MapData['nodes']; edges: MapData['edges'] };
 		if (result.success) {
@@ -115,11 +127,16 @@ export default function MapComponent() {
 	}, [editError]);
 
 	// Clear vehicles when simulation is reset
-	const [prevResetAt, setPrevResetAt] = useState(simulationResetAt);
-	if (simulationResetAt !== prevResetAt) {
-		setPrevResetAt(simulationResetAt);
-		setVehicles([]);
-	}
+	useEffect(() => {
+		if (simulationResetAt === 0) return;
+		const t = setTimeout(() => {
+			setVehicles([]);
+			setRoadDensity(new Map());
+			setDensityView(false);
+			setIsDensityLoading(false);
+		}, 0);
+		return () => clearTimeout(t);
+	}, [simulationResetAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
 	const handleAddNode = useCallback((x: number, y: number) => {
 		if (mapData) {
@@ -174,6 +191,9 @@ export default function MapComponent() {
 						mapData={mapData}
 						vehicles={visibleVehicles}
 						trafficLights={trafficLights}
+						roadDensity={roadDensity}
+						densityView={densityView}
+						showIntersections={showIntersections}
 						mode={mode}
 						editTool={editTool}
 						selectedElement={selectedElement}
