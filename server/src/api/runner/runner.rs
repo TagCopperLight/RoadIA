@@ -15,7 +15,7 @@ use crate::api::websocket::{ws_handler, ServerPacket, serialize_vehicle, seriali
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::Vehicle;
-use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map, create_simple_buses};
+use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
 use crate::scoring::Score;
 
 #[derive(Clone)]
@@ -56,6 +56,7 @@ pub struct SimulationInstance {
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
     pub speed_multiplier: AtomicU32,
+    pub bus_routes: Arc<RwLock<HashMap<u64, (String, Vec<u32>)>>>, // route_id -> (route_name, stop_node_ids)
 }
 
 impl SimulationInstance {
@@ -86,6 +87,7 @@ impl SimulationInstance {
             controller,
             active_connections: AtomicUsize::new(0),
             speed_multiplier: AtomicU32::new(3),
+                    bus_routes: Arc::new(RwLock::new(HashMap::new())),
         });
 
         tokio::spawn({
@@ -170,13 +172,10 @@ impl SimulationInstance {
                 println!("Map has {} nodes and {} edges", map.graph.node_count(), map.graph.edge_count());
                 
                 // Create regular vehicles (cars)
-                let mut vehicles = create_random_vehicles(&map, 500);
+                let vehicles = create_random_vehicles(&map, 500);
                 
-                // Create buses - same amount as cars
-                let (bus_vehicles, bus_states) = create_simple_buses(&map, 500);
-                
-                // Combine all vehicles
-                vehicles.extend(bus_vehicles);
+                // No auto-generated buses - only user-created bus routes will be added
+                let bus_states = HashMap::new();
                 
                 let instance = Self::new(map, vehicles);
                 

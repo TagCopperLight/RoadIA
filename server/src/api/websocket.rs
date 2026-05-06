@@ -15,6 +15,8 @@ use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::vehicle::{Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::{AppState, SimulationInstance};
+use crate::simulation::vehicle::TripRequest;
+use crate::simulation::bus::BusSpecifications;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -36,6 +38,8 @@ pub enum ClientPacket {
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
     SetSpeed { multiplier: u32 },
+    SetBusRoute { route_id: u64, route_name: String, stop_node_ids: Vec<u32> },
+    DeleteBusRoute { route_id: u64 },
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -226,6 +230,8 @@ async fn handle_client_packet(
                 vehicle.registered_link_ids = Vec::new();
                 vehicle.waiting_time = 0.0;
                 vehicle.impatience = 0.0;
+                vehicle.arrived_at = None;
+                vehicle.clear_waypoints();
             }
 
             let map_snapshot = eng.config.map.clone();
@@ -237,6 +243,68 @@ async fn handle_client_packet(
         ClientPacket::SetSpeed { multiplier } => {
             let clamped = multiplier.clamp(1, 20);
             instance.speed_multiplier.store(clamped, Ordering::Relaxed);
+        }
+
+        ClientPacket::SetBusRoute { route_id, route_name, stop_node_ids } => {
+            let mut routes = instance.bus_routes.write().await;
+            routes.insert(route_id, (route_name.clone(), stop_node_ids.clone()));
+            
+            // Create bus vehicle immediately and add it to the simulation.
+            if stop_node_ids.len() >= 2 {
+                let mut eng = instance.engine.lock().await;
+                let map = &eng.config.map;
+
+                let stop_nodes: Vec<_> = stop_node_ids
+                    .iter()
+                    .filter_map(|node_id| map.node_index_map.get(node_id).copied())
+                    .collect();
+
+                if stop_nodes.len() != stop_node_ids.len() {
+                    println!("Error: Could not find all node IDs for bus route {}", route_id);
+                    return;
+                }
+
+                let origin = stop_nodes[0];
+                let destination = stop_nodes[stop_nodes.len() - 1];
+                let waypoints = if stop_nodes.len() > 2 {
+                    stop_nodes[1..stop_nodes.len() - 1].to_vec()
+                } else {
+                    Vec::new()
+                };
+
+                let trip = TripRequest {
+                    origin,
+                    destination,
+                    departure_time: 0.0,
+                };
+
+                let spec = BusSpecifications::default_spec();
+                let mut bus = Vehicle::new(route_id, spec, trip);
+                bus.waypoints = waypoints;
+                bus.current_waypoint_index = 0;
+                bus.update_path(map);
+
+                eng.vehicles.retain(|v| v.id != route_id);
+                eng.vehicles.push(bus);
+                println!("Created bus {} for route '{}' with {} stops", route_id, route_name, stop_node_ids.len());
+            } else {
+                println!("Error: Bus route must have at least 2 stops");
+            }
+        }
+
+        ClientPacket::DeleteBusRoute { route_id } => {
+            {
+                let mut routes = instance.bus_routes.write().await;
+                routes.remove(&route_id);
+            }
+
+            let mut eng = instance.engine.lock().await;
+            let before = eng.vehicles.len();
+            eng.vehicles
+                .retain(|v| !(v.spec.kind == VehicleKind::Bus && v.id == route_id));
+            let removed = before.saturating_sub(eng.vehicles.len());
+
+            println!("Deleted bus route {} (removed {} bus vehicle(s))", route_id, removed);
         }
 
         ClientPacket::AddNode { x, y, kind } => {
