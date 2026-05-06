@@ -7,6 +7,7 @@ use crate::map::intersection::{self, IntersectionKind};
 use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
+use crate::simulation::commute::CommutePlan;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
@@ -72,13 +73,18 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
 }
 
 
-pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
+pub struct GeneratedCommutes {
+    pub vehicles: Vec<Vehicle>,
+    pub commute_plans: Vec<CommutePlan>,
+}
+
+pub fn create_random_commutes(map: &Map, commute_plan_count: usize) -> GeneratedCommutes {
     let mut vehicles = Vec::new();
-    let mut ids = 0..;
+    let mut commute_plans = Vec::new();
 
     let nodes: Vec<NodeIndex> = map.graph.node_indices().collect();
     if nodes.is_empty() {
-        return vehicles;
+        return GeneratedCommutes { vehicles, commute_plans };
     }
 
     let habitations: Vec<NodeIndex> = nodes.iter()
@@ -93,26 +99,34 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
 
     if habitations.is_empty() || workplaces.is_empty() {
         println!("Warning: Cannot create vehicles, missing Habitation or Workplace nodes");
-        return vehicles;
+        return GeneratedCommutes { vehicles, commute_plans };
     }
 
-    // Pre-calculate reachable pairs using BFS to avoid generating vehicles with no possible path
+    // Pre-calculate commute pairs that are reachable in both directions.
     let mut valid_pairs = Vec::new();
     for &h in &habitations {
-        let mut bfs = petgraph::visit::Bfs::new(&map.graph, h);
-        while let Some(nx) = bfs.next(&map.graph) {
-            if nx != h && matches!(map.graph[nx].kind, IntersectionKind::Workplace) {
-                valid_pairs.push((h, nx));
+        for &w in &workplaces {
+            if h == w {
+                continue;
+            }
+            if crate::simulation::vehicle::fastest_path(map, h, w).is_some()
+                && crate::simulation::vehicle::fastest_path(map, w, h).is_some()
+            {
+                valid_pairs.push((h, w));
             }
         }
     }
 
     if valid_pairs.is_empty() {
-        println!("Warning: No valid paths exist between any Habitation and Workplace on this map");
-        return vehicles;
+        println!("Warning: No valid commute paths exist between any Habitation and Workplace on this map");
+        return GeneratedCommutes { vehicles, commute_plans };
     }
 
-    for _ in 0..count {
+    while commute_plans.len() < commute_plan_count {
+        let commute_plan_id = commute_plans.len() as u64;
+        let outbound_vehicle_id = vehicles.len() as u64;
+        let return_vehicle_id = outbound_vehicle_id + 1;
+
         let (origin, destination) = valid_pairs[rand::random_range(0..valid_pairs.len())];
 
         let roll: u32 = rand::random_range(0..100);
@@ -127,16 +141,45 @@ pub fn create_random_vehicles(map: &Map, count: usize) -> Vec<Vehicle> {
         };
         let spec = VehicleSpec::new(VehicleKind::Car, max_speed, 4.0, 3.0, 1.0, length);
 
-        let trip = TripRequest {
+        let outbound_trip = TripRequest {
             origin,
             destination,
             departure_time: 0.0,
         };
+        let return_trip = TripRequest {
+            origin: destination,
+            destination: origin,
+            departure_time: f32::MAX,
+        };
 
-        vehicles.push(Vehicle::new(ids.next().unwrap(), spec, trip, motorization));
+        let mut outbound_vehicle = Vehicle::new(outbound_vehicle_id, spec, outbound_trip, motorization);
+        outbound_vehicle.commute_plan_id = Some(commute_plan_id);
+        if !outbound_vehicle.update_path(map) {
+            continue;
+        }
+
+        let mut return_vehicle = Vehicle::new(return_vehicle_id, spec, return_trip, motorization);
+        return_vehicle.commute_plan_id = Some(commute_plan_id);
+        if !return_vehicle.update_path(map) {
+            continue;
+        }
+
+        let waiting_time_s = 5.0;
+        vehicles.push(outbound_vehicle);
+        vehicles.push(return_vehicle);
+        commute_plans.push(CommutePlan::new(
+            commute_plan_id,
+            outbound_vehicle_id,
+            return_vehicle_id,
+            waiting_time_s,
+        ));
     }
 
-    vehicles
+    GeneratedCommutes { vehicles, commute_plans }
+}
+
+pub fn create_random_vehicles(map: &Map, commute_plan_count: usize) -> Vec<Vehicle> {
+    create_random_commutes(map, commute_plan_count).vehicles
 }
 
 pub fn create_connected_map(num_nodes: usize, width: f32, height: f32) -> Map {

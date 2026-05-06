@@ -44,6 +44,7 @@ export interface VehicleData {
     origin_id?: number;
     destination_id?: number;
     waypoint_ids?: number[];
+	commute_plan_id: number | null;
 }
 
 export interface VehicleSummary {
@@ -52,6 +53,7 @@ export interface VehicleSummary {
     destination_id: number;
     motorization: Motorization;
     waypoint_ids: number[];
+	commute_plan_id: number | null;
 }
 
 export interface TrafficLightData {

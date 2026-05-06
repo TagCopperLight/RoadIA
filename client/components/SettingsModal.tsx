@@ -110,8 +110,8 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                             {section === 'simulation' && (
                                 <div className="space-y-5">
                                     <FieldRow
-                                        label="Nombre de véhicules"
-                                        hint="Simulés lors de chaque simulation"
+                                        label="Nombre de trajets"
+                                        hint="Chaque trajet crée 2 véhicules"
                                     >
                                         <NumberInput
                                             value={form.vehicle_count}

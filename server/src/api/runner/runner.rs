@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::api::websocket::{ServerPacket, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+use crate::api::runner::map_generator::{create_random_commutes, create_osm_map};
 
 
 #[derive(Clone)]
@@ -54,9 +54,9 @@ pub struct SimulationInstance {
 
 impl SimulationInstance {
     pub fn new(map: crate::map::model::Map) -> Arc<Self> {
-        let vehicle_count = map.settings.vehicle_count;
+        let commute_plan_count = map.settings.vehicle_count;
         let end_time = map.settings.simulation_duration;
-        let vehicles = create_random_vehicles(&map, vehicle_count);
+        let generated = create_random_commutes(&map, commute_plan_count);
         let token = generate_token();
 
         let config = SimulationConfig {
@@ -68,10 +68,7 @@ impl SimulationInstance {
             map,
         };
 
-        let mut simulation = SimulationEngine::new(config, vehicles);
-        for vehicle in &mut simulation.vehicles {
-            vehicle.update_path(&simulation.config.map);
-        }
+        let simulation = SimulationEngine::new_with_commutes(config, generated.vehicles, generated.commute_plans);
 
         let initial_snapshot = simulation.clone();
         let engine = Arc::new(Mutex::new(simulation));

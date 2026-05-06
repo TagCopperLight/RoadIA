@@ -15,6 +15,7 @@ const MOTOR_STYLE: Record<Motorization, { color: number; w: number; h: number }>
 
 export function Vehicle({ data }: VehicleProps) {
     const style = data.motorization ? MOTOR_STYLE[data.motorization] : MOTOR_STYLE.Essence;
+    const alpha = data.state === 'Waiting' ? 0.45 : 1.0;
 
     const drawCar = useCallback((g: Graphics) => {
         g.clear();
@@ -23,7 +24,7 @@ export function Vehicle({ data }: VehicleProps) {
         g.fill();
     }, [style.color, style.w, style.h]);
 
-    if (data.state === 'Arrived' || data.state === 'Waiting') {
+    if (data.state === 'Arrived') {
         return null;
     }
 
@@ -32,6 +33,7 @@ export function Vehicle({ data }: VehicleProps) {
             x={data.x}
             y={data.y}
             rotation={data.heading ?? 0}
+            alpha={alpha}
             draw={drawCar}
         />
     );

@@ -17,7 +17,7 @@ use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
-use crate::api::runner::map_generator::create_random_vehicles;
+use crate::api::runner::map_generator::create_random_commutes;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -292,32 +292,15 @@ async fn handle_client_packet(
         ClientPacket::ResetSimulation {} => {
             instance.controller.stop();
             let mut eng = instance.engine.lock().await;
-            eng.current_time = 0.0;
-            eng.vehicles_by_lane.clear();
-            eng.link_states.clear();
-
-            for vehicle in &mut eng.vehicles {
-                vehicle.state = VehicleState::WaitingToDepart;
-                vehicle.position_on_lane = 0.0;
-                vehicle.velocity = 0.0;
-                vehicle.previous_velocity = 0.0;
-                vehicle.path = Vec::new();
-                vehicle.path_index = 0;
-                vehicle.current_lane = None;
-                vehicle.drive_plan = Vec::new();
-                vehicle.registered_link_ids = Vec::new();
-                vehicle.waiting_time = 0.0;
-                vehicle.impatience = 0.0;
-            }
-
             eng.config.end_time = eng.config.map.settings.simulation_duration;
-            let new_count = eng.config.map.settings.vehicle_count;
+            let commute_plan_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();
-            eng.vehicles = create_random_vehicles(&map_snapshot, new_count);
-            eng.all_vehicles_arrived = false;
-            for vehicle in eng.vehicles.iter_mut() {
-                vehicle.update_path(&map_snapshot);
-            }
+            let generated = create_random_commutes(&map_snapshot, commute_plan_count);
+            *eng = crate::simulation::engine::SimulationEngine::new_with_commutes(
+                eng.config.clone(),
+                generated.vehicles,
+                generated.commute_plans,
+            );
 
             let vehicles: Vec<Value> = eng.vehicles.iter()
                 .map(|v| serialize_vehicle_summary(v, &map_snapshot))
@@ -595,6 +578,7 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
         "origin_id": sim_map.graph[vehicle.trip.origin].id,
         "destination_id": sim_map.graph[vehicle.trip.destination].id,
         "waypoint_ids": waypoint_ids,
+        "commute_plan_id": vehicle.commute_plan_id,
     })
 }
 
@@ -613,6 +597,7 @@ pub fn serialize_vehicle_summary(vehicle: &Vehicle, map: &Map) -> Value {
             VehicleType::Diesel     => "Diesel",
         },
         "waypoint_ids": waypoint_ids,
+        "commute_plan_id": vehicle.commute_plan_id,
     })
 }
 

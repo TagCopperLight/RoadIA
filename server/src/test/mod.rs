@@ -3,6 +3,7 @@ mod vehicle_tests;
 mod intersection_tests;
 mod editor_tests;
 mod engine_tests;
+mod commute_tests;
 mod simulation_tests;
 
 use petgraph::graph::NodeIndex;
