@@ -27,7 +27,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
-		densityView, setDensityView, setIsDensityLoading,
+		densityView, setDensityView, isDensityLoading, setIsDensityLoading,
 		showIntersections,
 		showSettings, setShowSettings, mapSettings, setMapSettings,
 	} = useEditMode();
@@ -232,6 +232,13 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
 						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
 						<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
+					</div>
+				)}
+
+				{isDensityLoading && (
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
+						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+						<span className="text-sm font-medium text-neutral-800">Calcul de la densité...</span>
 					</div>
 				)}
 
