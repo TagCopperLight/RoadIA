@@ -78,6 +78,26 @@ function IconModeSimulation() {
     );
 }
 
+function IconIntersection() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="7" />
+            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function IconDensity() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="10" width="18" height="4" rx="1" />
+            <circle cx="7"  cy="12" r="1.5" fill="#22C55E" stroke="none" />
+            <circle cx="12" cy="12" r="1.5" fill="#EAB308" stroke="none" />
+            <circle cx="17" cy="12" r="1.5" fill="#EF4444" stroke="none" />
+        </svg>
+    );
+}
+
 function _IconStatistics() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -124,21 +144,35 @@ export default function Toolbar() {
     const {
         mode, editTool, simState,
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
+        densityView, setDensityView, isDensityLoading, setIsDensityLoading,
+        showIntersections, setShowIntersections,
     } = useEditMode();
 
     const switchToEdit = () => {
         ws?.send('resetSimulation', {});
         setSimState('stopped');
         setShowScore(false);
+        setDensityView(false);
+        setIsDensityLoading(false);
         setSimulationResetAt(prev => prev + 1);
         setSelectedElement(null);
         setPendingRoadFrom(null);
         setMode('edit');
     };
 
+    const handleDensityToggle = () => {
+        if (densityView) {
+            setDensityView(false);
+        } else if (!isDensityLoading) {
+            ws?.send('requestDensity', {});
+            setIsDensityLoading(true);
+        }
+    };
+
     const switchToSimulation = () => {
         setSelectedElement(null);
         setPendingRoadFrom(null);
+        setShowIntersections(true);
         setMode('simulation');
     };
 
@@ -192,6 +226,23 @@ export default function Toolbar() {
                             <Separator />
                             <ToolButton onClick={handleReset} title="Reset">
                                 <IconReset />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={handleDensityToggle}
+                                isSelected={densityView}
+                                disabled={isDensityLoading}
+                                title={isDensityLoading ? 'Computing...' : densityView ? 'Hide Density' : 'Density View'}
+                            >
+                                <IconDensity />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={() => setShowIntersections(!showIntersections)}
+                                isSelected={!showIntersections}
+                                title={showIntersections ? 'Hide Intersections' : 'Show Intersections'}
+                            >
+                                <IconIntersection />
                             </ToolButton>
                         </>
                     )}

@@ -15,14 +15,14 @@ function Header() {
     const router = useRouter();
     const params = useParams();
     const [openMenu, setOpenMenu] = useState<string | null>(null);
-    const [mapName, setMapName] = useState(() =>
-        typeof window !== 'undefined' ? (sessionStorage.getItem('map_name') ?? 'Nouvelle carte') : 'Nouvelle carte'
-    );
+    const [mapName, setMapName] = useState<string>(() => {
+        if (typeof window === 'undefined') return 'Nouvelle carte';
+        return sessionStorage.getItem('map_name') ?? 'Nouvelle carte';
+    });
     const [savedName, setSavedName] = useState<string | null>(() => {
-        if (typeof window !== 'undefined' && sessionStorage.getItem('map_saved') === 'true') {
-            return sessionStorage.getItem('map_name');
-        }
-        return null;
+        if (typeof window === 'undefined') return null;
+        if (sessionStorage.getItem('map_saved') !== 'true') return null;
+        return sessionStorage.getItem('map_name');
     });
 
     const menuRef = useRef<HTMLDivElement>(null);
@@ -39,6 +39,7 @@ function Header() {
 
     const handleSupprimer = async () => {
         setOpenMenu(null);
+        if (!confirm(`Supprimer « ${mapName} » ? Cette action est irréversible.`)) return;
         const fileUuid = sessionStorage.getItem('map_file_uuid');
         if (!fileUuid || sessionStorage.getItem('map_saved') !== 'true') {
             router.push('/');
@@ -92,8 +93,9 @@ function Header() {
             </button>
             <div className='flex flex-col pl-[15px]'>
                 <div className='inline-grid w-fit text-[17px]'>
-                    <span className='invisible whitespace-pre col-start-1 row-start-1 pl-1 pr-2 pointer-events-none'>{mapName || ' '}</span>
+                    <span suppressHydrationWarning className='invisible whitespace-pre col-start-1 row-start-1 pl-1 pr-2 pointer-events-none'>{mapName || ' '}</span>
                     <input
+                        suppressHydrationWarning
                         value={mapName}
                         size={1}
                         onChange={(e) => {

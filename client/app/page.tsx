@@ -58,7 +58,8 @@ export default function Home() {
     }
   };
 
-  const handleDeleteMap = async (fileUuid: string) => {
+  const handleDeleteMap = async (fileUuid: string, name: string) => {
+    if (!confirm(`Supprimer « ${name || fileUuid} » ? Cette action est irréversible.`)) return;
     try {
       await deleteMap(fileUuid);
       setMaps((prev) => prev.filter((m) => m.uuid !== fileUuid));
@@ -105,7 +106,7 @@ export default function Home() {
                             Charger
                           </button>
                           <button
-                            onClick={() => handleDeleteMap(map.uuid)}
+                            onClick={() => handleDeleteMap(map.uuid, map.name)}
                             title="Supprimer"
                             className="cursor-pointer p-2 text-gray-400 hover:text-red-600 transition-colors rounded"
                           >
