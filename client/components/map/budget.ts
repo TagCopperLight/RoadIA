@@ -1,39 +1,53 @@
 import { MapData, MapNode, MapEdge } from './types';
 
-export const MAX_BUDGET = 750_000_000;
+export interface BudgetConfig {
+    max_budget: number;
+    base_cost_per_meter: number;
+    intersection_cost: number;
+    habitation_cost: number;
+    workplace_cost: number;
+}
 
-const BASE_COST_PER_METER = 500;
-
-const BASE_INTERSECTION_COST: Record<MapNode['kind'], number> = {
-    Intersection: 50_000,
-    Habitation:   150_000,
-    Workplace:    200_000,
+export const DEFAULT_BUDGET_CONFIG: BudgetConfig = {
+    max_budget: 750_000_000,
+    base_cost_per_meter: 500,
+    intersection_cost: 50_000,
+    habitation_cost: 150_000,
+    workplace_cost: 200_000,
 };
 
 const RADIUS_COST_PER_METER = 2_000;
 
-export function roadCost(edge: MapEdge): number {
-    return BASE_COST_PER_METER * edge.length * edge.lane_count;
+export function roadCost(edge: MapEdge, cfg: BudgetConfig = DEFAULT_BUDGET_CONFIG): number {
+    return cfg.base_cost_per_meter * edge.length * edge.lane_count;
 }
 
-export function nodeCost(node: MapNode): number {
-    return BASE_INTERSECTION_COST[node.kind] + RADIUS_COST_PER_METER * node.radius;
+export function nodeCost(node: MapNode, cfg: BudgetConfig = DEFAULT_BUDGET_CONFIG): number {
+    const baseCost: Record<MapNode['kind'], number> = {
+        Intersection: cfg.intersection_cost,
+        Habitation: cfg.habitation_cost,
+        Workplace: cfg.workplace_cost,
+    };
+    return baseCost[node.kind] + RADIUS_COST_PER_METER * node.radius;
 }
 
-export function calculateCost(mapData: MapData): number {
-    return mapData.edges.reduce((sum, e) => sum + roadCost(e), 0)
-         + mapData.nodes.reduce((sum, n) => sum + nodeCost(n), 0);
+export function calculateCost(mapData: MapData, cfg: BudgetConfig = DEFAULT_BUDGET_CONFIG): number {
+    return mapData.edges.reduce((sum, e) => sum + roadCost(e, cfg), 0)
+         + mapData.nodes.reduce((sum, n) => sum + nodeCost(n, cfg), 0);
 }
 
-// Estimates road cost before server creates it, using node coordinates
-export function estimateRoadCost(fromNode: MapNode, toNode: MapNode, laneCount = 2): number {
+export function estimateRoadCost(fromNode: MapNode, toNode: MapNode, laneCount = 2, cfg: BudgetConfig = DEFAULT_BUDGET_CONFIG): number {
     const dx = toNode.x - fromNode.x;
     const dy = toNode.y - fromNode.y;
     const estimatedLength = Math.max(0, Math.sqrt(dx * dx + dy * dy) - fromNode.radius - toNode.radius);
-    return BASE_COST_PER_METER * estimatedLength * laneCount;
+    return cfg.base_cost_per_meter * estimatedLength * laneCount;
 }
 
-// Estimates node cost before server creates it (uses minimum radius for fresh nodes)
-export function estimateNodeCost(kind: MapNode['kind'] = 'Intersection'): number {
-    return BASE_INTERSECTION_COST[kind] + RADIUS_COST_PER_METER * 8;
+export function estimateNodeCost(kind: MapNode['kind'] = 'Intersection', cfg: BudgetConfig = DEFAULT_BUDGET_CONFIG): number {
+    const baseCost: Record<MapNode['kind'], number> = {
+        Intersection: cfg.intersection_cost,
+        Habitation: cfg.habitation_cost,
+        Workplace: cfg.workplace_cost,
+    };
+    return baseCost[kind] + RADIUS_COST_PER_METER * 8;
 }

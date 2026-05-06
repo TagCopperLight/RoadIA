@@ -9,6 +9,64 @@ use serde::{Serialize, Deserialize};
 use crate::map::road::Road;
 use crate::map::traffic_light::TrafficLightController;
 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MapSettings {
+    #[serde(default = "MapSettings::default_vehicle_count")]
+    pub vehicle_count: usize,
+    #[serde(default = "MapSettings::default_simulation_duration")]
+    pub simulation_duration: f32,
+    #[serde(default = "MapSettings::default_max_budget")]
+    pub max_budget: u64,
+    #[serde(default = "MapSettings::default_base_cost_per_meter")]
+    pub base_cost_per_meter: u32,
+    #[serde(default = "MapSettings::default_intersection_cost")]
+    pub intersection_cost: u32,
+    #[serde(default = "MapSettings::default_habitation_cost")]
+    pub habitation_cost: u32,
+    #[serde(default = "MapSettings::default_workplace_cost")]
+    pub workplace_cost: u32,
+    #[serde(default = "MapSettings::default_time_weight")]
+    pub time_weight: f32,
+    #[serde(default = "MapSettings::default_success_weight")]
+    pub success_weight: f32,
+    #[serde(default = "MapSettings::default_pollution_weight")]
+    pub pollution_weight: f32,
+    #[serde(default = "MapSettings::default_infrastructure_weight")]
+    pub infrastructure_weight: f32,
+}
+
+impl MapSettings {
+    fn default_vehicle_count() -> usize { 500 }
+    fn default_simulation_duration() -> f32 { 600.0 }
+    fn default_max_budget() -> u64 { 750_000_000 }
+    fn default_base_cost_per_meter() -> u32 { 500 }
+    fn default_intersection_cost() -> u32 { 50_000 }
+    fn default_habitation_cost() -> u32 { 150_000 }
+    fn default_workplace_cost() -> u32 { 200_000 }
+    fn default_time_weight() -> f32 { 0.4 }
+    fn default_success_weight() -> f32 { 0.2 }
+    fn default_pollution_weight() -> f32 { 0.2 }
+    fn default_infrastructure_weight() -> f32 { 0.2 }
+}
+
+impl Default for MapSettings {
+    fn default() -> Self {
+        Self {
+            vehicle_count: Self::default_vehicle_count(),
+            simulation_duration: Self::default_simulation_duration(),
+            max_budget: Self::default_max_budget(),
+            base_cost_per_meter: Self::default_base_cost_per_meter(),
+            intersection_cost: Self::default_intersection_cost(),
+            habitation_cost: Self::default_habitation_cost(),
+            workplace_cost: Self::default_workplace_cost(),
+            time_weight: Self::default_time_weight(),
+            success_weight: Self::default_success_weight(),
+            pollution_weight: Self::default_pollution_weight(),
+            infrastructure_weight: Self::default_infrastructure_weight(),
+        }
+    }
+}
+
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
@@ -20,6 +78,8 @@ pub struct Map {
     pub traffic_lights: HashMap<u32, TrafficLightController>,
     #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub settings: MapSettings,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -39,6 +99,7 @@ impl Map {
             next_controller_id: 0,
             traffic_lights: HashMap::new(),
             name: String::new(),
+            settings: MapSettings::default(),
         }
     }
 

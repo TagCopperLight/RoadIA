@@ -17,6 +17,7 @@ use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState};
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
+use crate::api::runner::map_generator::create_random_vehicles;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -210,7 +211,7 @@ async fn handle_client_packet(
         ClientPacket::RequestScore {} => {
             println!("Client requested score");
             let broadcast = instance.broadcast.clone();
-            let engine = instance.engine.clone();
+            let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
                     let eng = engine.lock().await;
@@ -239,7 +240,7 @@ async fn handle_client_packet(
         ClientPacket::RequestDensity {} => {
             println!("Client requested density map");
             let broadcast = instance.broadcast.clone();
-            let engine = instance.engine.clone();
+            let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
                     let eng = engine.lock().await;
@@ -312,10 +313,18 @@ async fn handle_client_packet(
                 vehicle.impatience = 0.0;
             }
 
+            eng.config.end_time = eng.config.map.settings.simulation_duration;
+            let new_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();
+            eng.vehicles = create_random_vehicles(&map_snapshot, new_count);
+            eng.all_vehicles_arrived = false;
             for vehicle in eng.vehicles.iter_mut() {
                 vehicle.update_path(&map_snapshot);
             }
+
+            let snapshot = eng.clone();
+            drop(eng);
+            *instance.initial_engine.lock().await = snapshot;
         }
 
         ClientPacket::SetSpeed { multiplier } => {
