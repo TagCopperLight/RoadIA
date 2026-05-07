@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use rand::Rng;
 use petgraph::graph::NodeIndex;
 
 use crate::map::editor as map_editor;
@@ -79,6 +80,15 @@ pub struct GeneratedCommutes {
 }
 
 pub fn create_random_commutes(map: &Map, commute_plan_count: usize) -> GeneratedCommutes {
+    let mut rng = rand::rng();
+    create_random_commutes_with_rng(map, commute_plan_count, &mut rng)
+}
+
+pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
+    map: &Map,
+    commute_plan_count: usize,
+    rng: &mut R,
+) -> GeneratedCommutes {
     let mut vehicles = Vec::new();
     let mut commute_plans = Vec::new();
 
@@ -127,9 +137,9 @@ pub fn create_random_commutes(map: &Map, commute_plan_count: usize) -> Generated
         let outbound_vehicle_id = vehicles.len() as u64;
         let return_vehicle_id = outbound_vehicle_id + 1;
 
-        let (origin, destination) = valid_pairs[rand::random_range(0..valid_pairs.len())];
+        let (origin, destination) = valid_pairs[rng.random_range(0..valid_pairs.len())];
 
-        let roll: u32 = rand::random_range(0..100);
+        let roll: u32 = rng.random_range(0..100);
         let (motorization, max_speed, length) = if roll < 45 {
             (VehicleType::Hybride, 12.5, 10.0)
         } else if roll < 75 {
@@ -141,10 +151,18 @@ pub fn create_random_commutes(map: &Map, commute_plan_count: usize) -> Generated
         };
         let spec = VehicleSpec::new(VehicleKind::Car, max_speed, 4.0, 3.0, 1.0, length);
 
+        let commute_plan = CommutePlan::random(
+            commute_plan_id,
+            outbound_vehicle_id,
+            return_vehicle_id,
+            map.settings.simulation_start_time,
+            rng,
+        );
+
         let outbound_trip = TripRequest {
             origin,
             destination,
-            departure_time: 0.0,
+            departure_time: commute_plan.outbound_departure_time_s,
         };
         let return_trip = TripRequest {
             origin: destination,
@@ -164,15 +182,9 @@ pub fn create_random_commutes(map: &Map, commute_plan_count: usize) -> Generated
             continue;
         }
 
-        let waiting_time_s = 5.0;
         vehicles.push(outbound_vehicle);
         vehicles.push(return_vehicle);
-        commute_plans.push(CommutePlan::new(
-            commute_plan_id,
-            outbound_vehicle_id,
-            return_vehicle_id,
-            waiting_time_s,
-        ));
+        commute_plans.push(commute_plan);
     }
 
     GeneratedCommutes { vehicles, commute_plans }

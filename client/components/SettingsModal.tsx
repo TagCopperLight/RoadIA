@@ -125,8 +125,28 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                                     >
                                         <NumberInput
                                             value={form.simulation_duration}
-                                            min={60} max={3600} step={60}
+                                            min={60} max={86400} step={60}
                                             onChange={v => set('simulation_duration', v)}
+                                        />
+                                    </FieldRow>
+                                    <FieldRow
+                                        label="Heure de début"
+                                        hint="En secondes depuis minuit"
+                                    >
+                                        <NumberInput
+                                            value={form.simulation_start_time}
+                                            min={0} max={39600} step={300}
+                                            onChange={v => set('simulation_start_time', v)}
+                                        />
+                                    </FieldRow>
+                                    <FieldRow
+                                        label="Pas de temps"
+                                        hint="Entre 0 et 1 seconde"
+                                    >
+                                        <NumberInput
+                                            value={form.time_step}
+                                            min={0.01} max={1} step={0.01}
+                                            onChange={v => set('time_step', v)}
                                         />
                                     </FieldRow>
                                 </div>

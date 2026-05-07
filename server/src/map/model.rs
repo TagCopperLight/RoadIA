@@ -15,6 +15,10 @@ pub struct MapSettings {
     pub vehicle_count: usize,
     #[serde(default = "MapSettings::default_simulation_duration")]
     pub simulation_duration: f32,
+    #[serde(default = "MapSettings::default_simulation_start_time")]
+    pub simulation_start_time: f32,
+    #[serde(default = "MapSettings::default_time_step")]
+    pub time_step: f32,
     #[serde(default = "MapSettings::default_max_budget")]
     pub max_budget: u64,
     #[serde(default = "MapSettings::default_base_cost_per_meter")]
@@ -37,7 +41,9 @@ pub struct MapSettings {
 
 impl MapSettings {
     fn default_vehicle_count() -> usize { 500 }
-    fn default_simulation_duration() -> f32 { 600.0 }
+    fn default_simulation_duration() -> f32 { 86_400.0 }
+    fn default_simulation_start_time() -> f32 { 0.0 }
+    fn default_time_step() -> f32 { 0.1 }
     fn default_max_budget() -> u64 { 750_000_000 }
     fn default_base_cost_per_meter() -> u32 { 500 }
     fn default_intersection_cost() -> u32 { 50_000 }
@@ -54,6 +60,8 @@ impl Default for MapSettings {
         Self {
             vehicle_count: Self::default_vehicle_count(),
             simulation_duration: Self::default_simulation_duration(),
+            simulation_start_time: Self::default_simulation_start_time(),
+            time_step: Self::default_time_step(),
             max_budget: Self::default_max_budget(),
             base_cost_per_meter: Self::default_base_cost_per_meter(),
             intersection_cost: Self::default_intersection_cost(),

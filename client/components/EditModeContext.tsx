@@ -5,6 +5,8 @@ import { createContext, useContext, useState, ReactNode, Dispatch, SetStateActio
 export interface MapSettings {
     vehicle_count: number;
     simulation_duration: number;
+    simulation_start_time: number;
+    time_step: number;
     max_budget: number;
     base_cost_per_meter: number;
     intersection_cost: number;

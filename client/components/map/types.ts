@@ -47,6 +47,12 @@ export interface VehicleData {
 	commute_plan_id: number | null;
 }
 
+export interface VehicleUpdatePacket {
+	vehicles: VehicleData[];
+	traffic_lights: TrafficLightData[];
+	simulation_time_s: number;
+}
+
 export interface VehicleSummary {
     id: number;
     origin_id: number;

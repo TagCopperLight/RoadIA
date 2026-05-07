@@ -56,13 +56,20 @@ impl SimulationInstance {
     pub fn new(map: crate::map::model::Map) -> Arc<Self> {
         let commute_plan_count = map.settings.vehicle_count;
         let end_time = map.settings.simulation_duration;
+        println!(
+            "Simulation settings: vehicle_count={}, simulation_duration={}, simulation_start_time={}, time_step={}",
+            map.settings.vehicle_count,
+            map.settings.simulation_duration,
+            map.settings.simulation_start_time,
+            map.settings.time_step,
+        );
         let generated = create_random_commutes(&map, commute_plan_count);
         let token = generate_token();
 
         let config = SimulationConfig {
-            start_time: 0.0,
+            start_time: map.settings.simulation_start_time,
             end_time,
-            time_step: 0.05,
+            time_step: map.settings.time_step,
             minimum_gap: 2.0,
             score_weights: crate::simulation::config::ScoreWeights::from_settings(&map.settings),
             map,
@@ -105,7 +112,7 @@ impl SimulationInstance {
                     let start = tokio::time::Instant::now();
                     let multiplier = instance.speed_multiplier.load(Ordering::Relaxed) as usize;
 
-                    let (vehicles_data, traffic_lights_data, time_step) = {
+                    let (vehicles_data, traffic_lights_data, simulation_time_s, time_step) = {
                         let mut eng = instance.engine.lock().await;
                         for _ in 0..multiplier {
                             eng.step();
@@ -117,12 +124,13 @@ impl SimulationInstance {
                             .collect::<Vec<_>>();
                         let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
                         let ts = eng.config.time_step;
-                        (vehicles, tl, ts)
+                        (vehicles, tl, eng.current_time, ts)
                     };
 
                     let packet = ServerPacket::VehicleUpdate {
                         vehicles: vehicles_data,
                         traffic_lights: traffic_lights_data,
+                        simulation_time_s,
                     };
                     let _ = instance.broadcast.send(packet);
 

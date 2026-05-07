@@ -700,7 +700,7 @@ impl SimulationEngine {
                     plan.state,
                     plan.outbound_vehicle_id,
                     plan.return_vehicle_id,
-                    plan.waiting_time_s,
+                    plan.return_waiting_time_s,
                 ),
                 None => continue,
             };
