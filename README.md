@@ -51,8 +51,8 @@ cargo test --all-features    # run tests
 
 ### Requirements
 
-- Docker
-- Docker Compose
+- Docker 20.10+
+- Docker Compose v2 (plugin, `docker compose`)
 
 ### Run
 
