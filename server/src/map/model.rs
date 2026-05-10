@@ -40,10 +40,17 @@ pub struct MapSettings {
 }
 
 impl MapSettings {
-    fn default_vehicle_count() -> usize { 500 }
-    fn default_simulation_duration() -> f32 { 86_400.0 }
-    fn default_simulation_start_time() -> f32 { 0.0 }
-    fn default_time_step() -> f32 { 0.1 }
+    pub const DEFAULT_VEHICLE_COUNT: usize = 500;
+    pub const DEFAULT_SIMULATION_DURATION_S: f32 = 86_400.0;
+    pub const DEFAULT_SIMULATION_START_TIME_S: f32 = 0.0;
+    pub const DEFAULT_TIME_STEP_S: f32 = 0.1;
+    pub const MAX_SIMULATION_START_TIME_S: f32 = 39_600.0;
+    pub const MAX_SIMULATION_DURATION_S: f32 = 86_400.0;
+
+    fn default_vehicle_count() -> usize { Self::DEFAULT_VEHICLE_COUNT }
+    fn default_simulation_duration() -> f32 { Self::DEFAULT_SIMULATION_DURATION_S }
+    fn default_simulation_start_time() -> f32 { Self::DEFAULT_SIMULATION_START_TIME_S }
+    fn default_time_step() -> f32 { Self::DEFAULT_TIME_STEP_S }
     fn default_max_budget() -> u64 { 750_000_000 }
     fn default_base_cost_per_meter() -> u32 { 500 }
     fn default_intersection_cost() -> u32 { 50_000 }

@@ -15,11 +15,17 @@ use crate::map::model::MapSettings;
 use super::runner::SimulationInstance;
 
 fn validate_map_settings(settings: &MapSettings) -> Result<(), (axum::http::StatusCode, String)> {
-    if !(0.0..=39_600.0).contains(&settings.simulation_start_time) {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "Simulation start time must be between 0 and 39600 seconds".to_string()));
+    if !(0.0..=MapSettings::MAX_SIMULATION_START_TIME_S).contains(&settings.simulation_start_time) {
+        return Err((axum::http::StatusCode::BAD_REQUEST, format!(
+            "Simulation start time must be between 0 and {} seconds",
+            MapSettings::MAX_SIMULATION_START_TIME_S as u32
+        )));
     }
-    if !(0.0..=86_400.0).contains(&settings.simulation_duration) {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "Simulation duration must be between 0 and 86400 seconds".to_string()));
+    if !(0.0..=MapSettings::MAX_SIMULATION_DURATION_S).contains(&settings.simulation_duration) {
+        return Err((axum::http::StatusCode::BAD_REQUEST, format!(
+            "Simulation duration must be between 0 and {} seconds",
+            MapSettings::MAX_SIMULATION_DURATION_S as u32
+        )));
     }
     if settings.simulation_start_time > settings.simulation_duration {
         return Err((axum::http::StatusCode::BAD_REQUEST, "Simulation start time must be less than or equal to simulation duration".to_string()));
