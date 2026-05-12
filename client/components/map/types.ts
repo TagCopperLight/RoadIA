@@ -54,6 +54,13 @@ export interface VehicleSummary {
     waypoint_ids: number[];
 }
 
+export interface BusLine {
+    id: number;
+    name: string;
+    stop_node_ids: number[];
+    vehicle_id: number;
+}
+
 export interface TrafficLightData {
     id: number;            // intersection_id
     green_road_ids: number[];  // road IDs with a green approach into this intersection

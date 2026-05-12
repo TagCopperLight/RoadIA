@@ -13,8 +13,12 @@ const MOTOR_STYLE: Record<Motorization, { color: number; w: number; h: number }>
     Diesel:     { color: 0x8B7355, w: 10, h: 5 },
 };
 
+const BUS_STYLE = { color: 0x22C55E, w: 18, h: 5 };
+
 export function Vehicle({ data }: VehicleProps) {
-    const style = data.motorization ? MOTOR_STYLE[data.motorization] : MOTOR_STYLE.Essence;
+    const style = data.kind === 'Bus'
+        ? BUS_STYLE
+        : data.motorization ? MOTOR_STYLE[data.motorization] : MOTOR_STYLE.Essence;
 
     const drawCar = useCallback((g: Graphics) => {
         g.clear();

@@ -68,6 +68,13 @@ impl Default for MapSettings {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
+pub struct SavedBusLine {
+    pub id: u64,
+    pub name: String,
+    pub stop_node_ids: Vec<u32>,
+}
+
+#[derive(Default, Clone, Serialize, Deserialize)]
 pub struct Map {
     pub graph: Graph<Intersection, Road>,
     pub node_index_map: HashMap<u32, NodeIndex>,
@@ -80,6 +87,10 @@ pub struct Map {
     pub name: String,
     #[serde(default)]
     pub settings: MapSettings,
+    #[serde(default)]
+    pub bus_lines: Vec<SavedBusLine>,
+    #[serde(default)]
+    pub next_bus_line_id: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -100,6 +111,8 @@ impl Map {
             traffic_lights: HashMap::new(),
             name: String::new(),
             settings: MapSettings::default(),
+            bus_lines: Vec::new(),
+            next_bus_line_id: 0,
         }
     }
 

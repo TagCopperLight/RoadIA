@@ -15,6 +15,7 @@ use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::engine::Simulation;
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
+use crate::simulation::engine::BusLine;
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
 use crate::api::runner::map_generator::create_random_vehicles;
@@ -43,6 +44,9 @@ pub enum ClientPacket {
     RequestDensity {},
     AddWaypoints { vehicle_id: u64, node_ids: Vec<u32> },
     RequestVehicles {},
+    CreateBusLine { name: String, stop_node_ids: Vec<u32> },
+    DeleteBusLine { bus_line_id: u64 },
+    RequestBusLines {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -64,6 +68,7 @@ pub enum ServerPacket {
     SimulationFinished {},
     DensityMap { edges: Vec<Value> },
     VehicleList { vehicles: Vec<Value> },
+    BusLineList { bus_lines: Vec<Value> },
 }
 
 pub async fn ws_handler(
@@ -314,18 +319,28 @@ async fn handle_client_packet(
             let new_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();
             eng.vehicles = create_random_vehicles(&map_snapshot, new_count);
+            eng.next_vehicle_id = eng.vehicles.len() as u64;
             eng.all_vehicles_arrived = false;
             for vehicle in eng.vehicles.iter_mut() {
                 vehicle.update_path(&map_snapshot);
             }
 
+            // Recreate bus vehicles from saved bus lines (preserves user's bus lines across resets)
+            eng.bus_lines.clear();
+            eng.next_bus_line_id = map_snapshot.next_bus_line_id;
+            for bl in &map_snapshot.bus_lines {
+                eng.add_bus_from_saved(bl);
+            }
+
             let vehicles: Vec<Value> = eng.vehicles.iter()
                 .map(|v| serialize_vehicle_summary(v, &map_snapshot))
                 .collect();
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
             let snapshot = eng.clone();
             drop(eng);
             *instance.initial_engine.lock().await = snapshot;
             let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+            let _ = instance.broadcast.send(ServerPacket::BusLineList { bus_lines });
         }
 
         ClientPacket::SetSpeed { multiplier } => {
@@ -478,6 +493,55 @@ async fn handle_client_packet(
                 let _ = socket.send(Message::Text(text)).await;
             }
         }
+
+        ClientPacket::CreateBusLine { name, stop_node_ids } => {
+            if stop_node_ids.len() < 2 {
+                return;
+            }
+            let mut eng = instance.engine.lock().await;
+
+            let bus_line_id = eng.next_bus_line_id;
+            eng.next_bus_line_id += 1;
+            let saved = crate::map::model::SavedBusLine { id: bus_line_id, name, stop_node_ids };
+            eng.config.map.bus_lines.push(saved.clone());
+            eng.config.map.next_bus_line_id = eng.next_bus_line_id;
+
+            if !eng.add_bus_from_saved(&saved) {
+                eng.config.map.bus_lines.pop();
+                eng.next_bus_line_id -= 1;
+                eng.config.map.next_bus_line_id = eng.next_bus_line_id;
+                return;
+            }
+
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
+            drop(eng);
+            let _ = instance.broadcast.send(ServerPacket::BusLineList { bus_lines });
+        }
+
+        ClientPacket::DeleteBusLine { bus_line_id } => {
+            let mut eng = instance.engine.lock().await;
+            if let Some(pos) = eng.bus_lines.iter().position(|bl| bl.id == bus_line_id) {
+                let vehicle_id = eng.bus_lines[pos].vehicle_id;
+                eng.bus_lines.remove(pos);
+                eng.config.map.bus_lines.retain(|bl| bl.id != bus_line_id);
+                if let Some(v) = eng.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+                    v.state = VehicleState::Arrived;
+                }
+            }
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
+            drop(eng);
+            let _ = instance.broadcast.send(ServerPacket::BusLineList { bus_lines });
+        }
+
+        ClientPacket::RequestBusLines {} => {
+            let eng = instance.engine.lock().await;
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
+            drop(eng);
+            let packet = ServerPacket::BusLineList { bus_lines };
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
+            }
+        }
     }
 }
 
@@ -613,6 +677,15 @@ pub fn serialize_vehicle_summary(vehicle: &Vehicle, map: &Map) -> Value {
             VehicleType::Diesel     => "Diesel",
         },
         "waypoint_ids": waypoint_ids,
+    })
+}
+
+fn serialize_bus_line(bl: &BusLine) -> Value {
+    json!({
+        "id": bl.id,
+        "name": bl.name,
+        "stop_node_ids": bl.stop_node_ids,
+        "vehicle_id": bl.vehicle_id,
     })
 }
 

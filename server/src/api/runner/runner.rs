@@ -73,6 +73,12 @@ impl SimulationInstance {
             vehicle.update_path(&simulation.config.map);
         }
 
+        // Recreate bus vehicles from saved bus lines in the map
+        simulation.next_bus_line_id = simulation.config.map.next_bus_line_id;
+        for bl in simulation.config.map.bus_lines.clone() {
+            simulation.add_bus_from_saved(&bl);
+        }
+
         let initial_snapshot = simulation.clone();
         let engine = Arc::new(Mutex::new(simulation));
         let initial_engine = Arc::new(Mutex::new(initial_snapshot));
