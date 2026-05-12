@@ -14,7 +14,7 @@ use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
 use crate::simulation::engine::Simulation;
-use crate::simulation::vehicle::{LaneId, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState, VehicleType};
+use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
 use crate::simulation::engine::BusLine;
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
@@ -499,35 +499,19 @@ async fn handle_client_packet(
                 return;
             }
             let mut eng = instance.engine.lock().await;
-            let map = eng.config.map.clone();
-
-            let stops: Vec<_> = stop_node_ids.iter()
-                .filter_map(|nid| map.node_index_map.get(nid).copied())
-                .collect();
-            if stops.len() < 2 {
-                return;
-            }
-
-            let spec = VehicleSpec::new(VehicleKind::Bus, 8.0, 2.0, 3.0, 1.0, 12.0);
-            let trip = TripRequest { origin: stops[0], destination: stops[0], departure_time: 0.0 };
-            let vehicle_id = eng.next_vehicle_id;
-            eng.next_vehicle_id += 1;
-
-            let mut bus = Vehicle::new(vehicle_id, spec, trip, VehicleType::Electrique);
-            bus.waypoints = stops[1..].to_vec();
-            bus.update_path(&map);
-
-            if bus.path.len() < 2 {
-                return;
-            }
-
-            eng.vehicles.push(bus);
 
             let bus_line_id = eng.next_bus_line_id;
             eng.next_bus_line_id += 1;
-            eng.bus_lines.push(BusLine { id: bus_line_id, name: name.clone(), stop_node_ids: stop_node_ids.clone(), vehicle_id });
-            eng.config.map.bus_lines.push(crate::map::model::SavedBusLine { id: bus_line_id, name, stop_node_ids });
+            let saved = crate::map::model::SavedBusLine { id: bus_line_id, name, stop_node_ids };
+            eng.config.map.bus_lines.push(saved.clone());
             eng.config.map.next_bus_line_id = eng.next_bus_line_id;
+
+            if !eng.add_bus_from_saved(&saved) {
+                eng.config.map.bus_lines.pop();
+                eng.next_bus_line_id -= 1;
+                eng.config.map.next_bus_line_id = eng.next_bus_line_id;
+                return;
+            }
 
             let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
             drop(eng);
