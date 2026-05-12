@@ -5,12 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePacket, useWs } from '@/app/websocket/websocket';
 import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary } from './map/types';
+import { BusLine, MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary } from './map/types';
 import ScoreModal from './ScoreModal';
 import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
 import BudgetHUD from './BudgetHUD';
 import WaypointPanel from './WaypointPanel';
+import BusPanel from './BusPanel';
 import Legend from './Legend';
 import { calculateCost, estimateRoadCost, estimateNodeCost, DEFAULT_BUDGET_CONFIG } from './map/budget';
 
@@ -36,6 +37,10 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		waypointClickedNodeId, setWaypointClickedNodeId,
 		waypointVehicleId, setWaypointVehicleId,
 		pendingWaypoints, setPendingWaypoints,
+		busLines, setBusLines,
+		busPendingStops, setBusPendingStops,
+		busLineName, setBusLineName,
+		busCreating, setBusCreating,
 	} = useEditMode();
 
 	useEffect(() => {
@@ -56,6 +61,9 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	useEffect(() => {
 		if (editTool === 'waypoints') {
 			ws?.send('requestVehicles', {});
+		}
+		if (editTool === 'bus') {
+			ws?.send('requestBusLines', {});
 		}
 	}, [editTool, ws]);
 
@@ -93,6 +101,13 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		const result = data as { vehicles: VehicleSummary[] };
 		if (result && Array.isArray(result.vehicles)) {
 			setVehicleSummaries(result.vehicles);
+		}
+	});
+
+	usePacket("busLineList", (data) => {
+		const result = data as { bus_lines: BusLine[] };
+		if (result && Array.isArray(result.bus_lines)) {
+			setBusLines(result.bus_lines);
 		}
 	});
 
@@ -243,6 +258,38 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		setPendingWaypoints([]);
 	}, [setWaypointVehicleId, setWaypointClickedNodeId, setPendingWaypoints]);
 
+	const handleBusStopClick = useCallback((nodeId: number) => {
+		if (busCreating) {
+			setBusPendingStops(prev => [...prev, nodeId]);
+		}
+	}, [busCreating, setBusPendingStops]);
+
+	const handleCreateBusLine = useCallback((name: string, stops: number[]) => {
+		ws?.send('createBusLine', { name, stop_node_ids: stops });
+		setBusPendingStops([]);
+		setBusLineName('');
+		setBusCreating(false);
+	}, [ws, setBusPendingStops, setBusLineName, setBusCreating]);
+
+	const handleDeleteBusLine = useCallback((id: number) => {
+		ws?.send('deleteBusLine', { bus_line_id: id });
+	}, [ws]);
+
+	const handleBusCancel = useCallback(() => {
+		setBusPendingStops([]);
+		setBusLineName('');
+		setBusCreating(false);
+	}, [setBusPendingStops, setBusLineName, setBusCreating]);
+
+	// Route node clicks to correct handler based on active tool
+	const handleSpecialModeNodeClick = useCallback((nodeId: number) => {
+		if (editTool === 'waypoints') {
+			handleWaypointNodeClick(nodeId);
+		} else if (editTool === 'bus') {
+			handleBusStopClick(nodeId);
+		}
+	}, [editTool, handleWaypointNodeClick, handleBusStopClick]);
+
 	// In edit mode, show no vehicles
 	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
@@ -266,7 +313,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 						onSelectRoad={handleSelectRoad}
 						onAddNode={handleAddNode}
 						onAddRoad={handleAddRoad}
-						onWaypointNodeClick={handleWaypointNodeClick}
+						onWaypointNodeClick={handleSpecialModeNodeClick}
 					/>
 				)}
 				<BudgetHUD mapData={mapData} />
@@ -305,7 +352,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			</div>
 
 			{/* Properties panel sidebar */}
-			{mode === 'edit' && editTool !== 'waypoints' && selectedElement && mapData && (
+			{mode === 'edit' && editTool !== 'waypoints' && editTool !== 'bus' && selectedElement && mapData && (
 				<PropertiesPanel
 					selectedElement={selectedElement}
 					mapData={mapData}
@@ -326,6 +373,23 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 					onApply={handleWaypointApply}
 					onCancel={handleWaypointCancel}
 					onClose={() => setEditTool('select')}
+				/>
+			)}
+
+			{mode === 'edit' && editTool === 'bus' && (
+				<BusPanel
+					busLines={busLines}
+					mapData={mapData}
+					pendingStops={busPendingStops}
+					lineName={busLineName}
+					creating={busCreating}
+					onNameChange={setBusLineName}
+					onRemoveStop={(i) => setBusPendingStops(prev => prev.filter((_, idx) => idx !== i))}
+					onCreate={handleCreateBusLine}
+					onDelete={handleDeleteBusLine}
+					onStartCreating={() => setBusCreating(true)}
+					onCancel={handleBusCancel}
+					onClose={() => { handleBusCancel(); setEditTool('select'); }}
 				/>
 			)}
 		</div>
