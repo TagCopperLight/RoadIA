@@ -6,7 +6,7 @@ use crate::simulation::config::{
 };
 use crate::map::intersection::{ApproachData, LinkState, is_link_open};
 use crate::simulation::kinematics;
-use crate::simulation::vehicle::{DrivePlanEntry, LaneId, Vehicle, VehicleState};
+use crate::simulation::vehicle::{DrivePlanEntry, LaneId, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState, VehicleType};
 use petgraph::graph::{EdgeIndex, NodeIndex};
 use crate::scoring::Score;
 
@@ -31,6 +31,14 @@ struct TrafficLightRuntimeState {
 }
 
 #[derive(Clone)]
+pub struct BusLine {
+    pub id: u64,
+    pub name: String,
+    pub stop_node_ids: Vec<u32>,
+    pub vehicle_id: u64,
+}
+
+#[derive(Clone)]
 pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,
@@ -39,6 +47,9 @@ pub struct SimulationEngine {
     pub link_states: HashMap<u32, LinkState>,
     pub all_vehicles_arrived: bool,
     pub green_links: HashSet<u32>,
+    pub bus_lines: Vec<BusLine>,
+    pub next_bus_line_id: u64,
+    pub next_vehicle_id: u64,
     pending_transfers: Vec<PendingTransfer>,
     traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
     link_directory: HashMap<u32, crate::map::road::Link>,
@@ -63,6 +74,7 @@ impl Simulation for SimulationEngine {
             }
         }
         
+        let next_vehicle_id = vehicles.len() as u64;
         Self {
             config,
             vehicles,
@@ -74,6 +86,9 @@ impl Simulation for SimulationEngine {
             all_vehicles_arrived: false,
             traffic_light_states,
             link_directory,
+            bus_lines: Vec::new(),
+            next_bus_line_id: 0,
+            next_vehicle_id,
         }
     }
 
@@ -622,6 +637,15 @@ impl SimulationEngine {
         let path_len = self.vehicles[vidx].path.len();
 
         if pi + 1 >= path_len - 1 {
+            if matches!(self.vehicles[vidx].spec.kind, VehicleKind::Bus) {
+                self.vehicles[vidx].state = VehicleState::WaitingToDepart;
+                self.vehicles[vidx].path_index = 0;
+                self.vehicles[vidx].position_on_lane = 0.0;
+                self.vehicles[vidx].velocity = 0.0;
+                self.vehicles[vidx].drive_plan.clear();
+                self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+                return;
+            }
             self.vehicles[vidx].position_on_lane = road_len;
             self.vehicles[vidx].state = VehicleState::Arrived;
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
@@ -650,12 +674,38 @@ impl SimulationEngine {
     }
 
     fn check_if_all_vehicles_arrived(&mut self) {
-        let nb_arrived = self.vehicles.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
-        self.all_vehicles_arrived = nb_arrived == self.vehicles.len();
+        let non_bus: Vec<_> = self.vehicles.iter().filter(|v| !matches!(v.spec.kind, VehicleKind::Bus)).collect();
+        let nb_arrived = non_bus.iter().filter(|v| matches!(v.state, VehicleState::Arrived)).count();
+        self.all_vehicles_arrived = !non_bus.is_empty() && nb_arrived == non_bus.len();
     }
 }
 
 // Buffer flush
+
+impl SimulationEngine {
+    pub fn add_bus_from_saved(&mut self, bl: &crate::map::model::SavedBusLine) -> bool {
+        let map = self.config.map.clone();
+        let stops: Vec<_> = bl.stop_node_ids.iter()
+            .filter_map(|nid| map.node_index_map.get(nid).copied())
+            .collect();
+        if stops.len() < 2 {
+            return false;
+        }
+        let spec = VehicleSpec::new(VehicleKind::Bus, 8.0, 2.0, 3.0, 1.0, 12.0);
+        let trip = TripRequest { origin: stops[0], destination: stops[0], departure_time: 0.0 };
+        let vehicle_id = self.next_vehicle_id;
+        self.next_vehicle_id += 1;
+        let mut bus = Vehicle::new(vehicle_id, spec, trip, VehicleType::Electrique);
+        bus.waypoints = stops[1..].to_vec();
+        bus.update_path(&map);
+        if bus.path.len() < 2 {
+            return false;
+        }
+        self.vehicles.push(bus);
+        self.bus_lines.push(BusLine { id: bl.id, name: bl.name.clone(), stop_node_ids: bl.stop_node_ids.clone(), vehicle_id });
+        true
+    }
+}
 
 impl SimulationEngine {
     fn flush_transfers(&mut self) {
