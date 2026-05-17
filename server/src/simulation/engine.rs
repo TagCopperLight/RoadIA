@@ -1,15 +1,17 @@
-use std::collections::{HashMap, HashSet};
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
+use ordered_float::OrderedFloat;
 use crate::scoring;
 use crate::simulation::commute::{CommutePlan, CommutePlanState};
 use crate::simulation::config::{
     SimulationConfig, IMPATIENCE_RATE, LOOK_AHEAD, MIN_CREEP_SPEED, STOP_DWELL_TIME,
 };
 use crate::map::intersection::{ApproachData, LinkState, is_link_open};
+use crate::scoring::Score;
 use crate::simulation::kinematics;
 use crate::simulation::vehicle::{DrivePlanEntry, LaneId, Vehicle, VehicleState};
 use petgraph::graph::{EdgeIndex, NodeIndex};
-use crate::scoring::Score;
 
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
@@ -32,17 +34,30 @@ struct TrafficLightRuntimeState {
 }
 
 #[derive(Clone)]
+struct InternalLaneRuntime {
+    length: f32,
+    speed_limit: f32,
+    to_lane_id: u32,
+}
+
+#[derive(Clone)]
 pub struct SimulationEngine {
     pub config: SimulationConfig,
     pub vehicles: Vec<Vehicle>,
     pub current_time: f32,
-    pub vehicles_by_lane: HashMap<LaneId, Vec<usize>>, // Sorted by position_on_lane (back → front = index 0 first).
+    pub vehicles_by_lane: HashMap<LaneId, Vec<usize>>, // Sorted by position_on_lane (back -> front).
+    vehicle_lane_positions: Vec<Option<usize>>,
     pub link_states: HashMap<u32, LinkState>,
     pub all_vehicles_arrived: bool,
     pub green_links: HashSet<u32>,
+    departure_queue: BinaryHeap<Reverse<(OrderedFloat<f32>, usize)>>,
     pending_transfers: Vec<PendingTransfer>,
     traffic_light_states: HashMap<u32, TrafficLightRuntimeState>,
     link_directory: HashMap<u32, crate::map::road::Link>,
+    link_to_road_id: HashMap<u32, u32>,
+    internal_lane_directory: HashMap<(u32, u32), InternalLaneRuntime>,
+    controller_green_link_ids: HashMap<u32, HashSet<u32>>,
+    pub controller_green_road_ids: HashMap<u32, Vec<u32>>,
     pub commute_plans: HashMap<u64, CommutePlan>,
     vehicle_indices_by_id: HashMap<u64, usize>,
 }
@@ -53,40 +68,38 @@ impl Simulation for SimulationEngine {
     }
 
     fn run(&mut self) {
-        for v in &mut self.vehicles {
-            v.update_path(&self.config.map);
+        for vehicle in &mut self.vehicles {
+            vehicle.update_path(&self.config.map);
         }
+
         while self.current_time < self.config.end_time {
             self.step();
             self.current_time += self.config.time_step;
         }
     }
-  
+
     fn get_score(&self) -> Score {
         scoring::compute_score(&self.vehicles, &self.config)
     }
 
     fn step(&mut self) {
-        for v in &mut self.vehicles {
-            v.previous_velocity = v.velocity;
+        for vehicle in &mut self.vehicles {
+            vehicle.previous_velocity = vehicle.velocity;
         }
+
         self.handle_departures();
         self.plan_movements();
         self.register_approaches();
         self.advance_traffic_lights();
         self.execute_movements();
         self.flush_transfers();
+
         let dt = self.config.time_step;
-        let t = self.current_time;
-        for v in &mut self.vehicles {
-            if v.state == VehicleState::OnRoad {
-                scoring::update_co2_emissions(v, dt);
-            }
-            if v.state == VehicleState::Arrived && v.arrived_at.is_none() {
-                v.arrived_at = Some(t);
+        for vehicle in &mut self.vehicles {
+            if vehicle.state == VehicleState::OnRoad {
+                scoring::update_co2_emissions(vehicle, dt);
             }
         }
-        self.advance_commute_plans();
     }
 }
 
@@ -97,21 +110,6 @@ impl SimulationEngine {
         commute_plans: Vec<CommutePlan>,
     ) -> Self {
         let current_time = config.start_time;
-        let traffic_light_states = config
-            .map
-            .traffic_lights
-            .keys()
-            .map(|&id| (id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 }))
-            .collect();
-
-        let mut link_directory = HashMap::new();
-        for edge in config.map.graph.edge_indices() {
-            for lane in &config.map.graph[edge].lanes {
-                for link in &lane.links {
-                    link_directory.insert(link.id, link.clone());
-                }
-            }
-        }
 
         let commute_plans = commute_plans.into_iter().map(|plan| (plan.id, plan)).collect();
         let vehicle_indices_by_id = vehicles
@@ -120,76 +118,307 @@ impl SimulationEngine {
             .map(|(index, vehicle)| (vehicle.id, index))
             .collect();
 
-        Self {
+        let mut engine = Self {
             config,
             vehicles,
             current_time,
             vehicles_by_lane: HashMap::new(),
+            vehicle_lane_positions: Vec::new(),
             link_states: HashMap::new(),
-            green_links: HashSet::new(),
-            pending_transfers: Vec::new(),
             all_vehicles_arrived: false,
-            traffic_light_states,
-            link_directory,
+            green_links: HashSet::new(),
+            departure_queue: BinaryHeap::new(),
+            pending_transfers: Vec::new(),
+            traffic_light_states: HashMap::new(),
+            link_directory: HashMap::new(),
+            link_to_road_id: HashMap::new(),
+            internal_lane_directory: HashMap::new(),
+            controller_green_link_ids: HashMap::new(),
+            controller_green_road_ids: HashMap::new(),
             commute_plans,
             vehicle_indices_by_id,
+        };
+
+        engine.rebuild_runtime_caches();
+        engine
+    }
+
+    pub(crate) fn rebuild_runtime_caches(&mut self) {
+        let previous_traffic_light_states = self.traffic_light_states.clone();
+
+        self.link_directory.clear();
+        self.link_to_road_id.clear();
+        self.internal_lane_directory.clear();
+        self.traffic_light_states.clear();
+        self.green_links.clear();
+        self.controller_green_link_ids.clear();
+        self.controller_green_road_ids.clear();
+        self.link_states.clear();
+        self.pending_transfers.clear();
+
+        for edge in self.config.map.graph.edge_indices() {
+            let road_id = self.config.map.graph[edge].id;
+            for lane in &self.config.map.graph[edge].lanes {
+                for link in &lane.links {
+                    self.link_directory.insert(link.id, link.clone());
+                    self.link_to_road_id.insert(link.id, road_id);
+                }
+            }
         }
+
+        for node_idx in self.config.map.graph.node_indices() {
+            let junction_id = self.config.map.graph[node_idx].id;
+            for lane in &self.config.map.graph[node_idx].internal_lanes {
+                self.internal_lane_directory.insert(
+                    (junction_id, lane.id),
+                    InternalLaneRuntime {
+                        length: lane.length,
+                        speed_limit: lane.speed_limit,
+                        to_lane_id: lane.to_lane_id,
+                    },
+                );
+            }
+        }
+
+        for &controller_id in self.config.map.traffic_lights.keys() {
+            let state = previous_traffic_light_states
+                .get(&controller_id)
+                .cloned()
+                .unwrap_or(TrafficLightRuntimeState {
+                    phase_index: 0,
+                    time_in_phase: 0.0,
+                });
+            self.traffic_light_states.insert(controller_id, state);
+        }
+
+        for (&controller_id, state) in &self.traffic_light_states {
+            let (active_links, active_roads) = Self::traffic_light_cache_for_controller(
+                &self.config.map,
+                &self.link_to_road_id,
+                controller_id,
+                state,
+            );
+            self.green_links.extend(active_links.iter().copied());
+            self.controller_green_link_ids
+                .insert(controller_id, active_links);
+            self.controller_green_road_ids
+                .insert(controller_id, active_roads);
+        }
+
+        self.vehicle_lane_positions = vec![None; self.vehicles.len()];
+        self.rebuild_lane_position_cache();
+        self.seed_departure_queue();
+        self.all_vehicles_arrived = self
+            .vehicles
+            .iter()
+            .all(|vehicle| matches!(vehicle.state, VehicleState::Arrived));
+    }
+}
+
+// Runtime caches and queues
+impl SimulationEngine {
+    fn traffic_light_cache_for_controller(
+        map: &crate::map::model::Map,
+        link_to_road_id: &HashMap<u32, u32>,
+        controller_id: u32,
+        state: &TrafficLightRuntimeState,
+    ) -> (HashSet<u32>, Vec<u32>) {
+        let mut active_link_ids = HashSet::new();
+        let mut active_road_ids = HashSet::new();
+
+        let controller = match map.traffic_lights.get(&controller_id) {
+            Some(controller) => controller,
+            None => return (active_link_ids, Vec::new()),
+        };
+
+        if controller.phases.is_empty() {
+            return (active_link_ids, Vec::new());
+        }
+
+        let phase = &controller.phases[state.phase_index];
+        if state.time_in_phase < phase.green_duration {
+            for &link_id in &phase.green_link_ids {
+                active_link_ids.insert(link_id);
+                if let Some(&road_id) = link_to_road_id.get(&link_id) {
+                    active_road_ids.insert(road_id);
+                }
+            }
+        }
+
+        let mut active_road_ids: Vec<u32> = active_road_ids.into_iter().collect();
+        active_road_ids.sort_unstable();
+        (active_link_ids, active_road_ids)
+    }
+
+    fn seed_departure_queue(&mut self) {
+        self.departure_queue.clear();
+        for vidx in 0..self.vehicles.len() {
+            self.enqueue_departure(vidx);
+        }
+    }
+
+    fn enqueue_departure(&mut self, vidx: usize) {
+        let vehicle = &self.vehicles[vidx];
+        if vehicle.state != VehicleState::WaitingToDepart {
+            return;
+        }
+        let departure_time = OrderedFloat(vehicle.trip.departure_time);
+        if departure_time.into_inner() >= f32::MAX {
+            return;
+        }
+        self.departure_queue.push(Reverse((departure_time, vidx)));
+    }
+
+    fn rebuild_lane_position_cache(&mut self) {
+        for slot in &mut self.vehicle_lane_positions {
+            *slot = None;
+        }
+
+        for indices in self.vehicles_by_lane.values() {
+            for (slot, &vehicle_idx) in indices.iter().enumerate() {
+                if let Some(entry) = self.vehicle_lane_positions.get_mut(vehicle_idx) {
+                    *entry = Some(slot);
+                }
+            }
+        }
+    }
+
+    fn insert_vehicle_into_lane(&mut self, lane: LaneId, vehicle_idx: usize) {
+        let insert_at = {
+            let list = self.vehicles_by_lane.entry(lane).or_default();
+            let insert_at = list.partition_point(|&i| {
+                self.vehicles[i].position_on_lane < self.vehicles[vehicle_idx].position_on_lane
+            });
+            list.insert(insert_at, vehicle_idx);
+            insert_at
+        };
+
+        if let Some(slot) = self.vehicle_lane_positions.get_mut(vehicle_idx) {
+            *slot = Some(insert_at);
+        }
+
+        if let Some(list) = self.vehicles_by_lane.get(&lane) {
+            for (slot, &other_idx) in list.iter().enumerate().skip(insert_at + 1) {
+                if let Some(entry) = self.vehicle_lane_positions.get_mut(other_idx) {
+                    *entry = Some(slot);
+                }
+            }
+        }
+    }
+
+    fn remove_vehicle_from_lane(&mut self, lane: LaneId, vehicle_idx: usize) {
+        let (removed_slot, remove_lane) = {
+            let Some(list) = self.vehicles_by_lane.get_mut(&lane) else {
+                if let Some(slot) = self.vehicle_lane_positions.get_mut(vehicle_idx) {
+                    *slot = None;
+                }
+                return;
+            };
+
+            let Some(position) = list.iter().position(|&i| i == vehicle_idx) else {
+                if let Some(slot) = self.vehicle_lane_positions.get_mut(vehicle_idx) {
+                    *slot = None;
+                }
+                return;
+            };
+
+            list.remove(position);
+            (position, list.is_empty())
+        };
+
+        if remove_lane {
+            self.vehicles_by_lane.remove(&lane);
+        }
+
+        if let Some(slot) = self.vehicle_lane_positions.get_mut(vehicle_idx) {
+            *slot = None;
+        }
+
+        if let Some(list) = self.vehicles_by_lane.get(&lane) {
+            for (slot, &other_idx) in list.iter().enumerate().skip(removed_slot) {
+                if let Some(entry) = self.vehicle_lane_positions.get_mut(other_idx) {
+                    *entry = Some(slot);
+                }
+            }
+        }
+    }
+
+    fn start_vehicle_departure(&mut self, vidx: usize) -> bool {
+        if self.vehicles[vidx].state != VehicleState::WaitingToDepart || self.vehicles[vidx].path.len() < 2 {
+            return false;
+        }
+
+        let first_edge = match self.config.map.graph.find_edge(self.vehicles[vidx].path[0], self.vehicles[vidx].path[1]) {
+            Some(edge) => edge,
+            None => return false,
+        };
+        let lane_id = LaneId::Normal(first_edge, 0);
+
+        let space_ok = self
+            .vehicles_by_lane
+            .get(&lane_id)
+            .and_then(|lst| lst.first().copied())
+            .is_none_or(|rear_idx| {
+                self.vehicles[rear_idx].position_on_lane - self.vehicles[rear_idx].spec.length
+                    >= self.config.minimum_gap
+            });
+
+        if !space_ok {
+            return false;
+        }
+
+        self.vehicles[vidx].position_on_lane = 0.0;
+        self.vehicles[vidx].state = VehicleState::OnRoad;
+        self.vehicles[vidx].current_lane = Some(lane_id);
+
+        self.insert_vehicle_into_lane(lane_id, vidx);
+
+        if let Some(plan_id) = self.vehicles[vidx].commute_plan_id {
+            if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
+                if plan.outbound_vehicle_id == self.vehicles[vidx].id {
+                    plan.state = CommutePlanState::OutboundRunning;
+                } else if plan.return_vehicle_id == self.vehicles[vidx].id {
+                    plan.state = CommutePlanState::ReturnRunning;
+                }
+            }
+        }
+
+        true
     }
 }
 
 // Departures
 impl SimulationEngine {
     fn handle_departures(&mut self) {
-        let waiting: Vec<usize> = self
-            .vehicles
-            .iter()
-            .enumerate()
-            .filter(|(_, v)| {
-                v.state == VehicleState::WaitingToDepart
-                    && v.path.len() >= 2
-                    && v.trip.departure_time <= self.current_time
-            })
-            .map(|(i, _)| i)
-            .collect();
+        let mut ready = Vec::new();
 
-        for vidx in waiting {
-            let first_edge = {
-                let v = &self.vehicles[vidx];
-                match self.config.map.graph.find_edge(v.path[0], v.path[1]) {
-                    Some(e) => e,
-                    None => continue,
-                }
-            };
-            let lane_id = LaneId::Normal(first_edge, 0);
+        while let Some(Reverse((departure_time, vidx))) = self.departure_queue.peek().copied() {
+            if departure_time > OrderedFloat(self.current_time) {
+                break;
+            }
 
-            let space_ok = self
-                .vehicles_by_lane
-                .get(&lane_id)
-                .and_then(|lst| lst.first().copied())
-                .is_none_or(|rear_idx| {
-                    self.vehicles[rear_idx].position_on_lane - self.vehicles[rear_idx].spec.length
-                        >= self.config.minimum_gap
-                });
+            self.departure_queue.pop();
+            ready.push((departure_time, vidx));
+        }
 
-            if !space_ok {
+        let mut blocked = Vec::new();
+
+        for (departure_time, vidx) in ready {
+            if self.vehicles[vidx].state != VehicleState::WaitingToDepart {
                 continue;
             }
 
-            self.vehicles[vidx].position_on_lane = 0.0;
-            self.vehicles[vidx].state = VehicleState::OnRoad;
-            self.vehicles[vidx].current_lane = Some(lane_id);
-            
-            lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, lane_id, vidx);
-
-            if let Some(plan_id) = self.vehicles[vidx].commute_plan_id {
-                if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
-                    if plan.outbound_vehicle_id == self.vehicles[vidx].id {
-                        plan.state = CommutePlanState::OutboundRunning;
-                    } else if plan.return_vehicle_id == self.vehicles[vidx].id {
-                        plan.state = CommutePlanState::ReturnRunning;
-                    }
-                }
+            if OrderedFloat(self.vehicles[vidx].trip.departure_time) != departure_time {
+                continue;
             }
+
+            if !self.start_vehicle_departure(vidx) {
+                blocked.push(vidx);
+            }
+        }
+
+        for vidx in blocked {
+            self.enqueue_departure(vidx);
         }
     }
 }
@@ -200,12 +429,18 @@ impl SimulationEngine {
     fn plan_movements(&mut self) {
         let lane_keys: Vec<LaneId> = self.vehicles_by_lane.keys().copied().collect();
         for lane_id in lane_keys {
-            let indices: Vec<usize> = self
-                .vehicles_by_lane
-                .get(&lane_id)
-                .cloned()
-                .unwrap_or_default();
-            for &vidx in &indices {
+            let mut cursor = 0usize;
+            loop {
+                let Some(vidx) = self
+                    .vehicles_by_lane
+                    .get(&lane_id)
+                    .and_then(|indices| indices.get(cursor))
+                    .copied()
+                else {
+                    break;
+                };
+                cursor += 1;
+
                 if self.vehicles[vidx].state != VehicleState::OnRoad {
                     continue;
                 }
@@ -272,25 +507,23 @@ impl SimulationEngine {
                 Some(LaneId::Normal(e, lid)) if e == in_edge => lid as usize,
                 _ => 0,
             };
-            let link = self.config.map.graph[in_edge]
+
+            let (link_id, via_internal_lane_id, link_type) = match self.config.map.graph[in_edge]
                 .lanes
                 .get(lane_idx)
                 .and_then(|lane| lane.links.iter().find(|l| l.destination_road_id == out_road_id))
-                .cloned();
-
-            let link = match link {
-                Some(l) => l,
+                .map(|link| (link.id, link.via_internal_lane_id, link.link_type.clone())) {
+                Some(link_data) => link_data,
                 None => break,
             };
 
-            let v1 = kinematics::approach_speed(&link.link_type, in_road_speed);
+            let v1 = kinematics::approach_speed(&link_type, in_road_speed);
             let t_arrive =
                 t_cursor + kinematics::arrival_time(dist_to_junction, v_cursor, v1, a_max, d_max);
             let v_leave = self.config.map.graph[out_edge].speed_limit;
 
             let (t_leave, il_len) = {
-                let jnode = &self.config.map.graph[junction_node];
-                match jnode.internal_lanes.iter().find(|il| il.id == link.via_internal_lane_id) {
+                match self.internal_lane_directory.get(&(junction_id, via_internal_lane_id)) {
                     Some(il) => (
                         kinematics::leave_time(t_arrive, il.length, veh_len, v1, v_leave),
                         il.length,
@@ -300,9 +533,9 @@ impl SimulationEngine {
             };
 
             plan.push(DrivePlanEntry {
-                link_id: link.id,
+                link_id,
                 lane_id: LaneId::Normal(in_edge, lane_idx as u32),
-                via_internal_lane_id: link.via_internal_lane_id,
+                via_internal_lane_id,
                 junction_id,
                 v_pass: v1.max(MIN_CREEP_SPEED),
                 v_wait: kinematics::v_stop_at(total_from_vehicle, d_max),
@@ -336,35 +569,46 @@ impl SimulationEngine {
 
             let veh_id = self.vehicles[vidx].id;
 
-            let old_ids: Vec<u32> = self.vehicles[vidx].registered_link_ids.clone();
+            let old_ids = std::mem::take(&mut self.vehicles[vidx].registered_link_ids);
             for lid in old_ids {
                 if let Some(s) = self.link_states.get_mut(&lid) {
                     s.approaching.remove(&veh_id);
                 }
             }
-            self.vehicles[vidx].registered_link_ids.clear();
 
-            let plan: Vec<DrivePlanEntry> = self.vehicles[vidx].drive_plan.clone();
-            for entry in plan {
-                if !entry.set_request {
+            let plan_len = self.vehicles[vidx].drive_plan.len();
+            for entry_idx in 0..plan_len {
+                let (set_request, link_id, arrival_time, leave_time, arrival_speed, leave_speed) = {
+                    let entry = &self.vehicles[vidx].drive_plan[entry_idx];
+                    (
+                        entry.set_request,
+                        entry.link_id,
+                        entry.arrival_time,
+                        entry.leave_time,
+                        entry.arrival_speed,
+                        entry.leave_speed,
+                    )
+                };
+
+                if !set_request {
                     continue;
                 }
                 // In case of deadlock, we can add a random jitter to the arrival and leave times.
                 // let jitter = if rand::random::<bool>() { dt } else { 0.0 };
                 let jitter = 0.0;
                 let data = ApproachData {
-                    arrival_time: entry.arrival_time + jitter,
-                    leave_time: entry.leave_time + jitter,
-                    arrival_speed: entry.arrival_speed,
-                    leave_speed: entry.leave_speed,
+                    arrival_time: arrival_time + jitter,
+                    leave_time: leave_time + jitter,
+                    arrival_speed: arrival_speed,
+                    leave_speed: leave_speed,
                     will_pass: true,
                 };
                 self.link_states
-                    .entry(entry.link_id)
+                    .entry(link_id)
                     .or_default()
                     .approaching
                     .insert(veh_id, data);
-                self.vehicles[vidx].registered_link_ids.push(entry.link_id);
+                self.vehicles[vidx].registered_link_ids.push(link_id);
             }
         }
     }
@@ -375,7 +619,7 @@ impl SimulationEngine {
 impl SimulationEngine {
     fn advance_traffic_lights(&mut self) {
         let dt = self.config.time_step;
-        let mut any_transition = false;
+        let mut transitioned_controllers = Vec::new();
 
         for (&ctrl_id, state) in &mut self.traffic_light_states {
             let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
@@ -393,25 +637,32 @@ impl SimulationEngine {
             if state.time_in_phase >= total_duration {
                 state.time_in_phase -= total_duration;
                 state.phase_index = (state.phase_index + 1) % controller.phases.len();
-                any_transition = true;
+                transitioned_controllers.push(ctrl_id);
             }
         }
 
-        if any_transition {
-            self.green_links.clear();
-            for (&ctrl_id, state) in &self.traffic_light_states {
-                let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
-                    Some(c) => c,
-                    None => continue,
-                };
-                if controller.phases.is_empty() {
-                    continue;
-                }
-                let current_phase = &controller.phases[state.phase_index];
-                if state.time_in_phase < current_phase.green_duration {
-                    self.green_links.extend(current_phase.green_link_ids.iter().copied());
+        for ctrl_id in transitioned_controllers {
+            if let Some(previous_links) = self.controller_green_link_ids.remove(&ctrl_id) {
+                for link_id in previous_links {
+                    self.green_links.remove(&link_id);
                 }
             }
+
+            let state = match self.traffic_light_states.get(&ctrl_id) {
+                Some(state) => state,
+                None => continue,
+            };
+
+            let (active_links, active_roads) = Self::traffic_light_cache_for_controller(
+                &self.config.map,
+                &self.link_to_road_id,
+                ctrl_id,
+                state,
+            );
+
+            self.green_links.extend(active_links.iter().copied());
+            self.controller_green_link_ids.insert(ctrl_id, active_links);
+            self.controller_green_road_ids.insert(ctrl_id, active_roads);
         }
     }
 }
@@ -422,12 +673,18 @@ impl SimulationEngine {
     fn execute_movements(&mut self) {
         let lane_keys: Vec<LaneId> = self.vehicles_by_lane.keys().copied().collect();
         for lane_id in lane_keys {
-            let indices: Vec<usize> = self
-                .vehicles_by_lane
-                .get(&lane_id)
-                .cloned()
-                .unwrap_or_default();
-            for &vidx in &indices {
+            let mut cursor = 0usize;
+            loop {
+                let Some(vidx) = self
+                    .vehicles_by_lane
+                    .get(&lane_id)
+                    .and_then(|indices| indices.get(cursor))
+                    .copied()
+                else {
+                    break;
+                };
+                cursor += 1;
+
                 if self.vehicles[vidx].state != VehicleState::OnRoad {
                     continue;
                 }
@@ -529,8 +786,8 @@ impl SimulationEngine {
         }
     }
 
-    fn find_link(&self, link_id: u32) -> Option<crate::map::road::Link> {
-        self.link_directory.get(&link_id).cloned()
+    fn find_link(&self, link_id: u32) -> Option<&crate::map::road::Link> {
+        self.link_directory.get(&link_id)
     }
 
     fn vehicle_ahead_info(&self, vidx: usize, lane_id: LaneId) -> (f32, f32) {
@@ -540,7 +797,12 @@ impl SimulationEngine {
             None => return (f32::INFINITY, v.spec.max_speed),
         };
 
-        let my_slot = lst.iter().position(|&i| i == vidx);
+        let my_slot = self
+            .vehicle_lane_positions
+            .get(vidx)
+            .copied()
+            .flatten()
+            .or_else(|| lst.iter().position(|&i| i == vidx));
         let leader = my_slot.and_then(|p| lst.get(p + 1)).copied();
 
         match leader {
@@ -557,17 +819,9 @@ impl SimulationEngine {
         match self.vehicles[vidx].current_lane {
             Some(LaneId::Normal(edge, _)) => self.config.map.graph[edge].length,
             Some(LaneId::Internal(jid, ilid)) => self
-                .config
-                .map
-                .node_index_map
-                .get(&jid)
-                .and_then(|&ni| {
-                    self.config.map.graph[ni]
-                        .internal_lanes
-                        .iter()
-                        .find(|il| il.id == ilid)
-                        .map(|il| il.length)
-                })
+                .internal_lane_directory
+                .get(&(jid, ilid))
+                .map(|lane| lane.length)
                 .unwrap_or(1.0),
             None => f32::INFINITY,
         }
@@ -577,17 +831,9 @@ impl SimulationEngine {
         match self.vehicles[vidx].current_lane {
             Some(LaneId::Normal(edge, _)) => self.config.map.graph[edge].speed_limit,
             Some(LaneId::Internal(jid, ilid)) => self
-                .config
-                .map
-                .node_index_map
-                .get(&jid)
-                .and_then(|&ni| {
-                    self.config.map.graph[ni]
-                        .internal_lanes
-                        .iter()
-                        .find(|il| il.id == ilid)
-                        .map(|il| il.speed_limit)
-                })
+                .internal_lane_directory
+                .get(&(jid, ilid))
+                .map(|lane| lane.speed_limit)
                 .unwrap_or(crate::simulation::config::MAX_SPEED),
             None => crate::simulation::config::MAX_SPEED,
         }
@@ -622,8 +868,9 @@ impl SimulationEngine {
         let pi = self.vehicles[vidx].path_index;
         if pi + 1 >= self.vehicles[vidx].path.len() {
             self.vehicles[vidx].state = VehicleState::Arrived;
+            self.vehicles[vidx].arrived_at = Some(self.current_time);
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
-            self.check_if_all_vehicles_arrived();
+            self.handle_vehicle_arrival(vidx);
             return;
         }
 
@@ -635,16 +882,10 @@ impl SimulationEngine {
         };
         let dest_lane_id = match self.vehicles[vidx].current_lane {
             Some(LaneId::Internal(jid, ilid)) => {
-                if let Some(&ni) = self.config.map.node_index_map.get(&jid) {
-                    self.config.map.graph[ni]
-                        .internal_lanes
-                        .iter()
-                        .find(|il| il.id == ilid)
-                        .map(|il| il.to_lane_id)
-                        .unwrap_or(0)
-                } else {
-                    0
-                }
+                self.internal_lane_directory
+                    .get(&(jid, ilid))
+                    .map(|lane| lane.to_lane_id)
+                    .unwrap_or(0)
             }
             _ => 0,
         };
@@ -661,15 +902,16 @@ impl SimulationEngine {
         if pi + 1 >= path_len - 1 {
             self.vehicles[vidx].position_on_lane = road_len;
             self.vehicles[vidx].state = VehicleState::Arrived;
+            self.vehicles[vidx].arrived_at = Some(self.current_time);
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
-            self.check_if_all_vehicles_arrived();
+            self.handle_vehicle_arrival(vidx);
             return;
         }
 
         self.vehicles[vidx].position_on_lane -= road_len;
 
-        let entry = match self.vehicles[vidx].drive_plan.first().cloned() {
-            Some(e) => e,
+        let via_internal_lane_id = match self.vehicles[vidx].drive_plan.first() {
+            Some(entry) => entry.via_internal_lane_id,
             None => {
                 self.vehicles[vidx].position_on_lane = 0.0;
                 self.vehicles[vidx].velocity = 0.0;
@@ -679,7 +921,7 @@ impl SimulationEngine {
 
         let junction_node: NodeIndex = self.vehicles[vidx].path[pi + 1];
         let junction_id = self.config.map.graph[junction_node].id;
-        let to_lane = LaneId::Internal(junction_id, entry.via_internal_lane_id);
+        let to_lane = LaneId::Internal(junction_id, via_internal_lane_id);
 
         self.vehicles[vidx].current_lane = Some(to_lane);
         self.vehicles[vidx].drive_plan.remove(0);
@@ -691,99 +933,83 @@ impl SimulationEngine {
         self.all_vehicles_arrived = nb_arrived == self.vehicles.len();
     }
 
-    fn advance_commute_plans(&mut self) {
-        let plan_ids: Vec<u64> = self.commute_plans.keys().copied().collect();
+    fn handle_vehicle_arrival(&mut self, vidx: usize) {
+        let Some(plan_id) = self.vehicles[vidx].commute_plan_id else {
+            self.check_if_all_vehicles_arrived();
+            return;
+        };
 
-        for plan_id in plan_ids {
-            let snapshot = match self.commute_plans.get(&plan_id) {
-                Some(plan) => (
-                    plan.state,
-                    plan.outbound_vehicle_id,
-                    plan.return_vehicle_id,
-                    plan.return_waiting_time_s,
-                ),
-                None => continue,
-            };
-
-            match snapshot.0 {
-                CommutePlanState::OutboundRunning | CommutePlanState::OutboundPending => {
-                    let outbound_idx = match self.vehicle_indices_by_id.get(&snapshot.1).copied() {
-                        Some(index) => index,
-                        None => {
-                            if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
-                                plan.state = CommutePlanState::Failed;
-                            }
-                            continue;
-                        }
-                    };
-
-                    if self.vehicles[outbound_idx].state != VehicleState::Arrived {
-                        continue;
-                    }
-
-                    let return_idx = match self.vehicle_indices_by_id.get(&snapshot.2).copied() {
-                        Some(index) => index,
-                        None => {
-                            if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
-                                plan.state = CommutePlanState::Failed;
-                            }
-                            continue;
-                        }
-                    };
-
-                    let ready_at = self.vehicles[outbound_idx]
-                        .arrived_at
-                        .unwrap_or(self.current_time)
-                        + snapshot.3;
-
-                    let path_ok = {
-                        let return_vehicle = &mut self.vehicles[return_idx];
-                        return_vehicle.trip.departure_time = ready_at;
-                        return_vehicle.state = VehicleState::WaitingToDepart;
-                        return_vehicle.position_on_lane = 0.0;
-                        return_vehicle.velocity = 0.0;
-                        return_vehicle.previous_velocity = 0.0;
-                        return_vehicle.current_lane = None;
-                        return_vehicle.drive_plan.clear();
-                        return_vehicle.registered_link_ids.clear();
-                        return_vehicle.waiting_time = 0.0;
-                        return_vehicle.impatience = 0.0;
-                        return_vehicle.update_path(&self.config.map)
-                    };
-
-                    if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
-                        plan.state = if path_ok {
-                            CommutePlanState::WaitingForReturnDeparture
-                        } else {
-                            CommutePlanState::Failed
-                        };
-                    }
-
-                    if !path_ok {
-                        self.vehicles[return_idx].trip.departure_time = f32::MAX;
-                    }
-                }
-                CommutePlanState::ReturnRunning => {
-                    let return_idx = match self.vehicle_indices_by_id.get(&snapshot.2).copied() {
-                        Some(index) => index,
-                        None => {
-                            if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
-                                plan.state = CommutePlanState::Failed;
-                            }
-                            continue;
-                        }
-                    };
-
-                    if self.vehicles[return_idx].state == VehicleState::Arrived {
-                        if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
-                            plan.state = CommutePlanState::Completed;
-                        }
-                    }
-                }
-                _ => {}
+        let snapshot = match self.commute_plans.get(&plan_id) {
+            Some(plan) => (
+                plan.state,
+                plan.outbound_vehicle_id,
+                plan.return_vehicle_id,
+                plan.return_waiting_time_s,
+            ),
+            None => {
+                self.check_if_all_vehicles_arrived();
+                return;
             }
+        };
+
+        let vehicle_id = self.vehicles[vidx].id;
+
+        match snapshot.0 {
+            CommutePlanState::OutboundPending | CommutePlanState::OutboundRunning
+                if vehicle_id == snapshot.1 => {
+                let ready_at = self.vehicles[vidx].arrived_at.unwrap_or(self.current_time) + snapshot.3;
+
+                let return_idx = match self.vehicle_indices_by_id.get(&snapshot.2).copied() {
+                    Some(index) => index,
+                    None => {
+                        if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
+                            plan.state = CommutePlanState::Failed;
+                        }
+                        self.check_if_all_vehicles_arrived();
+                        return;
+                    }
+                };
+
+                let path_ok = {
+                    let return_vehicle = &mut self.vehicles[return_idx];
+                    return_vehicle.trip.departure_time = ready_at;
+                    return_vehicle.state = VehicleState::WaitingToDepart;
+                    return_vehicle.position_on_lane = 0.0;
+                    return_vehicle.velocity = 0.0;
+                    return_vehicle.previous_velocity = 0.0;
+                    return_vehicle.current_lane = None;
+                    return_vehicle.drive_plan.clear();
+                    return_vehicle.registered_link_ids.clear();
+                    return_vehicle.waiting_time = 0.0;
+                    return_vehicle.impatience = 0.0;
+                    return_vehicle.update_path(&self.config.map)
+                };
+
+                if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
+                    plan.state = if path_ok {
+                        CommutePlanState::WaitingForReturnDeparture
+                    } else {
+                        CommutePlanState::Failed
+                    };
+                }
+
+                if !path_ok {
+                    self.vehicles[return_idx].trip.departure_time = f32::MAX;
+                } else {
+                    self.enqueue_departure(return_idx);
+                }
+            }
+            CommutePlanState::ReturnRunning if vehicle_id == snapshot.2 => {
+                if let Some(plan) = self.commute_plans.get_mut(&plan_id) {
+                    plan.state = CommutePlanState::Completed;
+                }
+            }
+            _ => {}
         }
+
+        self.check_if_all_vehicles_arrived();
     }
+
 }
 
 // Buffer flush
@@ -792,21 +1018,17 @@ impl SimulationEngine {
     fn flush_transfers(&mut self) {
         let transfers: Vec<PendingTransfer> = self.pending_transfers.drain(..).collect();
         for t in transfers {
-            if let Some(lst) = self.vehicles_by_lane.get_mut(&t.from_lane) {
-                lst.retain(|&i| i != t.vehicle_idx);
-                if lst.is_empty() {
-                    self.vehicles_by_lane.remove(&t.from_lane);
-                }
-            }
+            self.remove_vehicle_from_lane(t.from_lane, t.vehicle_idx);
             if let Some(to_lane) = t.to_lane {
                 if self.vehicles[t.vehicle_idx].state != VehicleState::Arrived {
-                    lane_insert_sorted(&mut self.vehicles_by_lane, &self.vehicles, to_lane, t.vehicle_idx);
+                    self.insert_vehicle_into_lane(to_lane, t.vehicle_idx);
                 }
             }
         }
     }
 }
 
+#[cfg(test)]
 pub(crate) fn lane_insert_sorted(
     by_lane: &mut HashMap<LaneId, Vec<usize>>,
     vehicles: &[Vehicle],

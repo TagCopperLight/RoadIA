@@ -112,20 +112,25 @@ impl SimulationInstance {
                     let start = tokio::time::Instant::now();
                     let multiplier = instance.speed_multiplier.load(Ordering::Relaxed) as usize;
 
-                    let (vehicles_data, traffic_lights_data, simulation_time_s, time_step) = {
+                    let (map_snapshot, vehicles_snapshot, controller_green_road_ids, simulation_time_s, time_step, finished) = {
                         let mut eng = instance.engine.lock().await;
                         for _ in 0..multiplier {
                             eng.step();
                             eng.current_time += eng.config.time_step;
                         }
-                        let vehicles = eng.vehicles
-                            .iter()
-                            .map(|v| serialize_vehicle(v, &eng.config.map))
-                            .collect::<Vec<_>>();
-                        let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
+                        let map_snapshot = eng.config.map.clone();
+                        let vehicles_snapshot = eng.vehicles.clone();
+                        let controller_green_road_ids = eng.controller_green_road_ids.clone();
+                        let finished = eng.all_vehicles_arrived || eng.current_time >= eng.config.end_time;
                         let ts = eng.config.time_step;
-                        (vehicles, tl, eng.current_time, ts)
+                        (map_snapshot, vehicles_snapshot, controller_green_road_ids, eng.current_time, ts, finished)
                     };
+
+                    let mut vehicles_data = Vec::with_capacity(vehicles_snapshot.len());
+                    for vehicle in &vehicles_snapshot {
+                        vehicles_data.push(serialize_vehicle(vehicle, &map_snapshot));
+                    }
+                    let traffic_lights_data = serialize_traffic_lights(&map_snapshot, &controller_green_road_ids);
 
                     let packet = ServerPacket::VehicleUpdate {
                         vehicles: vehicles_data,
@@ -137,13 +142,10 @@ impl SimulationInstance {
                     let elapsed = start.elapsed();
                     let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
 
-                    {
-                        let engine = instance.engine.lock().await;
-                        if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
-                            instance.controller.stop();
-                            let _ = instance.broadcast.send(ServerPacket::SimulationFinished {});
-                            println!("Simulation finished");
-                        }
+                    if finished {
+                        instance.controller.stop();
+                        let _ = instance.broadcast.send(ServerPacket::SimulationFinished {});
+                        println!("Simulation finished");
                     }
 
                     drop(instance);
