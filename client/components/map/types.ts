@@ -82,3 +82,7 @@ export interface ScoreData {
 	ref_network_length: number;
 	success_rate: number;
 }
+
+export interface ScoreProgressPacket {
+	progress: number;
+}

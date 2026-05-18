@@ -46,6 +46,7 @@ pub struct SimulationInstance {
     pub engine: Arc<Mutex<SimulationEngine>>,
     pub initial_engine: Arc<Mutex<SimulationEngine>>,
     pub broadcast: broadcast::Sender<ServerPacket>,
+    pub score_progress_broadcast: broadcast::Sender<ServerPacket>,
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
     pub speed_multiplier: AtomicU32,
@@ -81,6 +82,7 @@ impl SimulationInstance {
         let engine = Arc::new(Mutex::new(simulation));
         let initial_engine = Arc::new(Mutex::new(initial_snapshot));
         let (broadcast, _) = broadcast::channel(100);
+        let (score_progress_broadcast, _) = broadcast::channel(100);
         let controller = SimulationController::new();
 
         let instance = Arc::new(Self {
@@ -88,6 +90,7 @@ impl SimulationInstance {
             engine,
             initial_engine,
             broadcast,
+            score_progress_broadcast,
             controller,
             active_connections: AtomicUsize::new(0),
             speed_multiplier: AtomicU32::new(3),

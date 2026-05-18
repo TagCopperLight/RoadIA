@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
+use crate::scoring::Score;
 use crate::simulation::engine::Simulation;
+use crate::simulation::engine::SimulationEngine;
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
@@ -61,6 +63,7 @@ pub enum ServerPacket {
         network_length: f32,
         ref_network_length: f32,
         success_rate: f32, },
+    ScoreProgress { progress: f32 },
     SimulationFinished {},
     DensityMap { edges: Vec<Value> },
     VehicleList { vehicles: Vec<Value> },
@@ -113,6 +116,7 @@ async fn ws_loop(
 ) {
     instance.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut rx = instance.broadcast.subscribe();
+    let mut score_progress_rx = instance.score_progress_broadcast.subscribe();
     println!("New WebSocket client connected");
 
     // Send initial map state immediately on connect
@@ -138,6 +142,17 @@ async fn ws_loop(
             }
             packet = rx.recv() => {
                 match packet {
+                    Ok(packet) => {
+                        if !process_broadcast_msg(packet, &mut socket).await {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            score_progress = score_progress_rx.recv() => {
+                match score_progress {
                     Ok(packet) => {
                         if !process_broadcast_msg(packet, &mut socket).await {
                             break;
@@ -199,6 +214,58 @@ async fn process_broadcast_msg(packet: ServerPacket, socket: &mut WebSocket) -> 
     true
 }
 
+#[cfg(test)]
+pub(crate) fn run_score_request_with_progress(
+    sim: SimulationEngine,
+    broadcast: broadcast::Sender<ServerPacket>,
+) {
+    run_score_request_with_progress_internal(sim, broadcast.clone(), broadcast);
+}
+
+fn run_score_request_with_progress_internal(
+    mut sim: SimulationEngine,
+    score_broadcast: broadcast::Sender<ServerPacket>,
+    progress_broadcast: broadcast::Sender<ServerPacket>,
+) {
+    for vehicle in &mut sim.vehicles {
+        vehicle.update_path(&sim.config.map);
+    }
+
+    let remaining_duration = (sim.config.end_time - sim.current_time).max(0.0);
+    let total_ticks = if sim.config.time_step > 0.0 {
+        (remaining_duration / sim.config.time_step).ceil().max(1.0) as usize
+    } else {
+        1
+    };
+    let report_every = (total_ticks / 100).max(1);
+
+    let mut completed_ticks = 0usize;
+    while sim.current_time < sim.config.end_time {
+        sim.step();
+        sim.current_time += sim.config.time_step;
+        completed_ticks += 1;
+
+        if completed_ticks % report_every == 0 {
+            let progress = ((completed_ticks as f32 / total_ticks as f32) * 100.0).min(99.0);
+            let _ = progress_broadcast.send(ServerPacket::ScoreProgress { progress });
+        }
+    }
+
+    let _ = progress_broadcast.send(ServerPacket::ScoreProgress { progress: 100.0 });
+
+    let score: Score = sim.get_score();
+    let _ = score_broadcast.send(ServerPacket::Score {
+        score: score.score,
+        total_trip_time: score.total_trip_time,
+        ref_total_trip_time: score.ref_total_trip_time,
+        total_emitted_co2: score.total_emitted_co2,
+        ref_total_emitted_co2: score.ref_total_emitted_co2,
+        network_length: score.network_length,
+        ref_network_length: score.ref_network_length,
+        success_rate: score.success_rate,
+    });
+}
+
 async fn handle_client_packet(
     packet: ClientPacket,
     socket: &mut WebSocket,
@@ -211,6 +278,7 @@ async fn handle_client_packet(
 
         ClientPacket::RequestScore {} => {
             let broadcast = instance.broadcast.clone();
+            let score_progress_broadcast = instance.score_progress_broadcast.clone();
             let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
@@ -218,22 +286,11 @@ async fn handle_client_packet(
                     eng.clone()
                 };
 
-                let score = tokio::task::spawn_blocking(move || {
-                    let mut sim = sim_clone;
-                    sim.run();
-                    sim.get_score()
-                }).await.expect("score computation panicked");
+                let _ = score_progress_broadcast.send(ServerPacket::ScoreProgress { progress: 1.0 });
 
-                let _ = broadcast.send(ServerPacket::Score {
-                    score: score.score,
-                    total_trip_time: score.total_trip_time,
-                    ref_total_trip_time: score.ref_total_trip_time,
-                    total_emitted_co2: score.total_emitted_co2,
-                    ref_total_emitted_co2: score.ref_total_emitted_co2,
-                    network_length: score.network_length,
-                    ref_network_length: score.ref_network_length,
-                    success_rate: score.success_rate,
-                });
+                tokio::task::spawn_blocking(move || {
+                    run_score_request_with_progress_internal(sim_clone, broadcast, score_progress_broadcast)
+                }).await.expect("score computation panicked");
             });
         }
 

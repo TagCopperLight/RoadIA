@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePacket, useWs } from '@/app/websocket/websocket';
 import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
-import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary, VehicleUpdatePacket } from './map/types';
+import { MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary, VehicleUpdatePacket, ScoreProgressPacket } from './map/types';
 import ScoreModal from './ScoreModal';
 import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
@@ -22,6 +22,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [vehicleSummaries, setVehicleSummaries] = useState<VehicleSummary[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
+	const [scoreProgress, setScoreProgress] = useState<number | null>(null);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [roadDensity, setRoadDensity] = useState<Map<number, number>>(new Map());
 	const [simulationTime, setSimulationTime] = useState(0);
@@ -57,6 +58,12 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		simStateRef.current = simState;
 		modeRef.current = mode;
 	});
+
+	useEffect(() => {
+		if (isScoringLoading || !showScore) {
+			setScoreProgress(null);
+		}
+	}, [isScoringLoading, showScore]);
 
 	// Request vehicle list when switching to waypoints tool
 	useEffect(() => {
@@ -107,8 +114,16 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
+		setScoreProgress(100);
 		setIsScoringLoading(false);
 		setShowScore(true);
+	});
+
+	usePacket("scoreProgress", (data) => {
+		const result = data as ScoreProgressPacket;
+		if (typeof result?.progress === 'number') {
+			setScoreProgress(prev => Math.max(prev ?? 0, Math.min(100, result.progress)));
+		}
 	});
 
 	usePacket("densityMap", (data) => {
@@ -305,9 +320,24 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 
 				{isScoringLoading && (
-					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
-						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
-						<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-3 rounded-2xl shadow-lg z-40 min-w-[280px]">
+						<div className="flex items-center gap-3">
+							<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+							<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
+							{scoreProgress !== null && (
+								<span className="ml-auto text-sm font-semibold text-neutral-900 tabular-nums">
+									{Math.round(Math.max(0, Math.min(100, scoreProgress)))}%
+								</span>
+							)}
+						</div>
+						{scoreProgress !== null && (
+							<div className="mt-3 h-2 w-full rounded-full bg-neutral-200 overflow-hidden">
+								<div
+									className="h-full rounded-full bg-neutral-900 transition-[width] duration-150"
+									style={{ width: `${Math.max(0, Math.min(100, scoreProgress))}%` }}
+								/>
+							</div>
+						)}
 					</div>
 				)}
 
