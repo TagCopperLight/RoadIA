@@ -219,13 +219,24 @@ pub(crate) fn run_score_request_with_progress(
     sim: SimulationEngine,
     broadcast: broadcast::Sender<ServerPacket>,
 ) {
-    run_score_request_with_progress_internal(sim, broadcast.clone(), broadcast);
+    run_score_request_with_progress_internal(
+        sim,
+        ScoreRequestChannels {
+            score: broadcast.clone(),
+            progress: broadcast,
+        },
+    );
+}
+
+#[derive(Clone)]
+struct ScoreRequestChannels {
+    score: broadcast::Sender<ServerPacket>,
+    progress: broadcast::Sender<ServerPacket>,
 }
 
 fn run_score_request_with_progress_internal(
     mut sim: SimulationEngine,
-    score_broadcast: broadcast::Sender<ServerPacket>,
-    progress_broadcast: broadcast::Sender<ServerPacket>,
+    channels: ScoreRequestChannels,
 ) {
     for vehicle in &mut sim.vehicles {
         vehicle.update_path(&sim.config.map);
@@ -247,14 +258,14 @@ fn run_score_request_with_progress_internal(
 
         if completed_ticks % report_every == 0 {
             let progress = ((completed_ticks as f32 / total_ticks as f32) * 100.0).min(99.0);
-            let _ = progress_broadcast.send(ServerPacket::ScoreProgress { progress });
+            let _ = channels.progress.send(ServerPacket::ScoreProgress { progress });
         }
     }
 
-    let _ = progress_broadcast.send(ServerPacket::ScoreProgress { progress: 100.0 });
+    let _ = channels.progress.send(ServerPacket::ScoreProgress { progress: 100.0 });
 
     let score: Score = sim.get_score();
-    let _ = score_broadcast.send(ServerPacket::Score {
+    let _ = channels.score.send(ServerPacket::Score {
         score: score.score,
         total_trip_time: score.total_trip_time,
         ref_total_trip_time: score.ref_total_trip_time,
@@ -277,8 +288,10 @@ async fn handle_client_packet(
         }
 
         ClientPacket::RequestScore {} => {
-            let broadcast = instance.broadcast.clone();
-            let score_progress_broadcast = instance.score_progress_broadcast.clone();
+            let channels = ScoreRequestChannels {
+                score: instance.broadcast.clone(),
+                progress: instance.score_progress_broadcast.clone(),
+            };
             let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
@@ -286,10 +299,10 @@ async fn handle_client_packet(
                     eng.clone()
                 };
 
-                let _ = score_progress_broadcast.send(ServerPacket::ScoreProgress { progress: 1.0 });
+                let _ = channels.progress.send(ServerPacket::ScoreProgress { progress: 1.0 });
 
                 tokio::task::spawn_blocking(move || {
-                    run_score_request_with_progress_internal(sim_clone, broadcast, score_progress_broadcast)
+                    run_score_request_with_progress_internal(sim_clone, channels)
                 }).await.expect("score computation panicked");
             });
         }

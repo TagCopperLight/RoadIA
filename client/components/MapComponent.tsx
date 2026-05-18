@@ -122,7 +122,8 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	usePacket("scoreProgress", (data) => {
 		const result = data as ScoreProgressPacket;
 		if (typeof result?.progress === 'number') {
-			setScoreProgress(prev => Math.max(prev ?? 0, Math.min(100, result.progress)));
+			const nextProgress = clampProgress(result.progress);
+			setScoreProgress(prev => Math.max(prev ?? 0, nextProgress));
 		}
 	});
 
@@ -197,6 +198,10 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		const secs = totalSeconds % 60;
 		return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 	};
+
+	const clampProgress = (value: number) => Math.max(0, Math.min(100, value));
+	const scoreProgressValue = scoreProgress === null ? null : clampProgress(scoreProgress);
+	const scoreProgressLabel = scoreProgressValue === null ? null : Math.round(scoreProgressValue);
 
 	const handleAddNode = useCallback((x: number, y: number) => {
 		if (mapData) {
@@ -324,17 +329,17 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 						<div className="flex items-center gap-3">
 							<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
 							<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
-							{scoreProgress !== null && (
+							{scoreProgressLabel !== null && (
 								<span className="ml-auto text-sm font-semibold text-neutral-900 tabular-nums">
-									{Math.round(Math.max(0, Math.min(100, scoreProgress)))}%
+									{scoreProgressLabel}%
 								</span>
 							)}
 						</div>
-						{scoreProgress !== null && (
+						{scoreProgressValue !== null && (
 							<div className="mt-3 h-2 w-full rounded-full bg-neutral-200 overflow-hidden">
 								<div
 									className="h-full rounded-full bg-neutral-900 transition-[width] duration-150"
-									style={{ width: `${Math.max(0, Math.min(100, scoreProgress))}%` }}
+									style={{ width: `${scoreProgressValue}%` }}
 								/>
 							</div>
 						)}
