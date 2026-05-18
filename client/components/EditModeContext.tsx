@@ -43,6 +43,8 @@ interface EditModeContextType {
     setShowScore: (show: boolean) => void;
     isScoringLoading: boolean;
     setIsScoringLoading: (loading: boolean) => void;
+    scoreProgress: number | null;
+    setScoreProgress: Dispatch<SetStateAction<number | null>>;
     densityView: boolean;
     setDensityView: (v: boolean) => void;
     isDensityLoading: boolean;
@@ -73,6 +75,7 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
     const [simulationResetAt, setSimulationResetAt] = useState(0);
     const [showScore, setShowScore] = useState(false);
     const [isScoringLoading, setIsScoringLoading] = useState(false);
+    const [scoreProgress, setScoreProgress] = useState<number | null>(null);
     const [densityView, setDensityView] = useState(false);
     const [isDensityLoading, setIsDensityLoading] = useState(false);
     const [showIntersections, setShowIntersections] = useState(true);
@@ -86,6 +89,7 @@ export function EditModeProvider({ children }: { children: ReactNode }) {
         <EditModeContext.Provider value={{
             mode, editTool, simState, selectedElement, pendingRoadFrom, simulationResetAt,
             showScore, setShowScore, isScoringLoading, setIsScoringLoading,
+            scoreProgress, setScoreProgress,
             densityView, setDensityView, isDensityLoading, setIsDensityLoading,
             showIntersections, setShowIntersections,
             showSettings, setShowSettings,

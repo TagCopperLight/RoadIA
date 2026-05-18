@@ -16,13 +16,14 @@ import { calculateCost, estimateRoadCost, estimateNodeCost, DEFAULT_BUDGET_CONFI
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
+const clampProgress = (value: number) => Math.max(0, Math.min(100, value));
+
 export default function MapComponent({ uuid }: { uuid: string }) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
 	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [vehicleSummaries, setVehicleSummaries] = useState<VehicleSummary[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
-	const [scoreProgress, setScoreProgress] = useState<number | null>(null);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [roadDensity, setRoadDensity] = useState<Map<number, number>>(new Map());
 	const [simulationTime, setSimulationTime] = useState(0);
@@ -32,6 +33,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
+		scoreProgress, setScoreProgress,
 		densityView, setDensityView, isDensityLoading, setIsDensityLoading,
 		showIntersections,
 		showSettings, setShowSettings, mapSettings, setMapSettings,
@@ -58,12 +60,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		simStateRef.current = simState;
 		modeRef.current = mode;
 	});
-
-	useEffect(() => {
-		if (isScoringLoading || !showScore) {
-			setScoreProgress(null);
-		}
-	}, [isScoringLoading, showScore]);
 
 	// Request vehicle list when switching to waypoints tool
 	useEffect(() => {
@@ -198,8 +194,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		const secs = totalSeconds % 60;
 		return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 	};
-
-	const clampProgress = (value: number) => Math.max(0, Math.min(100, value));
 	const scoreProgressValue = scoreProgress === null ? null : clampProgress(scoreProgress);
 	const scoreProgressLabel = scoreProgressValue === null ? null : Math.round(scoreProgressValue);
 
@@ -354,7 +348,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 
 				{showScore && score && (
-					<ScoreModal score={score} onClose={() => setShowScore(false)} />
+					<ScoreModal score={score} onClose={() => { setShowScore(false); setScoreProgress(null); }} />
 				)}
 
 				{showSettings && (
