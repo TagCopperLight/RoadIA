@@ -465,21 +465,37 @@ async fn handle_client_packet(
         }
 
         ClientPacket::AddWaypoints { vehicle_id, node_ids } => {
-            let mut eng = instance.engine.lock().await;
-            let map = eng.config.map.clone();
+            
+            // Lock engine and resolve NodeIndex values against the live map, and record the vehicle index.
+            let eng = instance.engine.lock().await;
+            let map_clone = eng.config.map.clone();
             let waypoints: Vec<_> = node_ids
                 .iter()
-                .filter_map(|nid| map.node_index_map.get(nid).copied())
+                .filter_map(|nid| eng.config.map.node_index_map.get(nid).copied())
                 .collect();
-            if let Some(v) = eng.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
-                v.waypoints = waypoints;
-                v.update_path(&map);
-            }
-            let vehicles: Vec<Value> = eng.vehicles.iter()
-                .map(|v| serialize_vehicle_summary(v, &map))
-                .collect();
+            let vehicle_pos = eng.vehicles.iter().position(|v| v.id == vehicle_id);
             drop(eng);
-            let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+
+            if let Some(pos) = vehicle_pos {
+                let mut eng = instance.engine.lock().await;
+                if let Some(v) = eng.vehicles.get_mut(pos) {
+                    v.waypoints = waypoints.clone();
+                    v.update_path(&map_clone);
+                }
+
+                // Log vehicle state using the cloned map for stable id lookup
+                if let Some(_v) = eng.vehicles.get(pos) {
+                    // intentionally left blank (no debug output)
+                }
+
+                let vehicles: Vec<Value> = eng.vehicles.iter()
+                    .map(|v| serialize_vehicle_summary(v, &map_clone))
+                    .collect();
+                drop(eng);
+                let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+                } else {
+                    
+                }
         }
 
         ClientPacket::RequestVehicles {} => {

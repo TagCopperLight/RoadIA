@@ -234,11 +234,11 @@ impl SimulationEngine {
 
             let in_edge = match self.config.map.graph.find_edge(from_node, junction_node) {
                 Some(e) => e,
-                None => break,
+                None => {continue;}
             };
             let out_edge = match self.config.map.graph.find_edge(junction_node, to_node) {
                 Some(e) => e,
-                None => break,
+                None => {continue;}
             };
 
             let in_road_speed = self.config.map.graph[in_edge].speed_limit;
@@ -246,20 +246,33 @@ impl SimulationEngine {
             let out_road_len = self.config.map.graph[out_edge].length;
             let junction_id = self.config.map.graph[junction_node].id;
 
-            let lane_idx = match self.vehicles[vidx].current_lane {
+            let mut lane_idx = match self.vehicles[vidx].current_lane {
                 Some(LaneId::Normal(e, lid)) if e == in_edge => lid as usize,
                 _ => 0,
             };
-            let link = self.config.map.graph[in_edge]
+            let mut link = self.config.map.graph[in_edge]
                 .lanes
                 .get(lane_idx)
                 .and_then(|lane| lane.links.iter().find(|l| l.destination_road_id == out_road_id))
                 .cloned();
 
-            let link = match link {
-                Some(l) => l,
-                None => break,
-            };
+            // If not found in the presumed lane, scan other lanes on the same edge.
+            if link.is_none() {
+                for (li, lane) in self.config.map.graph[in_edge].lanes.iter().enumerate() {
+                    if let Some(l) = lane.links.iter().find(|l| l.destination_road_id == out_road_id) {
+                        lane_idx = li;
+                        link = Some(l.clone());
+                        
+                        break;
+                    }
+                }
+            }
+
+            if link.is_none() {
+                continue;
+            }
+
+            let link = link.unwrap();
 
             let v1 = kinematics::approach_speed(&link.link_type, in_road_speed);
             let t_arrive =
@@ -598,6 +611,19 @@ impl SimulationEngine {
         self.vehicles[vidx].path_index += 1;
 
         let pi = self.vehicles[vidx].path_index;
+        let vid = self.vehicles[vidx].id;
+        let path_len = self.vehicles[vidx].path.len();
+        let current_node_idx = self.vehicles[vidx].path.get(pi).copied();
+        let _current_node_id = current_node_idx.map(|ni| self.config.map.graph[ni].id);
+        
+        // Check if current node is a waypoint and consume it
+        if let Some(current_idx) = current_node_idx {
+            if let Some(pos) = self.vehicles[vidx].waypoints.iter().position(|&w| w == current_idx) {
+                
+                self.vehicles[vidx].waypoints.remove(pos);
+            }
+        }
+        
         if pi + 1 >= self.vehicles[vidx].path.len() {
             self.vehicles[vidx].state = VehicleState::Arrived;
             self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
@@ -635,6 +661,7 @@ impl SimulationEngine {
         let road_len = self.config.map.graph[in_edge].length;
         let pi = self.vehicles[vidx].path_index;
         let path_len = self.vehicles[vidx].path.len();
+        let vid = self.vehicles[vidx].id;
 
         if pi + 1 >= path_len - 1 {
             if matches!(self.vehicles[vidx].spec.kind, VehicleKind::Bus) {
@@ -658,6 +685,7 @@ impl SimulationEngine {
         let entry = match self.vehicles[vidx].drive_plan.first().cloned() {
             Some(e) => e,
             None => {
+                // No drive plan -> stay stopped until next rebuild
                 self.vehicles[vidx].position_on_lane = 0.0;
                 self.vehicles[vidx].velocity = 0.0;
                 return;
@@ -666,6 +694,11 @@ impl SimulationEngine {
 
         let junction_node: NodeIndex = self.vehicles[vidx].path[pi + 1];
         let junction_id = self.config.map.graph[junction_node].id;
+        // If the junction node is a waypoint, consume it now.
+        if let Some(pos) = self.vehicles[vidx].waypoints.iter().position(|&w| w == junction_node) {
+            
+            self.vehicles[vidx].waypoints.remove(pos);
+        }
         let to_lane = LaneId::Internal(junction_id, entry.via_internal_lane_id);
 
         self.vehicles[vidx].current_lane = Some(to_lane);
