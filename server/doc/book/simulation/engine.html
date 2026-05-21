@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
+            window.path_to_searchindex_js = "../searchindex-e08d1819.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5b6ca4d7.js"></script>
+        <script src="../toc-c58d40f7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -176,64 +176,193 @@
                     <main>
                         <h1 id="engine-details"><a class="header" href="#engine-details">Engine details</a></h1>
 <p>Fichier: <code>src/simulation/engine.rs</code>.</p>
-<p>Responsabilités:</p>
+<p>Le moteur est le cœur de la simulation. Il maintient les véhicules, fait avancer le temps, arbitre les conflits d’intersection, gère les feux tricolores et agrège les données nécessaires au score final.</p>
+<h2 id="le-trait-simulation"><a class="header" href="#le-trait-simulation">Le trait <code>Simulation</code></a></h2>
+<p>Le trait formalise l’interface minimale d’un moteur de simulation:</p>
 <ul>
-<li><code>SimulationEngine</code> contient l’état: <code>vehicles</code>, <code>vehicles_by_lane</code>, <code>link_states</code>, <code>green_links</code>, <code>current_time</code>.</li>
-<li>Cycle principal: <code>handle_departures()</code>, <code>plan_movements()</code>, <code>register_approaches()</code>, <code>advance_traffic_lights()</code>, <code>execute_movements()</code>, <code>flush_transfers()</code>.</li>
-<li>Génération des <code>DrivePlanEntry</code> pour chaque véhicule et mécanismes d’enregistrement d’approches pour résoudre conflits.</li>
-<li><code>get_score()</code> délègue au module <code>scoring</code>.</li>
+<li><code>new(config, vehicles)</code> construit une instance prête à tourner.</li>
+<li><code>run()</code> exécute la simulation complète jusqu’à la fin.</li>
+<li><code>step()</code> avance d’un pas de temps.</li>
+<li><code>get_score()</code> calcule le score final.</li>
 </ul>
-<p>Points d’attention:</p>
+<h2 id="structures-internes"><a class="header" href="#structures-internes">Structures internes</a></h2>
+<h3 id="pendingtransfer"><a class="header" href="#pendingtransfer"><code>PendingTransfer</code></a></h3>
+<p>Représente un déplacement temporaire d’un véhicule entre deux voies. Cette structure sert à différer certaines mutations du graphe de véhicules jusqu’à la fin du pas de temps, afin d’éviter les conflits d’emprunts et de conserver une exécution déterministe.</p>
+<h3 id="trafficlightruntimestate"><a class="header" href="#trafficlightruntimestate"><code>TrafficLightRuntimeState</code></a></h3>
+<p>Stocke l’état courant d’un feu tricolore pendant l’exécution:</p>
 <ul>
-<li>Le moteur met à jour <code>vehicles</code> chaque pas de temps (<code>time_step</code>).</li>
-<li>Gestion de l’état des feux via <code>traffic_light_states</code> et génération de <code>green_links</code>.</li>
+<li><code>phase_index</code> : phase active actuelle.</li>
+<li><code>time_in_phase</code> : temps déjà passé dans cette phase.</li>
 </ul>
-<p>Recommandations pour contributeurs:</p>
+<h3 id="busline"><a class="header" href="#busline"><code>BusLine</code></a></h3>
+<p>Représente une ligne de bus active dans la simulation.</p>
 <ul>
-<li>Tests unitaires couvrant <code>rebuild_drive_plan</code>, <code>is_link_open</code>, et transitions de feux.</li>
+<li><code>id</code> : identifiant de la ligne.</li>
+<li><code>name</code> : nom lisible de la ligne.</li>
+<li><code>stop_node_ids</code> : liste des arrêts.</li>
+<li><code>vehicle_id</code> : identifiant du bus associé à la ligne.</li>
 </ul>
-<p>API et descriptions fonctionnelles (paramètres &amp; retours)</p>
-<p><code>SimulationEngine::new(config: SimulationConfig, vehicles: Vec&lt;Vehicle&gt;) -&gt; SimulationEngine</code>:</p>
+<h3 id="simulationengine"><a class="header" href="#simulationengine"><code>SimulationEngine</code></a></h3>
+<p>Structure principale du moteur.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>config</code></td><td>Configuration globale de la simulation.</td></tr>
+<tr><td><code>vehicles</code></td><td>Liste complète des véhicules.</td></tr>
+<tr><td><code>current_time</code></td><td>Temps simulé courant.</td></tr>
+<tr><td><code>vehicles_by_lane</code></td><td>Index des véhicules par voie, triés du plus proche au plus loin.</td></tr>
+<tr><td><code>link_states</code></td><td>Réservations temporelles par lien d’intersection.</td></tr>
+<tr><td><code>all_vehicles_arrived</code></td><td>Indique si tous les véhicules ont terminé.</td></tr>
+<tr><td><code>green_links</code></td><td>Identifiants des liens actuellement ouverts par les feux.</td></tr>
+<tr><td><code>bus_lines</code></td><td>Lignes de bus actives.</td></tr>
+<tr><td><code>next_bus_line_id</code></td><td>Compteur de génération des lignes de bus.</td></tr>
+<tr><td><code>next_vehicle_id</code></td><td>Compteur de génération des véhicules supplémentaires.</td></tr>
+<tr><td><code>pending_transfers</code></td><td>Transferts différés à appliquer en fin de pas.</td></tr>
+<tr><td><code>traffic_light_states</code></td><td>État runtime de chaque contrôleur de feux.</td></tr>
+<tr><td><code>link_directory</code></td><td>Index global des <code>Link</code> du graphe pour accès rapide.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="cycle-de-simulation"><a class="header" href="#cycle-de-simulation">Cycle de simulation</a></h2>
+<h3 id="simulationenginenew"><a class="header" href="#simulationenginenew"><code>SimulationEngine::new</code></a></h3>
+<p>Crée un moteur à partir d’une configuration et d’une liste de véhicules. L’instance initialise les états de feux à partir de la carte, construit un index de tous les liens du réseau, et démarre le temps simulé à <code>start_time</code>.</p>
+<h3 id="simulationenginerun"><a class="header" href="#simulationenginerun"><code>SimulationEngine::run</code></a></h3>
+<p>Prépare d’abord tous les chemins des véhicules, puis appelle <code>step()</code> jusqu’à atteindre <code>end_time</code>.</p>
+<h3 id="simulationenginestep"><a class="header" href="#simulationenginestep"><code>SimulationEngine::step</code></a></h3>
+<p>Un pas de simulation suit toujours le même ordre:</p>
+<ol>
+<li>mémoriser la vitesse précédente de chaque véhicule,</li>
+<li>gérer les départs,</li>
+<li>préparer les mouvements,</li>
+<li>enregistrer les approches,</li>
+<li>faire avancer les feux,</li>
+<li>exécuter les déplacements,</li>
+<li>appliquer les transferts différés,</li>
+<li>mettre à jour les émissions et les dates d’arrivée.</li>
+</ol>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant E as SimulationEngine
+    participant V as Vehicles
+    participant TL as TrafficLights
+    participant S as Scoring
+
+    Note over E: Début du pas (step)
+    E-&gt;&gt;V: Mémoriser velocity → previous_velocity
+    E-&gt;&gt;E: handle_departures()
+    E-&gt;&gt;E: plan_movements()
+    E-&gt;&gt;E: register_approaches()
+    E-&gt;&gt;TL: advance_traffic_lights()
+    E-&gt;&gt;E: execute_movements()
+    E-&gt;&gt;E: flush_transfers()
+    loop Pour chaque véhicule
+        E-&gt;&gt;S: update_co2_emissions(v)
+        E-&gt;&gt;V: Mettre à jour arrived_at si besoin
+    end
+    Note over E: Fin du pas
+</code></pre>
+<h2 id="méthodes-de-cycle-détaillées"><a class="header" href="#méthodes-de-cycle-détaillées">Méthodes de cycle détaillées</a></h2>
+<h3 id="handle_departures"><a class="header" href="#handle_departures">handle_departures</a></h3>
+<p>Gère le passage des véhicules de l’état <code>WaitingToDepart</code> à <code>OnRoad</code>.</p>
 <ul>
-<li><code>config</code>: configuration de simulation (map, time_step, start/end times, minimum_gap, etc.).</li>
-<li><code>vehicles</code>: liste initiale de <code>Vehicle</code> (doit contenir <code>trip</code>/<code>origin</code>/<code>destination</code>).</li>
+<li><strong>Entrée</strong> : <code>&amp;mut self</code>.</li>
+<li><strong>Action</strong> : Vérifie pour chaque véhicule en attente si son heure de départ est arrivée et si la première voie de son trajet est libre. Si oui, insère le véhicule sur la voie.</li>
 </ul>
-<p>Cycle interne (<strong>step</strong>) — fonctions principales:</p>
+<h3 id="plan_movements"><a class="header" href="#plan_movements">plan_movements</a></h3>
+<p>Phase de décision pour tous les véhicules actifs.</p>
 <ul>
-<li><code>handle_departures(&amp;mut self)</code> — active les véhicules dont <code>departure_time &lt;= current_time</code> si espace suffisant sur la voie d’origine; met <code>state = OnRoad</code> et insère dans <code>vehicles_by_lane</code>.</li>
-<li><code>plan_movements(&amp;mut self)</code> — pour chaque véhicule en <code>OnRoad</code> et non engagé dans un <code>Internal</code> lane, appelle <code>rebuild_drive_plan(vidx)</code> pour générer <code>DrivePlanEntry</code> sur l’itinéraire anticipé.</li>
-<li><code>rebuild_drive_plan(&amp;mut self, vidx: usize)</code> — construit la séquence de <code>DrivePlanEntry</code> pour le véhicule <code>vidx</code>:
-<ul>
-<li>calcule <code>braking_horizon</code> en fonction de <code>v^2/(2*d_max)</code> et d’un buffer;</li>
-<li>itère sur le <code>path</code> et pour chaque jonction identifie <code>in_edge</code>/<code>out_edge</code>, calcule <code>arrival_time</code> via <code>kinematics::arrival_time(...)</code>, <code>leave_time</code> via <code>kinematics::leave_time(...)</code>, et remplit <code>DrivePlanEntry</code> (voir <code>simulation::vehicle::DrivePlanEntry</code> pour champs).</li>
+<li><strong>Action</strong> : Parcourt les véhicules sur les routes normales et recalcule leur <code>drive_plan</code> s’ils s’approchent d’une intersection.</li>
 </ul>
+<h3 id="rebuild_drive_plan"><a class="header" href="#rebuild_drive_plan">rebuild_drive_plan</a></h3>
+<p>Calcule les réservations pour les prochaines intersections du trajet d’un véhicule.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>vidx: usize</code>.</li>
+<li><strong>Action</strong> : Simule le mouvement futur du véhicule sur plusieurs segments pour estimer les heures d’arrivée aux carrefours et choisir les voies internes optimales.</li>
+</ul>
+<h3 id="register_approaches"><a class="header" href="#register_approaches">register_approaches</a></h3>
+<p>Enregistre officiellement les intentions de passage dans les carrefours.</p>
+<ul>
+<li><strong>Action</strong> : Pour chaque véhicule ayant un plan de conduite, ajoute son <code>ApproachData</code> à l’état du lien correspondant (<code>link_states</code>) si le passage est autorisé.</li>
+</ul>
+<h3 id="advance_traffic_lights"><a class="header" href="#advance_traffic_lights">advance_traffic_lights</a></h3>
+<p>Fait évoluer le temps interne des contrôleurs de feux.</p>
+<ul>
+<li><strong>Entrée</strong> : <code>&amp;mut self</code>.</li>
+<li><strong>Action</strong> : Incrémente le compteur de chaque feu. Si la durée d’une phase est dépassée, passe à la suivante et met à jour les liens ouverts (<code>green_links</code>).</li>
+</ul>
+<h3 id="execute_vehicle"><a class="header" href="#execute_vehicle">execute_vehicle</a></h3>
+<p>Applique la physique du mouvement à un véhicule.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>vidx: usize</code>, <code>lane_id: LaneId</code>.</li>
+<li><strong>Action</strong> :
+<ol>
+<li>Détermine la vitesse de sécurité selon le véhicule de devant et l’état des liens.</li>
+<li>Calcule l’accélération (IDM).</li>
+<li>Met à jour la position et la vitesse.</li>
+<li>Gère les transitions entre les routes et les intersections (via <code>process_lane_advances</code>).</li>
+</ol>
 </li>
-<li><code>register_approaches(&amp;mut self)</code> — lit les <code>DrivePlanEntry</code> des véhicules et inscrit <code>ApproachData</code> dans <code>link_states</code> (clé: <code>link_id</code>) afin que les arbitres (is_link_open) puissent décider.</li>
-<li><code>advance_traffic_lights(&amp;mut self)</code> — incrémente le temps des phases et met à jour <code>green_links</code> en conséquence.</li>
-<li><code>execute_movements(&amp;mut self)</code> — pour chaque véhicule OnRoad appelle <code>execute_vehicle(vidx, lane_id)</code>.</li>
 </ul>
-<p>Fonctions utilitaires importantes:</p>
+<h3 id="determine_safe_speed"><a class="header" href="#determine_safe_speed">determine_safe_speed</a></h3>
+<p>Calcule la vitesse maximale autorisée pour un véhicule en tenant compte des obstacles.</p>
 <ul>
-<li><code>determine_safe_speed(&amp;self, vidx: usize) -&gt; (f32, Option&lt;f32&gt;)</code> — renvoie <code>(speed_to_use, optional_stop_distance)</code>:
-<ul>
-<li>si <code>is_link_open(...)</code> retourne vrai → renvoie <code>v_pass</code> (point of no return logic) sinon renvoie <code>v_wait</code> et la distance de freinage demandée (Some(distance)).</li>
+<li><strong>Entrées</strong> : <code>vidx: usize</code>.</li>
+<li><strong>Action</strong> : Analyse la distance jusqu’au prochain véhicule sur la même voie et l’état de l’intersection à venir (Stop, feu rouge, ou conflit).</li>
+<li><strong>Retour</strong> : <code>(v_cible, distance_obstacle)</code>.</li>
 </ul>
-</li>
-<li><code>find_link(&amp;self, link_id: u32) -&gt; Option&lt;map::road::Link&gt;</code> — renvoie le clone du link depuis <code>link_directory</code>.</li>
-<li><code>lane_length</code>, <code>lane_speed_limit</code> — exposent propriétés utilitaires pour une lane donnée du véhicule.</li>
-</ul>
-<p>Points de documentation à surveiller (actions recommandées):</p>
+<h3 id="find_link"><a class="header" href="#find_link">find_link</a></h3>
+<p>Cherche un lien d’intersection par son ID.</p>
 <ul>
-<li>Documenter précisément les unités et marges temporelles utilisées par <code>arrival_time</code>/<code>leave_time</code> (fonctions dans <code>simulation::kinematics</code>).</li>
-<li>Ajouter exemples numériques dans <code>simulation/kinematics.md</code> démontrant <code>arrival_time</code> et <code>v_stop_at</code> pour scénarios typiques.</li>
-<li>Documenter la structure de <code>link_states</code> et <code>ApproachData</code> (déjà couvert dans <code>map/intersection.md</code> mais à lier ici).</li>
+<li><strong>Retour</strong> : <code>Option&lt;Link&gt;</code>.</li>
+</ul>
+<h3 id="vehicle_ahead_info"><a class="header" href="#vehicle_ahead_info">vehicle_ahead_info</a></h3>
+<p>Identifie le véhicule précédant immédiatement un autre sur une voie donnée.</p>
+<ul>
+<li><strong>Retour</strong> : <code>(distance, vitesse)</code>.</li>
+</ul>
+<h3 id="process_lane_advances"><a class="header" href="#process_lane_advances">process_lane_advances</a></h3>
+<p>Gère le passage d’un véhicule d’une section à la suivante (ex: sortie de route vers intersection).</p>
+<ul>
+<li><strong>Action</strong> : Détecte si le véhicule a dépassé la longueur de sa voie actuelle et déclenche les fonctions de transition appropriées.</li>
+</ul>
+<h3 id="exit_internal_lane"><a class="header" href="#exit_internal_lane">exit_internal_lane</a></h3>
+<p>Gère la sortie d’un carrefour pour entrer sur une nouvelle route.</p>
+<ul>
+<li><strong>Action</strong> : Met à jour la position du véhicule et prépare un transfert vers la voie de destination.</li>
+</ul>
+<h3 id="enter_junction_or_arrive"><a class="header" href="#enter_junction_or_arrive">enter_junction_or_arrive</a></h3>
+<p>Gère l’entrée dans un carrefour ou l’arrivée à destination.</p>
+<ul>
+<li><strong>Action</strong> : Si le véhicule a atteint son dernier nœud, il passe à l’état <code>Arrived</code>. Sinon, il s’engage sur la voie interne réservée.</li>
+</ul>
+<h3 id="flush_transfers"><a class="header" href="#flush_transfers">flush_transfers</a></h3>
+<p>Applique tous les changements de voies mis en attente pendant le pas de temps.</p>
+<ul>
+<li><strong>Action</strong> : Met à jour <code>vehicles_by_lane</code> et les champs <code>current_lane</code> des véhicules concernés.</li>
+</ul>
+<h3 id="lane_insert_sorted"><a class="header" href="#lane_insert_sorted">lane_insert_sorted</a></h3>
+<p>Helper pour insérer un véhicule dans l’index d’une voie tout en maintenant le tri par position.</p>
+<h3 id="add_bus_from_saved"><a class="header" href="#add_bus_from_saved">add_bus_from_saved</a></h3>
+<p>Ajoute un bus à la simulation à partir d’une ligne sauvegardée.</p>
+<ul>
+<li><strong>Entrée</strong> : <code>bl: &amp;SavedBusLine</code>.</li>
+<li><strong>Action</strong> : Crée un véhicule de type <code>Bus</code>, initialise son trajet passant par tous les arrêts de la ligne, et l’ajoute à la liste des véhicules actifs.</li>
+<li><strong>Retour</strong> : <code>bool</code> (succès).</li>
+</ul>
+<h2 id="ce-qui-vaut-dêtre-retenu"><a class="header" href="#ce-qui-vaut-dêtre-retenu">Ce qui vaut d’être retenu</a></h2>
+<ul>
+<li>Le moteur ne se contente pas de déplacer les véhicules: il réserve aussi les intersections à l’avance.</li>
+<li>Les feux, la priorité et les conflits temporels sont évalués conjointement.</li>
+<li>La séparation entre planification et exécution évite de mélanger les décisions de sécurité avec le déplacement physique.</li>
 </ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../simulation/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../simulation/config.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -247,7 +376,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../simulation/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../simulation/config.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
@@ -296,10 +425,10 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid-loader-58f8d2c4.js"></script>
-        <script src="../mermaid-init-1ea3646b.js"></script>
-        <script src="../katex-loader-1f369d43.js"></script>
-        <script src="../katex-init-7f5dd265.js"></script>
+        <script src="../mermaid-loader-1508ae7a.js"></script>
+        <script src="../mermaid-init-49a54d84.js"></script>
+        <script src="../katex-loader-d2c37f60.js"></script>
+        <script src="../katex-init-c90d5c99.js"></script>
 
 
 

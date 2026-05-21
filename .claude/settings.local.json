@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat \"/c/Users/elias/.claude/projects/C--Users-elias-Documents-enssat-2A-gl-projetgl-RoadIA/6607875b-110e-4b6b-9099-1eb28a8c2c18/tool-results/toolu_01WsJk1eZJrTY5pWC24PQv79.txt\" | wc -l)"
+    ]
+  }
+}

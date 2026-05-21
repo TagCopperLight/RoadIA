@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
+            window.path_to_searchindex_js = "../searchindex-e08d1819.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5b6ca4d7.js"></script>
+        <script src="../toc-c58d40f7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -176,51 +176,150 @@
                     <main>
                         <h1 id="map-model"><a class="header" href="#map-model">Map model</a></h1>
 <p>Fichier: <code>src/map/model.rs</code>.</p>
-<p>Structures principales:</p>
+<p>Ce module est la source de vérité de la topologie routière. Il contient la carte complète, ses réglages globaux, les identifiants utilisés par le moteur et les helpers de persistance.</p>
+<h2 id="mapsettings"><a class="header" href="#mapsettings"><code>MapSettings</code></a></h2>
+<p>Les réglages de la carte contrôlent à la fois la génération des véhicules, le calcul du score et les paramètres de budget du projet.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th><th>Valeur par défaut</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vehicle_count</code></td><td>Nombre de véhicules générés au départ.</td><td>500</td></tr>
+<tr><td><code>simulation_duration</code></td><td>Durée maximale de la simulation.</td><td>600.0 s</td></tr>
+<tr><td><code>max_budget</code></td><td>Budget de référence pour l’infrastructure.</td><td>750000000</td></tr>
+<tr><td><code>base_cost_per_meter</code></td><td>Coût d’une route par mètre.</td><td>500</td></tr>
+<tr><td><code>intersection_cost</code></td><td>Coût d’une intersection.</td><td>50000</td></tr>
+<tr><td><code>habitation_cost</code></td><td>Coût associé aux zones d’habitation.</td><td>150000</td></tr>
+<tr><td><code>workplace_cost</code></td><td>Coût associé aux zones de travail.</td><td>200000</td></tr>
+<tr><td><code>time_weight</code></td><td>Poids de la dimension temps dans le score.</td><td>0.4</td></tr>
+<tr><td><code>success_weight</code></td><td>Poids du taux de réussite.</td><td>0.2</td></tr>
+<tr><td><code>pollution_weight</code></td><td>Poids de la pollution.</td><td>0.2</td></tr>
+<tr><td><code>infrastructure_weight</code></td><td>Poids de l’infrastructure.</td><td>0.2</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="savedbusline"><a class="header" href="#savedbusline"><code>SavedBusLine</code></a></h2>
+<p>Ligne de bus persistée sur disque.</p>
 <ul>
-<li>
-<p><code>Map</code> : conteneur principal contenant un <code>petgraph::Graph&lt;Intersection, Road&gt;</code>, indices, compteurs d’ID et <code>traffic_lights</code>.</p>
+<li><code>id</code> : identifiant de ligne.</li>
+<li><code>name</code> : nom lisible.</li>
+<li><code>stop_node_ids</code> : identifiants des arrêts.</li>
+</ul>
+<h2 id="map"><a class="header" href="#map"><code>Map</code></a></h2>
+<p>La carte contient:</p>
 <ul>
-<li>Méthodes utiles (signatures et description):
+<li>un graphe orienté <code>Intersection -&gt; Road</code>;</li>
+<li>une table de correspondance entre identifiants publics et indices <code>petgraph</code>;</li>
+<li>des compteurs d’identifiants pour les noeuds, routes, liens et contrôleurs;</li>
+<li>les contrôleurs de feux;</li>
+<li>le nom de la carte et ses réglages;</li>
+<li>les lignes de bus sauvegardées.</li>
+</ul>
+<h3 id="champs-principaux"><a class="header" href="#champs-principaux">Champs principaux</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>graph</code></td><td>Graphe routier principal.</td></tr>
+<tr><td><code>node_index_map</code></td><td>Correspondance <code>id -&gt; NodeIndex</code>.</td></tr>
+<tr><td><code>next_node_id</code></td><td>Prochain identifiant de noeud à attribuer.</td></tr>
+<tr><td><code>next_edge_id</code></td><td>Prochain identifiant de route à attribuer.</td></tr>
+<tr><td><code>next_link_id</code></td><td>Prochain identifiant de lien interne.</td></tr>
+<tr><td><code>next_controller_id</code></td><td>Prochain identifiant de contrôleur de feux.</td></tr>
+<tr><td><code>traffic_lights</code></td><td>Contrôleurs de feux actifs.</td></tr>
+<tr><td><code>name</code></td><td>Nom lisible de la carte.</td></tr>
+<tr><td><code>settings</code></td><td>Réglages globaux.</td></tr>
+<tr><td><code>bus_lines</code></td><td>Lignes de bus persistées.</td></tr>
+<tr><td><code>next_bus_line_id</code></td><td>Prochain identifiant de ligne de bus.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="méthodes-utiles"><a class="header" href="#méthodes-utiles">Méthodes utiles</a></h3>
+<h4 id="add_intersection"><a class="header" href="#add_intersection">add_intersection</a></h4>
+<p>Ajoute un nœud à la carte.</p>
 <ul>
-<li><code>Map::new() -&gt; Map</code> — constructeur vide.</li>
-<li><code>Map::add_intersection(&amp;mut self, kind: IntersectionKind, x: f32, y: f32) -&gt; u32</code> — ajoute un noeud, retourne son <code>id</code> (u32). <code>x,y</code> en unités monde (m).</li>
-<li><code>Map::add_road(&amp;mut self, from: u32, to: u32, lane_count: u8, speed_limit: f32, length: f32) -&gt; u32</code> — ajoute une arête dirigée entre <code>from</code> et <code>to</code>. Calcule et stocke un <code>road id</code> unique.</li>
-<li><code>Map::add_two_way_road(&amp;mut self, from: u32, to: u32, lane_count: u8, speed_limit: f32, length: f32) -&gt; (u32,u32)</code> — crée deux routes opposées et retourne leurs ids.</li>
-<li><code>Map::find_node(&amp;self, id: u32) -&gt; Option&lt;NodeIndex&gt;</code> — récupère l’index interne <code>NodeIndex</code> si présent.</li>
-<li><code>Map::find_edge(&amp;self, id: u32) -&gt; Option&lt;EdgeIndex&gt;</code> — recherche un <code>EdgeIndex</code> par <code>road.id</code>.</li>
-<li><code>Map::retain_largest_component(&amp;mut self)</code> — supprime fragments isolés (utile après parsing OSM).</li>
+<li><strong>Entrées</strong> :
+<ul>
+<li><code>kind: IntersectionKind</code> : Le type de nœud (Habitation, Workplace, etc.).</li>
+<li><code>x, y: f32</code> : Les coordonnées géographiques projetées.</li>
 </ul>
 </li>
+<li><strong>Action</strong> : Insère un nouveau nœud dans le graphe et met à jour la table de correspondance des IDs.</li>
+<li><strong>Retour</strong> : <code>u32</code> (l’identifiant public du nœud).</li>
+</ul>
+<h4 id="add_road"><a class="header" href="#add_road">add_road</a></h4>
+<p>Ajoute une route orientée entre deux intersections.</p>
+<ul>
+<li><strong>Entrées</strong> :
+<ul>
+<li><code>from, to: u32</code> : Identifiants publics des nœuds de départ et d’arrivée.</li>
+<li><code>lane_count: u8</code> : Nombre de voies.</li>
+<li><code>speed_limit: f32</code> : Vitesse limite en m/s.</li>
+<li><code>length: f32</code> : Longueur en mètres.</li>
 </ul>
 </li>
-<li>
-<p><code>Coordinates</code> : structure légère <code>x, y</code> pour positions.</p>
-</li>
+<li><strong>Action</strong> : Crée une arête dans le graphe reliant les deux nœuds.</li>
+<li><strong>Pré-conditions</strong> : Les nœuds <code>from</code> et <code>to</code> doivent exister.</li>
+<li><strong>Retour</strong> : <code>u32</code> (l’identifiant public de la route).</li>
 </ul>
-<p>Exemples:</p>
-<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let mut map = Map::new();
-let n = map.add_intersection(IntersectionKind::Intersection, 10.0, 5.0); // returns node id
-let r = map.add_road(n, other_n, 2, 13.9, 120.0); // returns road id
-<span class="boring">}</span></code></pre>
-<p>Comportement important:</p>
+<h4 id="add_two_way_road"><a class="header" href="#add_two_way_road">add_two_way_road</a></h4>
+<p>Ajoute une liaison bidirectionnelle.</p>
 <ul>
-<li><code>retain_largest_component()</code> nettoie les fragments OSM isolés en ne conservant que la composante la plus grande (utile après parsing OSM).</li>
+<li><strong>Action</strong> : Appelle <code>add_road</code> deux fois avec les directions inversées.</li>
+<li><strong>Entrées</strong> : <code>from, to: u32</code>, <code>lane_count: u8</code>, <code>speed_limit: f32</code>, <code>length: f32</code>.</li>
+<li><strong>Retour</strong> : <code>(u32, u32)</code> (les identifiants des deux routes créées).</li>
 </ul>
-<p>Erreurs courantes / garanties:</p>
+<h4 id="find_node--find_edge"><a class="header" href="#find_node--find_edge">find_node / find_edge</a></h4>
+<p>Convertit un identifiant public (u32) en un index interne (<code>NodeIndex</code> ou <code>EdgeIndex</code>).</p>
 <ul>
-<li><code>add_road</code> panique si <code>from</code> / <code>to</code> inconnus (la version publique <code>editor::add_road</code> gère ces erreurs et retourne <code>Result</code>).</li>
+<li><strong>Entrées</strong> : <code>id: u32</code>.</li>
+<li><strong>Retour</strong> : <code>Option&lt;NodeIndex&gt;</code> ou <code>Option&lt;EdgeIndex&gt;</code>.</li>
 </ul>
-<p>Notes sur les unités:</p>
+<h4 id="neighboring_intersections"><a class="header" href="#neighboring_intersections">neighboring_intersections</a></h4>
+<p>Liste les nœuds voisins accessibles directement depuis un nœud donné.</p>
 <ul>
-<li><code>speed_limit</code> : unité interne du projet (assimilée à m/s dans la simulation).</li>
-<li><code>length</code>, <code>x</code>, <code>y</code>, <code>radius</code> : unités en mètres.</li>
+<li><strong>Entrées</strong> : <code>source: NodeIndex</code>.</li>
+<li><strong>Retour</strong> : <code>Vec&lt;NodeIndex&gt;</code>.</li>
 </ul>
-<p>Utilisation:</p>
+<h4 id="intersection_neighbor_distance"><a class="header" href="#intersection_neighbor_distance">intersection_neighbor_distance</a></h4>
+<p>Donne la longueur de la route reliant deux intersections adjacentes.</p>
 <ul>
-<li>Le module est la source de vérité pour la topologie routière utilisée par le simulateur.</li>
+<li><strong>Entrées</strong> : <code>source</code>, <code>destination</code>.</li>
+<li><strong>Retour</strong> : <code>Option&lt;f32&gt;</code>.</li>
+</ul>
+<h4 id="intersections_euclidean_distance"><a class="header" href="#intersections_euclidean_distance">intersections_euclidean_distance</a></h4>
+<p>Calcule la distance à vol d’oiseau entre deux intersections.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>source</code>, <code>destination</code>.</li>
+<li><strong>Retour</strong> : <code>f32</code> (mètres).</li>
+</ul>
+<h4 id="retain_largest_component"><a class="header" href="#retain_largest_component">retain_largest_component</a></h4>
+<p>Nettoie la carte pour ne garder que la partie principale.</p>
+<ul>
+<li><strong>Action</strong> : Identifie les composantes faiblement connexes du graphe (en ignorant l’orientation des routes) et supprime tous les nœuds et arêtes n’appartenant pas à la plus grande composante.</li>
+<li><strong>Post-conditions</strong> : Garantit que le réseau routier est d’un seul bloc, évitant les véhicules bloqués sur des fragments isolés.</li>
+</ul>
+<h4 id="save--load"><a class="header" href="#save--load">save / load</a></h4>
+<p>Gère la persistance de la carte au format JSON.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>path: P</code> (chemin du fichier).</li>
+<li><strong>Retour</strong> : <code>Result</code>.</li>
+</ul>
+<h3 id="coordinates"><a class="header" href="#coordinates">Coordinates</a></h3>
+<p>Structure légère utilisée pour les positions dans le monde simulé.</p>
+<ul>
+<li><code>x</code> : coordonnée horizontale.</li>
+<li><code>y</code> : coordonnée verticale.</li>
+</ul>
+<h2 id="lecture-fonctionnelle"><a class="header" href="#lecture-fonctionnelle">Lecture fonctionnelle</a></h2>
+<ul>
+<li><code>Map</code> décrit la topologie.</li>
+<li><code>MapSettings</code> décrit comment cette topologie doit être utilisée dans la simulation.</li>
+<li><code>SavedBusLine</code> permet de persister les transports publics sans les confondre avec la structure routière.</li>
+<li><code>Coordinates</code> est le type élémentaire réutilisé partout où une position est nécessaire.</li>
 </ul>
 
                     </main>
@@ -290,10 +389,10 @@ let r = map.add_road(n, other_n, 2, 13.9, 120.0); // returns road id
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid-loader-58f8d2c4.js"></script>
-        <script src="../mermaid-init-1ea3646b.js"></script>
-        <script src="../katex-loader-1f369d43.js"></script>
-        <script src="../katex-init-7f5dd265.js"></script>
+        <script src="../mermaid-loader-1508ae7a.js"></script>
+        <script src="../mermaid-init-49a54d84.js"></script>
+        <script src="../katex-loader-d2c37f60.js"></script>
+        <script src="../katex-init-c90d5c99.js"></script>
 
 
 

@@ -1,50 +1,22 @@
-# Map editor quick examples
+# Map editor examples
 
-Fichier: `src/map/editor.rs` — helper functions pour modifier la carte.
+Cette page donne des repères d'utilisation pour le module d'édition sans recopier le code source.
 
-## `add_roundabout` (exemple Rust)
+## Ajouter un rond-point
 
-```rust
-let handle = add_roundabout(
-    &mut map,
-    center_x: 100.0,
-    center_y: 50.0,
-    ring_radius: 30.0,
-    num_arms: 4,
-    ring_speed_limit: 8.0,
-    ring_lane_count: 1,
-);
-// handle.ring_node_ids and handle.ring_road_ids contiennent les ids créés
-```
+Une création de rond-point typique repose sur un centre, un rayon et un nombre de bras suffisant pour laisser de la place aux branches. Le handle retourné permet ensuite de connecter les routes d'accès extérieures à chaque noeud de l'anneau.
 
-Contraintes:
-- `num_arms >= 3`.
-- `ring_radius` doit être supérieur au minimum calculé (fonction de `num_arms`).
+## Ajouter un contrôleur de feux
 
-## `add_traffic_light_controller` (exemple Rust)
+Un contrôleur est décrit par une liste de phases. Chaque phase liste les liens autorisés et les durées de vert et de jaune. Les liens utilisés doivent être valides et être récupérés après reconstruction des intersections.
 
-```rust
-// phases: Vec<(Vec<link_id>, green_duration_s, yellow_duration_s)>
-let phases = vec![ (vec![101, 102], 10.0, 2.0), (vec![201], 8.0, 2.0) ];
-let result = add_traffic_light_controller(&mut map, intersection_id, phases);
-match result {
-    Ok(handle) => println!("controller id = {}", handle.controller_id),
-    Err(e) => eprintln!("Failed to add controller: {}", e),
-}
-```
+## Édition via le WebSocket
 
-Notes:
-- `add_traffic_light_controller` marque `link.link_type = TrafficLight` pour les link ids fournis et insère le contrôleur dans `map.traffic_lights`.
-- Il faut fournir des link ids valides (obtenus après `build_intersections`), ou construire le rond-point avant d'ajouter le contrôleur.
+Les opérations de base disponibles côté client sont l'ajout, la suppression et la mise à jour de noeuds et de routes. Les helpers de plus haut niveau, comme la création de ronds-points ou de feux, restent des opérations serveur ou de démarrage de carte.
 
-## Utilisation via l'API WebSocket
+## Bon réflexe
 
-Les fonctions `add_node`, `add_road`, `move_node`, `update_node`, `delete_node`, `delete_road` sont exposées via les paquets `ClientPacket` (`AddNode`, `AddRoad`, etc.).
-
-Exemple WS pour ajouter un noeud:
-
-```json
-{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
-```
-
-Remarque: `add_roundabout` et `add_traffic_light_controller` ne sont pas directement exposés par les paquets WS standard — utilisez les helpers Rust ou scripts d'initialisation pour construire des configurations complexes.
+- construire la topologie;
+- reconstruire les intersections;
+- récupérer les identifiants de liens;
+- seulement ensuite configurer les feux ou les ronds-points avancés.

@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a8bb04b6.js";
+            window.path_to_searchindex_js = "searchindex-e08d1819.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5b6ca4d7.js"></script>
+        <script src="toc-c58d40f7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,53 +175,142 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="scoring-system"><a class="header" href="#scoring-system">Scoring system</a></h1>
-<p>Fichier: <code>src/scoring/mod.rs</code> (et autres fonctions utilitaires).</p>
-<p>But:</p>
+<p>Fichier: <code>src/scoring/mod.rs</code>.</p>
+<p>Le module de scoring transforme l’état final d’une simulation en un nombre unique et lisible. Il compare les véhicules arrivés à des références théoriques pour le temps, le CO2 et la taille du réseau.</p>
+<h2 id="constantes-physiques-et-de-calibration"><a class="header" href="#constantes-physiques-et-de-calibration">Constantes physiques et de calibration</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Constante</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>AIR_DENSITY</code></td><td>Densité de l’air utilisée pour l’effort aérodynamique.</td></tr>
+<tr><td><code>GRAVITY</code></td><td>Accélération de la pesanteur.</td></tr>
+<tr><td><code>DRIVE_TRAIN_EFFICIENCY</code></td><td>Rendement global de la transmission mécanique.</td></tr>
+<tr><td><code>FRANCE_GRID_CO2_PER_J</code></td><td>Équivalent CO2 par joule électrique pour le mix français.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="structures-internes-et-publiques"><a class="header" href="#structures-internes-et-publiques">Structures internes et publiques</a></h2>
+<h3 id="kindparams"><a class="header" href="#kindparams"><code>KindParams</code></a></h3>
+<p>Paramètres physiques dépendant du type de véhicule.</p>
 <ul>
-<li>Calculer un score global sur la simulation basé sur: temps de trajet total, émissions de CO2, distance parcourue, taux de succès (arrivées).</li>
+<li>masse</li>
+<li>coefficient de traînée</li>
+<li>surface frontale</li>
+<li>résistance au roulement</li>
+<li>puissance consommée à l’arrêt</li>
 </ul>
-<p>Utilisation:</p>
+<p>Ces paramètres permettent d’estimer de façon cohérente la consommation et les émissions.</p>
+<h3 id="minheap"><a class="header" href="#minheap"><code>MinHeap</code></a></h3>
+<p>Petit wrapper de file de priorité utilisé lors du calcul de l’arbre couvrant minimal approché. Il sert uniquement à faire avancer l’algorithme de coût minimal sur les points de la carte.</p>
+<h3 id="score"><a class="header" href="#score"><code>Score</code></a></h3>
+<p>Résultat complet envoyé au client à la fin de la simulation.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>score</code></td><td>Valeur finale synthétique.</td></tr>
+<tr><td><code>total_trip_time</code></td><td>Temps réellement consommé par les véhicules arrivés.</td></tr>
+<tr><td><code>ref_total_trip_time</code></td><td>Temps de référence théorique minimal.</td></tr>
+<tr><td><code>total_emitted_co2</code></td><td>CO2 réellement produit.</td></tr>
+<tr><td><code>ref_total_emitted_co2</code></td><td>CO2 de référence minimal.</td></tr>
+<tr><td><code>network_length</code></td><td>Longueur totale des routes distinctes.</td></tr>
+<tr><td><code>ref_network_length</code></td><td>Borne inférieure du meilleur réseau possible.</td></tr>
+<tr><td><code>success_rate</code></td><td>Part des véhicules arrivés.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="fonctions-de-calcul"><a class="header" href="#fonctions-de-calcul">Fonctions de calcul</a></h2>
+<h3 id="kind_params"><a class="header" href="#kind_params">kind_params</a></h3>
+<p>Fournit les paramètres physiques pour une catégorie de véhicule donnée.</p>
 <ul>
-<li><code>SimulationEngine::get_score()</code> appelle le module <code>scoring</code> pour produire un <code>Score</code> struct, qui est ensuite envoyé au client via <code>ServerPacket::Score</code>.</li>
+<li><strong>Entrées</strong> : <code>kind: VehicleKind</code>.</li>
+<li><strong>Retour</strong> : Structure <code>KindParams</code>.</li>
 </ul>
-<h2 id="détails-de-limplémentation"><a class="header" href="#détails-de-limplémentation">Détails de l’implémentation</a></h2>
-<p>Le scoring combine plusieurs termes normalisés : temps, succès (ratio véhicules arrivés), pollution et infrastructure. Les poids actuels (dans <code>scoring/mod.rs</code>) sont :</p>
+<h3 id="emission_params"><a class="header" href="#emission_params">emission_params</a></h3>
+<p>Retourne les paramètres d’émission pour un couple (motorisation, catégorie).</p>
 <ul>
-<li><code>TIME_WEIGHT = 0.4</code></li>
-<li><code>SUCCESS_WEIGHT = 0.2</code></li>
-<li><code>POLLUTION_WEIGHT = 0.2</code></li>
-<li><code>INFRASTRUCTURE_WEIGHT = 0.2</code></li>
+<li><strong>Entrées</strong> : <code>motorization: VehicleType</code>, <code>kind: VehicleKind</code>.</li>
+<li><strong>Retour</strong> : <code>(f32, f32)</code> représentant (CO2 par Joule, CO2 par seconde au ralenti).</li>
 </ul>
-<p>Le calcul suit ces étapes :</p>
+<h3 id="update_co2_emissions"><a class="header" href="#update_co2_emissions">update_co2_emissions</a></h3>
+<p>Calcule et ajoute le CO2 produit par un véhicule durant un pas de temps.</p>
+<ul>
+<li><strong>Entrées</strong> :
+<ul>
+<li><code>vehicle: &amp;mut Vehicle</code> : Le véhicule à mettre à jour.</li>
+<li><code>time_step: f32</code> : Durée du pas de temps.</li>
+</ul>
+</li>
+<li><strong>Action</strong> : Calcule l’effort de traction (résistance air, roulement, accélération) puis la consommation énergétique et les émissions correspondantes.</li>
+<li><strong>Post-conditions</strong> : <code>vehicle.emitted_co2</code> est incrémenté.</li>
+</ul>
+<h3 id="get_minimal_time_travel_by_road--get_minimal_co2_by_road"><a class="header" href="#get_minimal_time_travel_by_road--get_minimal_co2_by_road">get_minimal_time_travel_by_road / get_minimal_co2_by_road</a></h3>
+<p>Calculent les minima théoriques pour un véhicule sur une route donnée sans trafic ni contrainte.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>map</code>, <code>road_index</code>, <code>motorization</code>, <code>kind</code>.</li>
+<li><strong>Retour</strong> : <code>f32</code>.</li>
+</ul>
+<h3 id="get_vehicle_min_time--get_vehicle_min_co2"><a class="header" href="#get_vehicle_min_time--get_vehicle_min_co2">get_vehicle_min_time / get_vehicle_min_co2</a></h3>
+<p>Estiment le temps et les émissions minimums pour l’intégralité du trajet d’un véhicule.</p>
+<ul>
+<li><strong>Action</strong> : Somment les minima de chaque route composant le chemin du véhicule.</li>
+<li><strong>Retour</strong> : <code>f32</code>.</li>
+</ul>
+<h3 id="euclidean"><a class="header" href="#euclidean">euclidean</a></h3>
+<p>Calcul de la distance Euclidienne en 64 bits.</p>
+<ul>
+<li><strong>Retour</strong> : <code>f64</code>.</li>
+</ul>
+<h3 id="mst_length"><a class="header" href="#mst_length">mst_length</a></h3>
+<p>Calcule la longueur totale de l’arbre couvrant minimal pour un nuage de points (algorithme de Prim).</p>
+<ul>
+<li><strong>Retour</strong> : <code>f64</code>.</li>
+</ul>
+<h3 id="steiner_lower_bound"><a class="header" href="#steiner_lower_bound">steiner_lower_bound</a></h3>
+<p>Estime la longueur minimale théorique nécessaire pour connecter tous les points d’intérêt (habitations et lieux de travail).</p>
+<ul>
+<li><strong>Entrées</strong> : <code>map: &amp;Map</code>.</li>
+<li><strong>Action</strong> : Calcule l’Arbre Couvrant Minimal (MST) sur l’ensemble des points d’intérêt, puis applique un coefficient correctif de $\frac{\sqrt{3}}{2} \approx 0.866$ pour approcher la borne inférieure de Steiner.</li>
+<li><strong>Retour</strong> : <code>f64</code> (longueur en mètres).</li>
+</ul>
+<h3 id="compute_score"><a class="header" href="#compute_score">compute_score</a></h3>
+<p>Calcule le score final synthétique de la simulation.</p>
+<ul>
+<li><strong>Entrées</strong> :
+<ul>
+<li><code>vehicles: &amp;[Vehicle]</code> : Liste de tous les véhicules.</li>
+<li><code>config: &amp;SimulationConfig</code> : Configuration incluant les poids du score.</li>
+</ul>
+</li>
+<li><strong>Action</strong> :
 <ol>
-<li><code>success_rate</code> = véhicules arrivés / total</li>
-<li><code>total_trip_time</code> = maximum du temps de trajet observé (arrived_at - departure_time)</li>
-<li><code>sum_trip_time</code> = somme des temps effectifs pour véhicules arrivés</li>
-<li><code>total_ref_trip_time</code> = somme des temps théoriques minimaux (<code>get_vehicle_min_time</code>) sur les mêmes trajets</li>
-<li><code>time_term</code> = <code>total_ref_trip_time / sum_trip_time</code> (proche de 1 si efficaces)</li>
-<li><code>pollution_term</code> = <code>total_ref_emitted_co2 / total_emitted_co2</code></li>
-<li><code>infrastructure_term</code> = <code>best_network_length (Steiner lower bound) / network_length</code></li>
+<li>Agrège les temps de trajet et émissions réelles de tous les véhicules.</li>
+<li>Calcule les références théoriques (minima).</li>
+<li>Calcule le taux de réussite (véhicules arrivés / total).</li>
+<li>Combine les ratios (Ref/Réel) pondérés par les poids de la configuration.</li>
 </ol>
-<p>Score final :</p>
-<pre><code>score = TIME_WEIGHT * time_term
-	+ SUCCESS_WEIGHT * success_rate
-	+ POLLUTION_WEIGHT * pollution_term
-	+ INFRASTRUCTURE_WEIGHT * infrastructure_term
-</code></pre>
-<h2 id="unités-et-constantes"><a class="header" href="#unités-et-constantes">Unités et constantes</a></h2>
-<ul>
-<li>Les fonctions de co2 utilisent des constantes physiques/empiriques (masse, rendement moteur, surface frontale, densité de l’air, etc.) pour estimer les émissions par distance parcourue.</li>
+</li>
+<li><strong>Retour</strong> : Structure <code>Score</code>.</li>
 </ul>
-<h2 id="exemple-dinterprétation"><a class="header" href="#exemple-dinterprétation">Exemple d’interprétation</a></h2>
+<h2 id="lecture-du-score"><a class="header" href="#lecture-du-score">Lecture du score</a></h2>
+<p>Le score final compare toujours l’exécution réelle à une exécution de référence:</p>
 <ul>
-<li><code>score</code> dans <code>[0,1]</code> (théoriquement) : plus élevé = meilleur compromis temps/pollution/succès/infrastructure.</li>
+<li>si le trajet est rapide, le terme temps augmente;</li>
+<li>si beaucoup de véhicules arrivent, le terme succès augmente;</li>
+<li>si le CO2 réel est proche du CO2 minimal, le terme pollution augmente;</li>
+<li>si le réseau est compact, le terme infrastructure augmente.</li>
 </ul>
+<p>Le résultat final est ensuite envoyé au client sous forme de <code>ServerPacket::Score</code>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="simulation/kinematics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="simulation/drive_plan.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
@@ -235,7 +324,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="simulation/kinematics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="simulation/drive_plan.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
@@ -284,10 +373,10 @@
         <script src="book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="mermaid-loader-58f8d2c4.js"></script>
-        <script src="mermaid-init-1ea3646b.js"></script>
-        <script src="katex-loader-1f369d43.js"></script>
-        <script src="katex-init-7f5dd265.js"></script>
+        <script src="mermaid-loader-1508ae7a.js"></script>
+        <script src="mermaid-init-49a54d84.js"></script>
+        <script src="katex-loader-d2c37f60.js"></script>
+        <script src="katex-init-c90d5c99.js"></script>
 
 
 
