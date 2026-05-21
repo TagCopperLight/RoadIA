@@ -2,37 +2,86 @@
 
 Fichier: `src/map/road.rs`.
 
-Types exposés et champs (champ-par-champ)
+Ce module contient les structures qui décrivent une route, ses voies et les mouvements possibles à travers les intersections.
 
-- `Road`:
-	- `id: u32` — identifiant unique.
-	- `length: f32` — longueur utile de la section entre intersections (m).
-	- `speed_limit: f32` — limite de vitesse pour la route (m/s).
-	- `lane_width: f32` — largeur des voies (m).
-	- `lanes: Vec<Lane>` — tableaux de `Lane` attachées à cette route.
+## `LinkType`
 
-- `Lane`:
-	- `id: u32` — identifiant local de la voie.
-	- `road_id: u32` — id de la `Road` parente.
-	- `length: f32` — généralement égal à `road.length`.
-	- `speed_limit: f32` — copie locale de la limite pour access rapide.
-	- `links: Vec<Link>` — mouvements sortants définissant les destinations possibles depuis cette voie.
+Type sémantique d'un mouvement à travers une intersection.
 
-- `Link`:
-	- `id: u32` — identifiant du mouvement (utilisé dans `DrivePlanEntry` et `link_states`).
-	- `destination_road_id: u32` — id de la `Road` de sortie ciblée par ce mouvement.
-	- `via_internal_lane_id: u32` — id de l'`InternalLane` traversée dans l'intersection.
-	- `link_type: LinkType` — sémantique du mouvement (`Priority`, `Yield`, `Stop`, `TrafficLight`).
-	- `foe_links: Vec<FoeLink>` — liste des `FoeLink` (liens en conflit) utilisée par `is_link_open`.
+- `Yield` : cédez le passage.
+- `Priority` : mouvement prioritaire.
+- `Stop` : arrêt obligatoire.
+- `TrafficLight` : mouvement contrôlé par un feu.
 
-- `FoeLink`:
-	- `id: u32` — id du lien adverse en conflit.
-	- `link_type: LinkType` — type du lien adverse (utile si feux/priority changent).
-	- `angle` / heuristiques (implémentation) — orientation relative utilisée pour priorité à droite.
+## `Road`
 
-Constructeurs et helpers
+Section orientée du graphe entre deux intersections.
 
-- `Road::new(id, lane_count, speed_limit, length)` — crée la `Road` et initialise `lane_count` voies avec `lane_width` par défaut.
+| Champ | Rôle |
+|---|---|
+| `id` | Identifiant unique de la route. |
+| `length` | Longueur utile de la section. |
+| `speed_limit` | Limite de vitesse de la route. |
+| `lane_width` | Largeur nominale d'une voie. |
+| `lanes` | Voies appartenant à cette route. |
+
+### `Road::new`
+
+Construit une route avec plusieurs voies.
+
+- **Entrées** :
+    - `id` : Identifiant public de la route.
+    - `lane_count` : Nombre de voies à créer.
+    - `speed_limit` : Vitesse limite (m/s).
+    - `length` : Longueur de la route (m).
+- **Action** : Initialise la structure `Road` et crée le nombre demandé d'objets `Lane`. La vitesse est bornée par `MAX_SPEED`.
+- **Retour** : Une instance de `Road`.
+
+## `Lane`
+
+Voie de circulation appartenant à une route.
+
+| Champ | Rôle |
+|---|---|
+| `id` | Identifiant local de la voie. |
+| `road_id` | Identifiant de la route parente. |
+| `length` | Longueur de la voie. |
+| `speed_limit` | Limite de vitesse copiée depuis la route. |
+| `links` | Mouvements autorisés depuis cette voie. |
+
+## `Link`
+
+Mouvement logique reliant une voie entrante à une route sortante via une intersection.
+
+| Champ | Rôle |
+|---|---|
+| `id` | Identifiant global du mouvement. |
+| `lane_origin_id` | Identifiant local de la voie entrante. |
+| `lane_destination_id` | Identifiant local de la voie de sortie. |
+| `via_internal_lane_id` | Identifiant de la voie interne traversée. |
+| `destination_road_id` | Route de sortie visée. |
+| `link_type` | Règle de priorité appliquée. |
+| `entry` | Point géométrique d'entrée dans le carrefour. |
+| `junction_center` | Centre géométrique du carrefour. |
+| `foe_links` | Mouvements concurrents pouvant bloquer ce lien. |
+| `foe_internal_lane_ids` | Identifiants des voies internes en conflit direct. |
+
+## `FoeLink`
+
+Mouvement adverse associé à un lien en conflit.
+
+| Champ | Rôle |
+|---|---|
+| `id` | Identifiant du lien adverse. |
+| `link_type` | Type de priorité de ce lien adverse. |
+| `entry` | Point d'entrée géométrique du mouvement adverse. |
+
+## Lecture fonctionnelle
+
+- `Road` porte la structure de haut niveau.
+- `Lane` porte l'état de circulation local sur la route.
+- `Link` porte les mouvements possibles dans les intersections.
+- `FoeLink` porte la notion de conflit.
 
 Rôle et utilisation
 

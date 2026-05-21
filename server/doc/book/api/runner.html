@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
+            window.path_to_searchindex_js = "../searchindex-e08d1819.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5b6ca4d7.js"></script>
+        <script src="../toc-c58d40f7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -176,76 +176,68 @@
                     <main>
                         <h1 id="runner--server-entrypoints"><a class="header" href="#runner--server-entrypoints">Runner / Server entrypoints</a></h1>
 <p>Fichier principal: <code>src/api/runner/runner.rs</code>.</p>
-<p>Responsabilités principales:</p>
+<p>Ce chapitre décrit la gestion des simulations en mémoire, les contrôleurs de démarrage/arrêt et le lancement du serveur HTTP + WebSocket.</p>
+<h2 id="simulationcontroller"><a class="header" href="#simulationcontroller"><code>SimulationController</code></a></h2>
+<p>Petit contrôleur atomique qui indique si une simulation doit tourner.</p>
 <ul>
-<li>Gestion des instances de simulation (<code>SimulationInstance</code>) identifiées par <code>Uuid</code>.</li>
-<li>Endpoint <code>/api/simulations</code> (POST) pour créer une nouvelle instance; renvoie <code>uuid</code> et <code>token</code>.</li>
-<li>Endpoint <code>/ws</code> (WebSocket) pour l’interaction en temps réel.</li>
-<li>Boucle d’exécution des instances: chaque <code>SimulationInstance</code> contient un thread asynchrone qui publie périodiquement les <code>VehicleUpdate</code> via un <code>broadcast</code> channel.</li>
+<li><code>new()</code> crée un contrôleur arrêté.</li>
+<li><code>start()</code> active la simulation.</li>
+<li><code>stop()</code> l’arrête.</li>
+<li><code>is_running()</code> lit l’état courant.</li>
 </ul>
-<p>Types importants:</p>
+<h2 id="simulationinstance"><a class="header" href="#simulationinstance"><code>SimulationInstance</code></a></h2>
+<p>Une instance correspond à une simulation autonome avec sa carte, son moteur, sa diffusion d’événements et son jeton d’accès.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>token</code></td><td>Jeton attendu par le WebSocket.</td></tr>
+<tr><td><code>engine</code></td><td>Moteur actif manipulé par le client et le worker.</td></tr>
+<tr><td><code>initial_engine</code></td><td>Instantané initial réutilisé pour les calculs de score ou les requêtes globales.</td></tr>
+<tr><td><code>broadcast</code></td><td>Canal de diffusion des paquets serveur vers tous les clients connectés.</td></tr>
+<tr><td><code>controller</code></td><td>État marche/arrêt partagé avec le WebSocket.</td></tr>
+<tr><td><code>active_connections</code></td><td>Nombre de clients WebSocket actuellement connectés.</td></tr>
+<tr><td><code>speed_multiplier</code></td><td>Accélération de simulation appliquée par le worker.</td></tr>
+<tr><td><code>file_uuid</code></td><td>Identifiant du fichier de carte persisté, si la simulation vient d’un fichier.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="fonctions-de-simulationinstance"><a class="header" href="#fonctions-de-simulationinstance">Fonctions de <code>SimulationInstance</code></a></h3>
 <ul>
-<li><code>SimulationController</code> : start/stop et état <code>is_running()</code>.</li>
-<li><code>SimulationInstance</code> : contient <code>engine: Arc&lt;Mutex&lt;SimulationEngine&gt;&gt;</code>, <code>broadcast</code>, <code>controller</code>, <code>token</code>.</li>
-<li><code>AppState</code> : état partagé exposant la map <code>simulations: HashMap&lt;Uuid, Arc&lt;SimulationInstance&gt;&gt;</code>.</li>
+<li><code>new(map)</code> construit une instance complète, initialise les véhicules, recalcule les chemins et lance un worker asynchrone qui publie les mises à jour.</li>
+<li><code>from_file(path, uuid)</code> charge une carte persistée puis en crée une instance.</li>
+<li><code>new_default()</code> essaie de charger <code>data/lannion.osm.pbf</code>; si l’import échoue, la simulation démarre sur une carte vide.</li>
 </ul>
-<p>Configuration CORS et binding réseau sont effectués dans <code>run()</code>.</p>
-<p>Génération de token: <code>generate_token()</code> (utilise <code>rand</code>).</p>
-<p>Notes opérationnelles:</p>
-<ul>
-<li><code>SimulationInstance::new_default()</code> charge <code>data/lannion.osm.pbf</code> via le map generator si disponible.</li>
-<li>L’instance publie périodiquement les mises à jour et envoie un <code>Score</code> lorsque la simulation se termine.</li>
-</ul>
-<h2 id="runner-startup-sequence"><a class="header" href="#runner-startup-sequence">Runner startup sequence</a></h2>
-<pre><code class="language-mermaid">flowchart LR
-	A["run()"] --&gt; B["Build AppState"]
-	B --&gt; C["Configure CORS"]
-	C --&gt; D["Register routes: /ws, /api/simulations"]
-	D --&gt; E["Bind TcpListener 0.0.0.0:8080"]
-	E --&gt; F["axum::serve(app)"]
-</code></pre>
-<h2 id="example-create--monitor"><a class="header" href="#example-create--monitor">Example: create + monitor</a></h2>
+<p>Le worker interne publie périodiquement les véhicules, les feux et le paquet de fin de simulation lorsque tout le monde est arrivé ou lorsque la durée maximale est atteinte.</p>
+<h2 id="appstate"><a class="header" href="#appstate"><code>AppState</code></a></h2>
+<p>État partagé du serveur. Il stocke la table des simulations actives, indexées par <code>Uuid</code>.</p>
+<h2 id="generate_token"><a class="header" href="#generate_token"><code>generate_token</code></a></h2>
+<p>Construit un jeton hexadécimal de 32 caractères à l’aide d’un générateur aléatoire.</p>
+<h2 id="flux-de-démarrage"><a class="header" href="#flux-de-démarrage">Flux de démarrage</a></h2>
 <ol>
-<li>POST <code>/api/simulations</code> → server responds <code>{uuid, token}</code></li>
-<li>Client opens WebSocket <code>/ws?uuid=&lt;uuid&gt;&amp;token=&lt;token&gt;</code></li>
-<li>Server sends initial <code>Map</code> packet and then periodic <code>VehicleUpdate</code> packets from the instance’s background task</li>
+<li><code>run()</code> crée l’état partagé vide.</li>
+<li><code>run()</code> configure les origines autorisées via <code>ALLOWED_ORIGINS</code>.</li>
+<li><code>run()</code> enregistre les routes HTTP et WebSocket.</li>
+<li><code>run()</code> lie le serveur sur <code>0.0.0.0:8080</code>.</li>
 </ol>
-<h2 id="notes-for-operators"><a class="header" href="#notes-for-operators">Notes for operators</a></h2>
+<h2 id="ce-quil-faut-retenir"><a class="header" href="#ce-quil-faut-retenir">Ce qu’il faut retenir</a></h2>
 <ul>
-<li>Ensure <code>ALLOWED_ORIGINS</code> env var is set before running server.</li>
-<li>The runner uses <code>tower_http::cors::CorsLayer</code> to enforce origins and allowed methods.</li>
+<li><code>handlers.rs</code> décide des routes et de leurs validations.</li>
+<li><code>runner.rs</code> porte la vie d’une simulation individuelle.</li>
+<li>Le WebSocket ne manipule pas directement les fichiers de carte; il agit sur une <code>SimulationInstance</code> déjà existante.</li>
 </ul>
-<h2 id="architecture-diagram"><a class="header" href="#architecture-diagram">Architecture diagram</a></h2>
-<p>High-level ownership and component diagram:</p>
-<pre><code class="language-mermaid">graph LR
-	subgraph Server
-		AppState[[AppState]]
-		Runner[Runner / Axum Server]
-	end
-	subgraph Instance
-		SI[SimulationInstance]
-		Engine[SimulationEngine]
-		Broadcast[BroadcastChannel]
-	end
-	Client[WebClient]
-
-	Runner --&gt; AppState
-	AppState --&gt; SI
-	SI --&gt; Engine
-	SI --&gt; Broadcast
-	Client --&gt;|POST /api/simulations| Runner
-	Client --&gt;|WS /ws?uuid&amp;token| Broadcast
-</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../api/ws_examples.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../api/handlers.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../map/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../api/map_generator.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -255,11 +247,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../api/ws_examples.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../api/handlers.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../map/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../api/map_generator.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -304,10 +296,10 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid-loader-58f8d2c4.js"></script>
-        <script src="../mermaid-init-1ea3646b.js"></script>
-        <script src="../katex-loader-1f369d43.js"></script>
-        <script src="../katex-init-7f5dd265.js"></script>
+        <script src="../mermaid-loader-1508ae7a.js"></script>
+        <script src="../mermaid-init-49a54d84.js"></script>
+        <script src="../katex-loader-d2c37f60.js"></script>
+        <script src="../katex-init-c90d5c99.js"></script>
 
 
 

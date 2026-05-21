@@ -1,46 +1,119 @@
 # Scoring system
 
-Fichier: `src/scoring/mod.rs` (et autres fonctions utilitaires).
+Fichier: `src/scoring/mod.rs`.
 
-But:
-- Calculer un score global sur la simulation basé sur: temps de trajet total, émissions de CO2, distance parcourue, taux de succès (arrivées).
+Le module de scoring transforme l'état final d'une simulation en un nombre unique et lisible. Il compare les véhicules arrivés à des références théoriques pour le temps, le CO2 et la taille du réseau.
 
-Utilisation:
-- `SimulationEngine::get_score()` appelle le module `scoring` pour produire un `Score` struct, qui est ensuite envoyé au client via `ServerPacket::Score`.
+## Constantes physiques et de calibration
 
-## Détails de l'implémentation
+| Constante | Rôle |
+|---|---|
+| `AIR_DENSITY` | Densité de l'air utilisée pour l'effort aérodynamique. |
+| `GRAVITY` | Accélération de la pesanteur. |
+| `DRIVE_TRAIN_EFFICIENCY` | Rendement global de la transmission mécanique. |
+| `FRANCE_GRID_CO2_PER_J` | Équivalent CO2 par joule électrique pour le mix français. |
 
-Le scoring combine plusieurs termes normalisés : temps, succès (ratio véhicules arrivés), pollution et infrastructure. Les poids actuels (dans `scoring/mod.rs`) sont :
+## Structures internes et publiques
 
-- `TIME_WEIGHT = 0.4`
-- `SUCCESS_WEIGHT = 0.2`
-- `POLLUTION_WEIGHT = 0.2`
-- `INFRASTRUCTURE_WEIGHT = 0.2`
+### `KindParams`
 
-Le calcul suit ces étapes :
+Paramètres physiques dépendant du type de véhicule.
 
-1. `success_rate` = véhicules arrivés / total
-2. `total_trip_time` = maximum du temps de trajet observé (arrived_at - departure_time)
-3. `sum_trip_time` = somme des temps effectifs pour véhicules arrivés
-4. `total_ref_trip_time` = somme des temps théoriques minimaux (`get_vehicle_min_time`) sur les mêmes trajets
-5. `time_term` = `total_ref_trip_time / sum_trip_time` (proche de 1 si efficaces)
-6. `pollution_term` = `total_ref_emitted_co2 / total_emitted_co2`
-7. `infrastructure_term` = `best_network_length (Steiner lower bound) / network_length`
+- masse
+- coefficient de traînée
+- surface frontale
+- résistance au roulement
+- puissance consommée à l'arrêt
 
-Score final :
+Ces paramètres permettent d'estimer de façon cohérente la consommation et les émissions.
 
-```
-score = TIME_WEIGHT * time_term
-	+ SUCCESS_WEIGHT * success_rate
-	+ POLLUTION_WEIGHT * pollution_term
-	+ INFRASTRUCTURE_WEIGHT * infrastructure_term
-```
+### `MinHeap`
 
-## Unités et constantes
+Petit wrapper de file de priorité utilisé lors du calcul de l'arbre couvrant minimal approché. Il sert uniquement à faire avancer l'algorithme de coût minimal sur les points de la carte.
 
-- Les fonctions de co2 utilisent des constantes physiques/empiriques (masse, rendement moteur, surface frontale, densité de l'air, etc.) pour estimer les émissions par distance parcourue.
+### `Score`
 
-## Exemple d'interprétation
+Résultat complet envoyé au client à la fin de la simulation.
 
-- `score` dans `[0,1]` (théoriquement) : plus élevé = meilleur compromis temps/pollution/succès/infrastructure.
+| Champ | Rôle |
+|---|---|
+| `score` | Valeur finale synthétique. |
+| `total_trip_time` | Temps réellement consommé par les véhicules arrivés. |
+| `ref_total_trip_time` | Temps de référence théorique minimal. |
+| `total_emitted_co2` | CO2 réellement produit. |
+| `ref_total_emitted_co2` | CO2 de référence minimal. |
+| `network_length` | Longueur totale des routes distinctes. |
+| `ref_network_length` | Borne inférieure du meilleur réseau possible. |
+| `success_rate` | Part des véhicules arrivés. |
+
+## Fonctions de calcul
+
+### kind_params
+Fournit les paramètres physiques pour une catégorie de véhicule donnée.
+- **Entrées** : `kind: VehicleKind`.
+- **Retour** : Structure `KindParams`.
+
+### emission_params
+Retourne les paramètres d'émission pour un couple (motorisation, catégorie).
+
+- **Entrées** : `motorization: VehicleType`, `kind: VehicleKind`.
+- **Retour** : `(f32, f32)` représentant (CO2 par Joule, CO2 par seconde au ralenti).
+
+### update_co2_emissions
+Calcule et ajoute le CO2 produit par un véhicule durant un pas de temps.
+
+- **Entrées** :
+    - `vehicle: &mut Vehicle` : Le véhicule à mettre à jour.
+    - `time_step: f32` : Durée du pas de temps.
+- **Action** : Calcule l'effort de traction (résistance air, roulement, accélération) puis la consommation énergétique et les émissions correspondantes.
+- **Post-conditions** : `vehicle.emitted_co2` est incrémenté.
+
+### get_minimal_time_travel_by_road / get_minimal_co2_by_road
+Calculent les minima théoriques pour un véhicule sur une route donnée sans trafic ni contrainte.
+- **Entrées** : `map`, `road_index`, `motorization`, `kind`.
+- **Retour** : `f32`.
+
+### get_vehicle_min_time / get_vehicle_min_co2
+Estiment le temps et les émissions minimums pour l'intégralité du trajet d'un véhicule.
+- **Action** : Somment les minima de chaque route composant le chemin du véhicule.
+- **Retour** : `f32`.
+
+### euclidean
+Calcul de la distance Euclidienne en 64 bits.
+- **Retour** : `f64`.
+
+### mst_length
+Calcule la longueur totale de l'arbre couvrant minimal pour un nuage de points (algorithme de Prim).
+- **Retour** : `f64`.
+
+### steiner_lower_bound
+Estime la longueur minimale théorique nécessaire pour connecter tous les points d'intérêt (habitations et lieux de travail).
+
+- **Entrées** : `map: &Map`.
+- **Action** : Calcule l'Arbre Couvrant Minimal (MST) sur l'ensemble des points d'intérêt, puis applique un coefficient correctif de $\frac{\sqrt{3}}{2} \approx 0.866$ pour approcher la borne inférieure de Steiner.
+- **Retour** : `f64` (longueur en mètres).
+
+### compute_score
+Calcule le score final synthétique de la simulation.
+
+- **Entrées** :
+    - `vehicles: &[Vehicle]` : Liste de tous les véhicules.
+    - `config: &SimulationConfig` : Configuration incluant les poids du score.
+- **Action** : 
+    1. Agrège les temps de trajet et émissions réelles de tous les véhicules.
+    2. Calcule les références théoriques (minima).
+    3. Calcule le taux de réussite (véhicules arrivés / total).
+    4. Combine les ratios (Ref/Réel) pondérés par les poids de la configuration.
+- **Retour** : Structure `Score`.
+
+## Lecture du score
+
+Le score final compare toujours l'exécution réelle à une exécution de référence:
+
+- si le trajet est rapide, le terme temps augmente;
+- si beaucoup de véhicules arrivent, le terme succès augmente;
+- si le CO2 réel est proche du CO2 minimal, le terme pollution augmente;
+- si le réseau est compact, le terme infrastructure augmente.
+
+Le résultat final est ensuite envoyé au client sous forme de `ServerPacket::Score`.
 
