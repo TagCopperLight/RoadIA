@@ -2,68 +2,57 @@
 
 Fichier principal: `src/api/runner/runner.rs`.
 
-Responsabilités principales:
-- Gestion des instances de simulation (`SimulationInstance`) identifiées par `Uuid`.
-- Endpoint `/api/simulations` (POST) pour créer une nouvelle instance; renvoie `uuid` et `token`.
-- Endpoint `/ws` (WebSocket) pour l'interaction en temps réel.
-- Boucle d'exécution des instances: chaque `SimulationInstance` contient un thread asynchrone qui publie périodiquement les `VehicleUpdate` via un `broadcast` channel.
+Ce chapitre décrit la gestion des simulations en mémoire, les contrôleurs de démarrage/arrêt et le lancement du serveur HTTP + WebSocket.
 
-Types importants:
-- `SimulationController` : start/stop et état `is_running()`.
-- `SimulationInstance` : contient `engine: Arc<Mutex<SimulationEngine>>`, `broadcast`, `controller`, `token`.
-- `AppState` : état partagé exposant la map `simulations: HashMap<Uuid, Arc<SimulationInstance>>`.
+## `SimulationController`
 
-Configuration CORS et binding réseau sont effectués dans `run()`.
+Petit contrôleur atomique qui indique si une simulation doit tourner.
 
-Génération de token: `generate_token()` (utilise `rand`).
+- `new()` crée un contrôleur arrêté.
+- `start()` active la simulation.
+- `stop()` l'arrête.
+- `is_running()` lit l'état courant.
 
-Notes opérationnelles:
-- `SimulationInstance::new_default()` charge `data/lannion.osm.pbf` via le map generator si disponible.
-- L'instance publie périodiquement les mises à jour et envoie un `Score` lorsque la simulation se termine.
+## `SimulationInstance`
 
-## Runner startup sequence
+Une instance correspond à une simulation autonome avec sa carte, son moteur, sa diffusion d'événements et son jeton d'accès.
 
-```mermaid
-flowchart LR
-	A["run()"] --> B["Build AppState"]
-	B --> C["Configure CORS"]
-	C --> D["Register routes: /ws, /api/simulations"]
-	D --> E["Bind TcpListener 0.0.0.0:8080"]
-	E --> F["axum::serve(app)"]
-```
+| Champ | Rôle |
+|---|---|
+| `token` | Jeton attendu par le WebSocket. |
+| `engine` | Moteur actif manipulé par le client et le worker. |
+| `initial_engine` | Instantané initial réutilisé pour les calculs de score ou les requêtes globales. |
+| `broadcast` | Canal de diffusion des paquets serveur vers tous les clients connectés. |
+| `controller` | État marche/arrêt partagé avec le WebSocket. |
+| `active_connections` | Nombre de clients WebSocket actuellement connectés. |
+| `speed_multiplier` | Accélération de simulation appliquée par le worker. |
+| `file_uuid` | Identifiant du fichier de carte persisté, si la simulation vient d'un fichier. |
 
-## Example: create + monitor
+### Fonctions de `SimulationInstance`
 
-1. POST `/api/simulations` → server responds `{uuid, token}`
-2. Client opens WebSocket `/ws?uuid=<uuid>&token=<token>`
-3. Server sends initial `Map` packet and then periodic `VehicleUpdate` packets from the instance's background task
+- `new(map)` construit une instance complète, initialise les véhicules, recalcule les chemins et lance un worker asynchrone qui publie les mises à jour.
+- `from_file(path, uuid)` charge une carte persistée puis en crée une instance.
+- `new_default()` essaie de charger `data/lannion.osm.pbf`; si l'import échoue, la simulation démarre sur une carte vide.
 
-## Notes for operators
+Le worker interne publie périodiquement les véhicules, les feux et le paquet de fin de simulation lorsque tout le monde est arrivé ou lorsque la durée maximale est atteinte.
 
-- Ensure `ALLOWED_ORIGINS` env var is set before running server.
-- The runner uses `tower_http::cors::CorsLayer` to enforce origins and allowed methods.
+## `AppState`
 
-## Architecture diagram
+État partagé du serveur. Il stocke la table des simulations actives, indexées par `Uuid`.
 
-High-level ownership and component diagram:
+## `generate_token`
 
-```mermaid
-graph LR
-	subgraph Server
-		AppState[[AppState]]
-		Runner[Runner / Axum Server]
-	end
-	subgraph Instance
-		SI[SimulationInstance]
-		Engine[SimulationEngine]
-		Broadcast[BroadcastChannel]
-	end
-	Client[WebClient]
+Construit un jeton hexadécimal de 32 caractères à l'aide d'un générateur aléatoire.
 
-	Runner --> AppState
-	AppState --> SI
-	SI --> Engine
-	SI --> Broadcast
-	Client -->|POST /api/simulations| Runner
-	Client -->|WS /ws?uuid&token| Broadcast
-```
+## Flux de démarrage
+
+1. `run()` crée l'état partagé vide.
+2. `run()` configure les origines autorisées via `ALLOWED_ORIGINS`.
+3. `run()` enregistre les routes HTTP et WebSocket.
+4. `run()` lie le serveur sur `0.0.0.0:8080`.
+
+## Ce qu'il faut retenir
+
+- `handlers.rs` décide des routes et de leurs validations.
+- `runner.rs` porte la vie d'une simulation individuelle.
+- Le WebSocket ne manipule pas directement les fichiers de carte; il agit sur une `SimulationInstance` déjà existante.
