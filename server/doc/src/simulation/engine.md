@@ -88,6 +88,7 @@ sequenceDiagram
     Note over E: Début du pas (step)
     E->>V: Mémoriser velocity → previous_velocity
     E->>E: handle_departures()
+    E->>E: handle_commutes()
     E->>E: plan_movements()
     E->>E: attempt_lane_changes()
     E->>E: register_approaches()
@@ -121,6 +122,13 @@ Pour qu'un changement de voie soit validé, le moteur vérifie :
 Gère le passage des véhicules de l'état `WaitingToDepart` à `OnRoad`.
 - **Entrée** : `&mut self`.
 - **Action** : Vérifie pour chaque véhicule en attente si son heure de départ est arrivée et si la première voie de son trajet est libre. Si oui, insère le véhicule sur la voie.
+
+### handle_commutes
+Gère les étapes des plans de trajets pendulaires (`CommutePlan`).
+- **Action** :
+    1. Injecte les véhicules pour le trajet aller.
+    2. Surveille l'arrivée des véhicules aller pour programmer le trajet retour (heure actuelle + temps d'attente).
+    3. Injecte les véhicules retour à l'heure prévue.
 
 ### plan_movements
 Phase de décision pour tous les véhicules actifs.
@@ -183,6 +191,13 @@ Gère l'entrée dans un carrefour ou l'arrivée à destination.
 ### flush_transfers
 Applique tous les changements de voies mis en attente pendant le pas de temps.
 - **Action** : Met à jour `vehicles_by_lane` et les champs `current_lane` des véhicules concernés.
+
+## Simulation Longue Durée (24h)
+
+Le moteur supporte des simulations s'étendant sur plusieurs heures réelles. Pour maintenir la stabilité :
+- **Distribution réaliste** : Les flux de véhicules ne sont pas constants mais suivent des cycles jour/nuit et des pics pendulaires (voir [Commute Plans](./commute.md)).
+- **Gestion de la mémoire** : Les véhicules arrivés sont archivés pour le scoring mais ne consomment plus de ressources physiques dans le moteur.
+- **Contrôles de vitesse** : Le moteur permet d'ajuster le multiplicateur de vitesse pour accélérer l'écoulement du temps simulé.
 
 ### lane_insert_sorted
 Helper pour insérer un véhicule dans l'index d'une voie tout en maintenant le tri par position.
