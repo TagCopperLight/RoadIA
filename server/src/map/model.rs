@@ -35,6 +35,8 @@ pub struct MapSettings {
     pub pollution_weight: f32,
     #[serde(default = "MapSettings::default_infrastructure_weight")]
     pub infrastructure_weight: f32,
+    #[serde(default = "MapSettings::default_use_day_night_cycle")]
+    pub use_day_night_cycle: bool,
 }
 
 impl MapSettings {
@@ -55,6 +57,7 @@ impl MapSettings {
     fn default_success_weight() -> f32 { 0.2 }
     fn default_pollution_weight() -> f32 { 0.2 }
     fn default_infrastructure_weight() -> f32 { 0.2 }
+    fn default_use_day_night_cycle() -> bool { true }
 }
 
 impl Default for MapSettings {
@@ -72,6 +75,7 @@ impl Default for MapSettings {
             success_weight: Self::default_success_weight(),
             pollution_weight: Self::default_pollution_weight(),
             infrastructure_weight: Self::default_infrastructure_weight(),
+            use_day_night_cycle: Self::default_use_day_night_cycle(),
         }
     }
 }

@@ -368,6 +368,11 @@ async fn handle_client_packet(
             instance.controller.stop();
             let mut eng = instance.engine.lock().await;
             eng.config.start_time = eng.config.map.settings.simulation_start_time;
+            eng.config.end_time = if eng.config.map.settings.use_day_night_cycle {
+                86_400.0f32
+            } else {
+                eng.config.map.settings.simulation_start_time + 3_600.0f32
+            };
             eng.config.time_step = eng.config.map.settings.time_step;
             let commute_plan_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();

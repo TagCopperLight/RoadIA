@@ -11,7 +11,7 @@ export default function MapShell({ uuid, children }: { uuid: string, children?: 
         <WsProvider uuid={uuid}>
             <EditModeProvider>
                 {children}
-                <Toolbar />
+                <Toolbar uuid={uuid} />
                 <div className='flex w-full h-full pl-[15px] pr-[15px] pt-[15px] pb-[15px]'>
                     <MapComponent uuid={uuid} />
                 </div>

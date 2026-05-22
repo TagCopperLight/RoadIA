@@ -56,7 +56,11 @@ pub struct SimulationInstance {
 impl SimulationInstance {
     pub fn new(map: crate::map::model::Map) -> Arc<Self> {
         let commute_plan_count = map.settings.vehicle_count;
-        let end_time = 86_400.0f32;
+        let end_time = if map.settings.use_day_night_cycle {
+            86_400.0f32
+        } else {
+            map.settings.simulation_start_time + 3_600.0f32
+        };
         println!(
             "Simulation settings: vehicle_count={}, simulation_start_time={}, time_step={}",
             map.settings.vehicle_count,
