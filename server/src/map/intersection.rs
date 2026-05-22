@@ -329,11 +329,11 @@ pub fn is_link_open(
         return true;
     }
 
-    if link.link_type == LinkType::Stop && vehicle.waiting_time < stop_dwell_time {
+    if link.link_type == LinkType::Stop && !vehicle.is_reckless && vehicle.waiting_time < stop_dwell_time {
         return false;
     }
 
-    if link.link_type == LinkType::TrafficLight && !green_links.contains(&link.id) {
+    if link.link_type == LinkType::TrafficLight && !vehicle.is_reckless && !green_links.contains(&link.id) {
         return false;
     }
 
