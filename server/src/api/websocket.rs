@@ -44,6 +44,7 @@ pub enum ClientPacket {
     SetSpeed { multiplier: u32 },
     RequestScore {},
     RequestDensity {},
+    RequestVehicleUpdate {},
     AddWaypoints { vehicle_id: u64, node_ids: Vec<u32> },
     RequestVehicles {},
     CreateBusLine { name: String, stop_node_ids: Vec<u32> },
@@ -358,6 +359,23 @@ async fn handle_client_packet(
 
                 let _ = broadcast.send(ServerPacket::DensityMap { edges });
             });
+        }
+
+        ClientPacket::RequestVehicleUpdate {} => {
+            let eng = instance.engine.lock().await;
+            let map_snapshot = eng.config.map.clone();
+            let vehicles = eng.vehicles.iter()
+                .map(|vehicle| serialize_vehicle(vehicle, &map_snapshot))
+                .collect::<Vec<_>>();
+            let traffic_lights = serialize_traffic_lights(&map_snapshot, &eng.controller_green_road_ids);
+            let packet = ServerPacket::VehicleUpdate {
+                vehicles,
+                traffic_lights,
+                simulation_time_s: eng.current_time,
+            };
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
+            }
         }
 
         ClientPacket::StopSimulation {} => {
