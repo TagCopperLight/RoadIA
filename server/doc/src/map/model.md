@@ -21,6 +21,7 @@ Les réglages de la carte contrôlent à la fois la génération des véhicules,
 | `success_weight` | Poids du taux de réussite. | 0.2 |
 | `pollution_weight` | Poids de la pollution. | 0.2 |
 | `infrastructure_weight` | Poids de l'infrastructure. | 0.2 |
+| `use_day_night_cycle` | Active ou désactive le cycle jour/nuit. | `true` |
 
 ## `SavedBusLine`
 

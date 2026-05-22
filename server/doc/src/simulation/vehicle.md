@@ -85,6 +85,8 @@ Structure principale représentant un véhicule actif.
     - `emitted_co2` : Cumul du CO2 émis.
     - `distance_traveled` : Distance totale parcourue.
     - `arrived_at` : Instant précis de l'arrivée (`Option<f32>`).
+    - `lane_change_cooldown` : Temps restant avant de pouvoir changer de voie à nouveau (s).
+    - `desired_velocity` : Vitesse que le véhicule tente d'atteindre, influencée par la limite de vitesse et le comportement du conducteur (m/s).
 
 ## Fonctions globales
 
@@ -116,11 +118,13 @@ Calcule ou met à jour le chemin complet du véhicule (incluant les points de pa
 Calcule l'accélération à appliquer selon le modèle IDM (Intelligent Driver Model).
 
 - **Entrées** :
-    - `desired_velocity` : Vitesse souhaitée (vitesse limite ou max véhicule).
+    - `desired_velocity` : Vitesse souhaitée.
     - `minimum_gap` : Distance de sécurité minimale.
     - `vehicle_ahead_distance` : Distance avec le véhicule de devant.
     - `vehicle_ahead_velocity` : Vitesse du véhicule de devant.
-- **Action** : Calcule l'équilibre entre l'envie d'accélérer vers la vitesse souhaitée et le besoin de freiner pour maintenir une distance de sécurité.
+- **Action** : 
+    - Le véhicule calcule sa vitesse désirée en fonction de `spec.max_speed` et de la limite de vitesse de la route.
+    - L'accélération est calculée pour équilibrer l'envie d'atteindre `desired_velocity` et le besoin de maintenir une distance de sécurité par rapport au leader.
 - **Retour** : `f32` (accélération en m/s²).
 
 ### get_coordinates
