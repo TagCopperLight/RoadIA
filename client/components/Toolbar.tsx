@@ -63,23 +63,6 @@ function IconReset() {
     );
 }
 
-function IconModeEdit() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
-}
-
-function IconModeSimulation() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <polygon points="10,8 16,12 10,16" fill="currentColor" stroke="none" />
-        </svg>
-    );
-}
 
 function IconWaypoints() {
     return (
@@ -182,23 +165,11 @@ export default function Toolbar({ uuid }: { uuid: string }) {
     const [speedMultiplier, setSpeedMultiplier] = useState(3);
     const {
         mode, editTool, simState,
-        setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
+        setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
         densityView, setDensityView, isDensityLoading, setIsDensityLoading,
         showIntersections, setShowIntersections,
         mapSettings, setMapSettings,
     } = useEditMode();
-
-    const switchToEdit = () => {
-        ws?.send('resetSimulation', {});
-        setSimState('stopped');
-        setShowScore(false);
-        setDensityView(false);
-        setIsDensityLoading(false);
-        setSimulationResetAt(prev => prev + 1);
-        setSelectedElement(null);
-        setPendingRoadFrom(null);
-        setMode('edit');
-    };
 
     const handleDensityToggle = () => {
         if (densityView) {
@@ -207,13 +178,6 @@ export default function Toolbar({ uuid }: { uuid: string }) {
             ws?.send('requestDensity', {});
             setIsDensityLoading(true);
         }
-    };
-
-    const switchToSimulation = () => {
-        setSelectedElement(null);
-        setPendingRoadFrom(null);
-        setShowIntersections(true);
-        setMode('simulation');
     };
 
     const handlePlayPause = () => {
@@ -340,13 +304,6 @@ export default function Toolbar({ uuid }: { uuid: string }) {
                     )}
                 </div>
 
-                {/* Right: mode toggle */}
-                <ToolButton
-                    onClick={mode === 'edit' ? switchToSimulation : switchToEdit}
-                    title={mode === 'edit' ? 'Switch to Simulation Mode' : 'Switch to Edit Mode'}
-                >
-                    {mode === 'edit' ? <IconModeSimulation /> : <IconModeEdit />}
-                </ToolButton>
             </div>
         </div>
     );

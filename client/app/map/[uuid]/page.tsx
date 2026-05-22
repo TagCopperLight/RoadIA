@@ -10,7 +10,11 @@ import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket'
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
-    const { isScoringLoading, setIsScoringLoading, setScoreProgress, showScore, setShowSettings } = useEditMode();
+    const {
+        isScoringLoading, setIsScoringLoading, setScoreProgress, showScore, setShowSettings,
+        mode, setMode, setSimState, setShowScore, setDensityView, setIsDensityLoading,
+        setSimulationResetAt, setSelectedElement, setPendingRoadFrom, setShowIntersections,
+    } = useEditMode();
     const ws = useWs();
     const router = useRouter();
     const params = useParams();
@@ -114,6 +118,8 @@ function Header() {
                                     if (item === 'Statistiques') { if (!isScoringLoading && !showScore) { ws?.send('requestScore', {}); setScoreProgress(null); setIsScoringLoading(true); } return; }
                                     if (item === 'Fichier') { setOpenMenu(openMenu === 'Fichier' ? null : 'Fichier'); return; }
                                     if (item === 'Paramètres') { setOpenMenu(null); setShowSettings(true); return; }
+                                    if (item === 'Simulation') { setSelectedElement(null); setPendingRoadFrom(null); setShowIntersections(true); setMode('simulation'); return; }
+                                    if (item === 'Édition') { ws?.send('resetSimulation', {}); setSimState('stopped'); setShowScore(false); setDensityView(false); setIsDensityLoading(false); setSimulationResetAt(prev => prev + 1); setSelectedElement(null); setPendingRoadFrom(null); setMode('edit'); return; }
                                 }}
                                 className={`transition-opacity select-none ${item === 'Statistiques' && (isScoringLoading || showScore) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-50'}`}
                             >
