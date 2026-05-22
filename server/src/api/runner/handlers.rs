@@ -292,7 +292,7 @@ async fn update_simulation_settings_handler(
     let simulations = state.simulations.read().await;
     let instance = simulations.get(&uuid).ok_or_else(|| (axum::http::StatusCode::NOT_FOUND, "Simulation not found".to_string()))?;
 
-    let file_uuid = instance.file_uuid.lock().unwrap().clone();
+    let file_uuid = *instance.file_uuid.lock().unwrap();
 
     {
         let mut engine = instance.engine.lock().await;
