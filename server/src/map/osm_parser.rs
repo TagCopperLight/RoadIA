@@ -59,15 +59,6 @@ struct NodeCoord {
 
 // ── Main entry point ────────────────────────────────────────────────────
 
-/// Parse an `.osm.pbf` file and build a [`Map`].
-///
-/// # Example
-/// ```ignore
-/// use server::map::osm_parser::parse_osm_pbf;
-/// let map = parse_osm_pbf("path/to/region.osm.pbf").unwrap();
-/// println!("Intersections: {}", map.graph.node_count());
-/// println!("Roads: {}", map.graph.edge_count());
-/// ```
 pub fn parse_osm_pbf<P: AsRef<Path>>(path: P) -> Result<Map, OsmParseError> {
     // ── Pass 1: collect highway ways & count node references ────────
     let (ways, mut node_ref_count) = collect_highway_data(path.as_ref())?;

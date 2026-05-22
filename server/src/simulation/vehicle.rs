@@ -3,6 +3,14 @@ use petgraph::graph::{EdgeIndex, NodeIndex};
 
 use crate::map::{model::Coordinates, model::Map};
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum VehicleType {
+    Hybride,
+    Electrique,
+    Essence,
+    Diesel,
+}
+
 #[derive(Copy, Clone)]
 pub enum VehicleKind {
     Car,
@@ -73,7 +81,10 @@ pub struct Vehicle {
     pub id: u64,
     pub spec: VehicleSpec,
     pub trip: TripRequest,
+    pub commute_plan_id: Option<u64>,
     pub state: VehicleState,
+    pub motorization: VehicleType,
+    pub waypoints: Vec<NodeIndex>,
 
     pub path: Vec<NodeIndex>,
     pub path_index: usize,
@@ -87,7 +98,8 @@ pub struct Vehicle {
     pub registered_link_ids: Vec<u32>,
     pub waiting_time: f32,
     pub impatience: f32,
-    
+    pub lane_change_cooldown: f32,
+
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,
@@ -105,12 +117,15 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Opt
 }
 
 impl Vehicle {
-    pub fn new(id: u64, spec: VehicleSpec, trip: TripRequest) -> Self {
+    pub fn new(id: u64, spec: VehicleSpec, trip: TripRequest, motorization: VehicleType) -> Self {
         Self {
             id,
             spec,
             trip,
+            commute_plan_id: None,
             state: VehicleState::WaitingToDepart,
+            motorization,
+            waypoints: Vec::new(),
             path: Vec::new(),
             path_index: 0,
             previous_velocity: 0.0,
@@ -121,18 +136,54 @@ impl Vehicle {
             registered_link_ids: Vec::new(),
             waiting_time: 0.0,
             impatience: 0.0,
+            lane_change_cooldown: 0.0,
             emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
         }
     }
 
-    pub fn update_path(&mut self, map: &Map) {
-        match fastest_path(map, self.trip.origin, self.trip.destination) {
-            Some(path) => self.path = path,
-            None => {/*pass*/},
+    pub fn update_path(&mut self, map: &Map) -> bool {
+        let mut stops: Vec<NodeIndex> = self.waypoints.clone();
+        stops.push(self.trip.destination);
+
+        let start = if !self.path.is_empty() && self.path_index < self.path.len() {
+            self.path[self.path_index]
+        } else {
+            self.trip.origin
+        };
+
+        let mut full_path = vec![start];
+        let mut current = start;
+        for &stop in &stops {
+            match fastest_path(map, current, stop) {
+                Some(seg) => {
+                    if seg.len() < 2 {
+                        self.path.clear();
+                        self.path_index = 0;
+                        return false;
+                    }
+                    full_path.extend_from_slice(&seg[1..]);
+                    current = stop;
+                }
+                None => {
+                    self.path.clear();
+                    self.path_index = 0;
+                    return false;
+                }
+            }
         }
-        self.path_index = 0;
+        if full_path.len() < 2 {
+            self.path.clear();
+            self.path_index = 0;
+            return false;
+        }
+        self.path = full_path;
+        self.path_index = 0; // full_path always starts at `start`
+        // NOTE: Do NOT clear drive_plan/registered_link_ids here. The simulation engine
+        // will rebuild them naturally when rebuild_drive_plan is called in the next step.
+        // Clearing them prematurely would cause enter_junction_or_arrive to abort movement.
+        true
     }
 
     pub fn compute_acceleration(

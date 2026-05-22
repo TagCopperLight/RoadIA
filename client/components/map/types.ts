@@ -47,6 +47,8 @@ export interface MapData {
 	edges: MapEdge[];
 }
 
+export type Motorization = "Hybride" | "Electrique" | "Essence" | "Diesel";
+
 export interface VehicleData {
     id: number;
     x: number;
@@ -54,6 +56,33 @@ export interface VehicleData {
     kind: string;
     state: string;
     heading?: number;
+    motorization?: Motorization;
+    origin_id?: number;
+    destination_id?: number;
+    waypoint_ids?: number[];
+	commute_plan_id: number | null;
+}
+
+export interface VehicleUpdatePacket {
+	vehicles: VehicleData[];
+	traffic_lights: TrafficLightData[];
+	simulation_time_s: number;
+}
+
+export interface VehicleSummary {
+    id: number;
+    origin_id: number;
+    destination_id: number;
+    motorization: Motorization;
+    waypoint_ids: number[];
+	commute_plan_id: number | null;
+}
+
+export interface BusLine {
+    id: number;
+    name: string;
+    stop_node_ids: number[];
+    vehicle_id: number;
 }
 
 export interface TrafficLightData {
@@ -75,4 +104,8 @@ export interface ScoreData {
 	network_length: number;
 	ref_network_length: number;
 	success_rate: number;
+}
+
+export interface ScoreProgressPacket {
+	progress: number;
 }

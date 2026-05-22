@@ -1,7 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, EditTool } from './EditModeContext';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 // Inline SVG icons
 
@@ -29,7 +32,7 @@ function IconAddRoad() {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="5" cy="12" r="3" fill="currentColor" stroke="none" />
             <circle cx="19" cy="12" r="3" fill="currentColor" stroke="none" />
-            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" strokeDasharray="2 2" />
+            <line x1="8" y1="12" x2="16" y2="12" strokeLinecap="round" />
         </svg>
     );
 }
@@ -78,11 +81,55 @@ function IconModeSimulation() {
     );
 }
 
+function IconWaypoints() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="5" cy="7" r="2" fill="currentColor" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="19" cy="17" r="2" fill="currentColor" />
+            <path d="M7,9 L10,10 L14,14 L17,15" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 function IconIntersection() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="7" />
             <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function IconBus() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="2" y="5" width="20" height="12" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
+            <line x1="8" y1="5" x2="8" y2="10" />
+            <line x1="16" y1="5" x2="16" y2="10" />
+            <circle cx="6.5" cy="19" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="17.5" cy="19" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function IconDayNight({ dayNight }: { dayNight: boolean }) {
+    return dayNight ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" strokeLinecap="round" />
+            <line x1="12" y1="21" x2="12" y2="23" strokeLinecap="round" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" strokeLinecap="round" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" strokeLinecap="round" />
+            <line x1="1" y1="12" x2="3" y2="12" strokeLinecap="round" />
+            <line x1="21" y1="12" x2="23" y2="12" strokeLinecap="round" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" strokeLinecap="round" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" strokeLinecap="round" />
+        </svg>
+    ) : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
         </svg>
     );
 }
@@ -97,17 +144,6 @@ function IconDensity() {
         </svg>
     );
 }
-
-function _IconStatistics() {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 20V10" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M12 20V4" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M6 20V14" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-    );
-}
-
 
 function ToolButton({
     onClick,
@@ -139,13 +175,17 @@ function Separator() {
     return <div className="w-px h-[26px] bg-white opacity-20" />;
 }
 
-export default function Toolbar() {
+const SPEED_PRESETS = [1, 3, 5, 10, 30] as const;
+
+export default function Toolbar({ uuid }: { uuid: string }) {
     const ws = useWs();
+    const [speedMultiplier, setSpeedMultiplier] = useState(3);
     const {
         mode, editTool, simState,
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
         densityView, setDensityView, isDensityLoading, setIsDensityLoading,
         showIntersections, setShowIntersections,
+        mapSettings, setMapSettings,
     } = useEditMode();
 
     const switchToEdit = () => {
@@ -193,6 +233,26 @@ export default function Toolbar() {
         setSimulationResetAt(prev => prev + 1);
     };
 
+    const handleDayNightToggle = async () => {
+        if (!mapSettings || simState !== 'stopped') return;
+        const updated = { ...mapSettings, use_day_night_cycle: !mapSettings.use_day_night_cycle };
+        try {
+            const res = await fetch(`${API_URL}/api/simulations/${uuid}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            if (!res.ok) return;
+            setMapSettings(updated);
+            ws?.send('resetSimulation', {});
+            setSimState('stopped');
+            setShowScore(false);
+            setSimulationResetAt(prev => prev + 1);
+        } catch {
+            // network error — no-op
+        }
+    };
+
     const selectTool = (tool: EditTool) => {
         setEditTool(tool);
         setSelectedElement(null);
@@ -217,6 +277,14 @@ export default function Toolbar() {
                             <ToolButton onClick={() => selectTool('addRoad')} isSelected={editTool === 'addRoad'} title="Add Road">
                                 <IconAddRoad />
                             </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('waypoints')} isSelected={editTool === 'waypoints'} title="Waypoints">
+                                <IconWaypoints />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('bus')} isSelected={editTool === 'bus'} title="Bus Lines">
+                                <IconBus />
+                            </ToolButton>
                         </>
                     ) : (
                         <>
@@ -227,6 +295,21 @@ export default function Toolbar() {
                             <ToolButton onClick={handleReset} title="Reset">
                                 <IconReset />
                             </ToolButton>
+                            <Separator />
+                            {SPEED_PRESETS.map(speed => (
+                                <button
+                                    key={speed}
+                                    onClick={() => {
+                                        ws?.send('setSpeed', { multiplier: speed });
+                                        setSpeedMultiplier(speed);
+                                    }}
+                                    title={`${speed}× speed`}
+                                    className={`px-2 py-[10px] text-xs font-medium transition-opacity text-white cursor-pointer
+                                        ${speedMultiplier === speed ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
+                                >
+                                    {speed}×
+                                </button>
+                            ))}
                             <Separator />
                             <ToolButton
                                 onClick={handleDensityToggle}
@@ -243,6 +326,15 @@ export default function Toolbar() {
                                 title={showIntersections ? 'Hide Intersections' : 'Show Intersections'}
                             >
                                 <IconIntersection />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={handleDayNightToggle}
+                                isSelected={mapSettings ? !mapSettings.use_day_night_cycle : false}
+                                disabled={simState !== 'stopped' || !mapSettings}
+                                title={mapSettings?.use_day_night_cycle ? 'Day/Night Cycle (click for Immediate)' : 'Immediate Departure (click for Day/Night)'}
+                            >
+                                <IconDayNight dayNight={mapSettings?.use_day_night_cycle ?? true} />
                             </ToolButton>
                         </>
                     )}

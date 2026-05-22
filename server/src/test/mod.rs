@@ -3,7 +3,10 @@ mod vehicle_tests;
 mod intersection_tests;
 mod editor_tests;
 mod engine_tests;
+mod commute_tests;
 mod simulation_tests;
+mod score_progress_tests;
+mod lane_change_tests;
 
 use petgraph::graph::NodeIndex;
 
@@ -11,7 +14,7 @@ use crate::map::intersection::{build_intersections, ApproachData, IntersectionKi
 use crate::map::model::Map;
 use crate::map::road::{FoeLink, Link, LinkType};
 use crate::simulation::config::SimulationConfig;
-use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec};
+use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 pub(crate) fn make_standard_spec() -> VehicleSpec {
     VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 10.0)
@@ -26,6 +29,7 @@ pub(crate) fn make_vehicle(id: u64, origin: NodeIndex, dest: NodeIndex) -> Vehic
             destination: dest,
             departure_time: 0.0,
         },
+        VehicleType::Essence,
     )
 }
 
@@ -48,7 +52,7 @@ pub(crate) fn make_sim_config(map: Map, end_time: f32) -> SimulationConfig {
     SimulationConfig {
         start_time: 0.0,
         end_time,
-        time_step: 0.05,
+        time_step: 0.1,
         minimum_gap: 2.0,
         score_weights: ScoreWeights::from_settings(&map.settings),
         map,
