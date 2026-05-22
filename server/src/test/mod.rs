@@ -6,6 +6,7 @@ mod engine_tests;
 mod commute_tests;
 mod simulation_tests;
 mod score_progress_tests;
+mod lane_change_tests;
 
 use petgraph::graph::NodeIndex;
 

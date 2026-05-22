@@ -6,6 +6,8 @@ use crate::scoring;
 use crate::simulation::commute::{CommutePlan, CommutePlanState};
 use crate::simulation::config::{
     SimulationConfig, IMPATIENCE_RATE, LOOK_AHEAD, MIN_CREEP_SPEED, STOP_DWELL_TIME,
+    LC2013_COOLDOWN, LC2013_SPEED_GAIN_THRESHOLD, LC2013_SAFE_GAP_FRONT,
+    LC2013_SAFE_GAP_REAR, LC2013_MAX_DECEL_FOLLOWER,
 };
 use crate::map::intersection::{ApproachData, LinkState, is_link_open};
 use crate::scoring::Score;
@@ -94,18 +96,22 @@ impl Simulation for SimulationEngine {
     }
 
     fn step(&mut self) {
+        let dt = self.config.time_step;
         for vehicle in &mut self.vehicles {
             vehicle.previous_velocity = vehicle.velocity;
+            if vehicle.lane_change_cooldown > 0.0 {
+                vehicle.lane_change_cooldown = (vehicle.lane_change_cooldown - dt).max(0.0);
+            }
         }
 
         self.handle_departures();
         self.plan_movements();
+        self.attempt_lane_changes();
         self.register_approaches();
         self.advance_traffic_lights();
         self.execute_movements();
         self.flush_transfers();
 
-        let dt = self.config.time_step;
         for vehicle in &mut self.vehicles {
             if vehicle.state == VehicleState::OnRoad {
                 scoring::update_co2_emissions(vehicle, dt);
@@ -298,7 +304,7 @@ impl SimulationEngine {
         }
     }
 
-    fn insert_vehicle_into_lane(&mut self, lane: LaneId, vehicle_idx: usize) {
+    pub(crate) fn insert_vehicle_into_lane(&mut self, lane: LaneId, vehicle_idx: usize) {
         let insert_at = {
             let list = self.vehicles_by_lane.entry(lane).or_default();
             let insert_at = list.partition_point(|&i| {
@@ -321,7 +327,7 @@ impl SimulationEngine {
         }
     }
 
-    fn remove_vehicle_from_lane(&mut self, lane: LaneId, vehicle_idx: usize) {
+    pub(crate) fn remove_vehicle_from_lane(&mut self, lane: LaneId, vehicle_idx: usize) {
         let (removed_slot, remove_lane) = {
             let Some(list) = self.vehicles_by_lane.get_mut(&lane) else {
                 if let Some(slot) = self.vehicle_lane_positions.get_mut(vehicle_idx) {
@@ -584,6 +590,128 @@ impl SimulationEngine {
     }
 }
 
+// LC2013 lane changes
+
+impl SimulationEngine {
+    fn attempt_lane_changes(&mut self) {
+        let mut pending: Vec<(usize, LaneId, LaneId)> = Vec::new();
+
+        for vidx in 0..self.vehicles.len() {
+            let (edge, lane_idx) = match self.vehicles[vidx].current_lane {
+                Some(LaneId::Normal(e, li)) => (e, li as usize),
+                _ => continue,
+            };
+            if self.vehicles[vidx].state != VehicleState::OnRoad {
+                continue;
+            }
+            if self.vehicles[vidx].lane_change_cooldown > 0.0 {
+                continue;
+            }
+
+            let lane_count = self.config.map.graph[edge].lanes.len();
+            if lane_count < 2 {
+                continue;
+            }
+
+            let next_road_id: Option<u32> = self.vehicles[vidx]
+                .drive_plan
+                .first()
+                .and_then(|e| self.link_directory.get(&e.link_id))
+                .map(|l| l.destination_road_id);
+
+            let current_lane_id = LaneId::Normal(edge, lane_idx as u32);
+            let (current_front_gap, current_front_vel) =
+                self.vehicle_ahead_info(vidx, current_lane_id);
+
+            let v_vel = self.vehicles[vidx].velocity;
+            let v_len = self.vehicles[vidx].spec.length;
+            let pos = self.vehicles[vidx].position_on_lane;
+
+            let mut overtake_queued = false;
+
+            // Try overtaking: move to lane_idx + 1
+            if lane_idx + 1 < lane_count {
+                let target_idx = lane_idx + 1;
+                let target_lane_id = LaneId::Normal(edge, target_idx as u32);
+
+                let strategically_ok = match next_road_id {
+                    None => true,
+                    Some(nrid) => self.config.map.graph[edge].lanes[target_idx]
+                        .links
+                        .iter()
+                        .any(|l| l.destination_road_id == nrid),
+                };
+
+                if strategically_ok {
+                    let (front_gap, front_vel) = self.vehicle_ahead_in_lane(target_lane_id, pos);
+                    let (rear_gap, rear_vel) = self.vehicle_behind_in_lane(target_lane_id, pos, v_len);
+
+                    let gap_safe = front_gap >= LC2013_SAFE_GAP_FRONT
+                        && rear_gap >= LC2013_SAFE_GAP_REAR;
+                    let follower_safe = rear_vel < 0.01
+                        || (rear_vel * rear_vel) / (2.0 * rear_gap.max(0.01))
+                            <= LC2013_MAX_DECEL_FOLLOWER;
+                    // blocked: close to a slow leader whose speed is below desired
+                    let v_desired = self.vehicles[vidx].spec.max_speed
+                        .min(self.config.map.graph[edge].speed_limit);
+                    let blocked = current_front_gap < 2.0 * LC2013_SAFE_GAP_FRONT
+                        && v_desired > current_front_vel + LC2013_SPEED_GAIN_THRESHOLD;
+                    // target advantageous: clear lane OR leader in target is faster than current
+                    let target_advantageous = front_gap > 2.0 * LC2013_SAFE_GAP_FRONT
+                        || front_vel > current_front_vel + LC2013_SPEED_GAIN_THRESHOLD;
+
+                    if gap_safe && follower_safe && blocked && target_advantageous {
+                        pending.push((vidx, current_lane_id, target_lane_id));
+                        overtake_queued = true;
+                    }
+                }
+            }
+
+            // Keep-right: move to lane_idx - 1 if not overtaking
+            if !overtake_queued && lane_idx > 0 {
+                let target_idx = lane_idx - 1;
+                let target_lane_id = LaneId::Normal(edge, target_idx as u32);
+
+                let strategically_ok = match next_road_id {
+                    None => true,
+                    Some(nrid) => self.config.map.graph[edge].lanes[target_idx]
+                        .links
+                        .iter()
+                        .any(|l| l.destination_road_id == nrid),
+                };
+
+                if strategically_ok {
+                    let (front_gap, front_vel) = self.vehicle_ahead_in_lane(target_lane_id, pos);
+                    let (rear_gap, rear_vel) = self.vehicle_behind_in_lane(target_lane_id, pos, v_len);
+
+                    let gap_safe = front_gap >= LC2013_SAFE_GAP_FRONT
+                        && rear_gap >= LC2013_SAFE_GAP_REAR;
+                    let follower_safe = rear_vel < 0.01
+                        || (rear_vel * rear_vel) / (2.0 * rear_gap.max(0.01))
+                            <= LC2013_MAX_DECEL_FOLLOWER;
+                    let right_ok = front_vel >= v_vel - LC2013_SPEED_GAIN_THRESHOLD
+                        || front_gap > 2.0 * LC2013_SAFE_GAP_FRONT;
+
+                    if gap_safe && follower_safe && right_ok {
+                        pending.push((vidx, current_lane_id, target_lane_id));
+                    }
+                }
+            }
+        }
+
+        for (vidx, from_lane, to_lane) in pending {
+            if self.vehicles[vidx].current_lane != Some(from_lane) {
+                continue;
+            }
+            self.remove_vehicle_from_lane(from_lane, vidx);
+            self.insert_vehicle_into_lane(to_lane, vidx);
+            self.vehicles[vidx].current_lane = Some(to_lane);
+            self.vehicles[vidx].lane_change_cooldown = LC2013_COOLDOWN;
+            self.rebuild_drive_plan(vidx);
+        }
+    }
+}
+
 // Register approaches
 
 impl SimulationEngine {
@@ -841,6 +969,37 @@ impl SimulationEngine {
             }
             None => (f32::INFINITY, 0.0)
         }
+    }
+
+    fn vehicle_ahead_in_lane(&self, lane_id: LaneId, pos: f32) -> (f32, f32) {
+        let lst = match self.vehicles_by_lane.get(&lane_id) {
+            Some(l) => l,
+            None => return (f32::INFINITY, 0.0),
+        };
+        let split = lst.partition_point(|&i| self.vehicles[i].position_on_lane <= pos);
+        match lst.get(split).copied() {
+            Some(lidx) => {
+                let lv = &self.vehicles[lidx];
+                let gap = (lv.position_on_lane - lv.spec.length - pos).max(0.01);
+                (gap, lv.previous_velocity)
+            }
+            None => (f32::INFINITY, 0.0),
+        }
+    }
+
+    fn vehicle_behind_in_lane(&self, lane_id: LaneId, pos: f32, veh_len: f32) -> (f32, f32) {
+        let lst = match self.vehicles_by_lane.get(&lane_id) {
+            Some(l) => l,
+            None => return (f32::INFINITY, 0.0),
+        };
+        let split = lst.partition_point(|&i| self.vehicles[i].position_on_lane < pos);
+        if split == 0 {
+            return (f32::INFINITY, 0.0);
+        }
+        let fidx = lst[split - 1];
+        let fv = &self.vehicles[fidx];
+        let gap = (pos - veh_len - fv.position_on_lane).max(0.0);
+        (gap, fv.previous_velocity)
     }
 
     fn lane_length(&self, vidx: usize) -> f32 {

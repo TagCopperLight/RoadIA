@@ -51,3 +51,9 @@ pub const STOP_DWELL_TIME: f32 = 1.0;
 pub const IMPATIENCE_RATE: f32 = 0.05;
 pub const MIN_CREEP_SPEED: f32 = 1.0;
 pub const LANE_WIDTH: f32 = 7.5;
+
+pub const LC2013_COOLDOWN: f32 = 3.0;
+pub const LC2013_SPEED_GAIN_THRESHOLD: f32 = 1.5;
+pub const LC2013_SAFE_GAP_FRONT: f32 = 10.0;
+pub const LC2013_SAFE_GAP_REAR: f32 = 6.0;
+pub const LC2013_MAX_DECEL_FOLLOWER: f32 = 3.0;

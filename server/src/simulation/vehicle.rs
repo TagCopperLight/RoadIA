@@ -98,6 +98,7 @@ pub struct Vehicle {
     pub registered_link_ids: Vec<u32>,
     pub waiting_time: f32,
     pub impatience: f32,
+    pub lane_change_cooldown: f32,
 
     pub emitted_co2: f32,
     pub distance_traveled: f32,
@@ -135,6 +136,7 @@ impl Vehicle {
             registered_link_ids: Vec::new(),
             waiting_time: 0.0,
             impatience: 0.0,
+            lane_change_cooldown: 0.0,
             emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
