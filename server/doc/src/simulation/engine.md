@@ -89,6 +89,7 @@ sequenceDiagram
     E->>V: Mémoriser velocity → previous_velocity
     E->>E: handle_departures()
     E->>E: plan_movements()
+    E->>E: attempt_lane_changes()
     E->>E: register_approaches()
     E->>TL: advance_traffic_lights()
     E->>E: execute_movements()
@@ -99,6 +100,20 @@ sequenceDiagram
     end
     Note over E: Fin du pas
 ```
+
+## Changements de voie (Modèle LC2013)
+
+Le moteur implémente une variante du modèle LC2013 pour gérer les changements de voie sur les routes multi-voies. Un changement de voie est tenté à chaque pas via `attempt_lane_changes`.
+
+### Stratégies
+- **Keep Right** : Les véhicules tendent à se rabattre sur la voie la plus à droite si elle est libre et sécurisée.
+- **Overtaking** : Un véhicule tente de déboîter vers la gauche s'il est bloqué par un véhicule plus lent et que la voie de gauche offre un avantage de vitesse.
+
+### Conditions de sécurité
+Pour qu'un changement de voie soit validé, le moteur vérifie :
+- **Gap Front/Rear** : Un espace minimal (`LC2013_SAFE_GAP_FRONT` et `LC2013_SAFE_GAP_REAR`) doit être disponible sur la voie cible.
+- **Sécurité du suiveur** : Le nouveau suiveur sur la voie cible ne doit pas avoir à freiner trop brutalement (`LC2013_MAX_DECEL_FOLLOWER`).
+- **Cooldown** : Un délai (`LC2013_COOLDOWN`) est imposé entre deux changements de voie successifs pour éviter les oscillations.
 
 ## Méthodes de cycle détaillées
 
@@ -158,7 +173,12 @@ Gère la sortie d'un carrefour pour entrer sur une nouvelle route.
 
 ### enter_junction_or_arrive
 Gère l'entrée dans un carrefour ou l'arrivée à destination.
-- **Action** : Si le véhicule a atteint son dernier nœud, il passe à l'état `Arrived`. Sinon, il s'engage sur la voie interne réservée.
+- **Action** : 
+    1. Si le véhicule a atteint son dernier nœud, il passe à l'état `Arrived`.
+    2. Sinon, le moteur vérifie si la voie de destination après la jonction n'est pas saturée (prévention de l'empilement).
+    3. Il existe une probabilité `direction_error_probability` que le véhicule choisisse une sortie aléatoire différente de celle prévue.
+    4. En cas d'erreur, le véhicule recalcule son trajet (`reroute_from_junction`) et son plan de conduite.
+    5. Le véhicule s'engage enfin sur la voie interne (originale ou nouvelle).
 
 ### flush_transfers
 Applique tous les changements de voies mis en attente pendant le pas de temps.
