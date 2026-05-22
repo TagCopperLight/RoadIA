@@ -84,7 +84,7 @@ fn delete_node_updates_swapped_index() {
 fn update_node_changes_kind() {
     let mut map = Map::new();
     let id = add_node(&mut map, 0.0, 0.0, IntersectionKind::Habitation);
-    update_node(&mut map, id, IntersectionKind::Workplace).unwrap();
+    update_node(&mut map, id, IntersectionKind::Workplace, None).unwrap();
     let ni = map.find_node(id).unwrap();
     assert!(matches!(map.graph[ni].kind, IntersectionKind::Workplace));
 }
@@ -92,7 +92,7 @@ fn update_node_changes_kind() {
 #[test]
 fn update_node_missing_returns_err() {
     let mut map = Map::new();
-    assert!(update_node(&mut map, 9999, IntersectionKind::Intersection).is_err());
+    assert!(update_node(&mut map, 9999, IntersectionKind::Intersection, None).is_err());
 }
 
 // ---- add_road ----

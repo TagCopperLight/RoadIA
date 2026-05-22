@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use crate::api::runner::map_generator::create_traffic_light_test_map;
+use crate::api::websocket::serialize_traffic_lights;
+use crate::map::editor::delete_road;
 use crate::simulation::engine::{lane_insert_sorted, Simulation, SimulationEngine};
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleState};
 use crate::test::{make_minimal_straight_map, make_sim_config, make_vehicle};
@@ -257,3 +260,134 @@ fn step_impatience_resets_after_moving() {
     // After arriving, impatience should be zero (reset when moving freely)
     assert_eq!(engine.vehicles[0].impatience, 0.0);
 }
+
+#[test]
+fn rebuild_runtime_caches_refreshes_traffic_light_road_ids_after_edit() {
+    let map = create_traffic_light_test_map();
+    let controller_id = *map.traffic_lights.keys().next().unwrap();
+    let mut engine = SimulationEngine::new(make_sim_config(map, 300.0), vec![]);
+
+    let before = serialize_traffic_lights(&engine.config.map, &engine.controller_green_road_ids);
+    let before_green_road_ids: Vec<u32> = before[0]["green_road_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_u64().unwrap() as u32)
+        .collect();
+    assert!(!before_green_road_ids.is_empty());
+
+    let deleted_road_id = before_green_road_ids[0];
+    delete_road(&mut engine.config.map, deleted_road_id).unwrap();
+    engine.rebuild_runtime_caches();
+
+    let after = serialize_traffic_lights(&engine.config.map, &engine.controller_green_road_ids);
+    let after_green_road_ids: Vec<u32> = after
+        .iter()
+        .find(|entry| entry["id"].as_u64().unwrap() as u32 == engine.config.map.traffic_lights[&controller_id].intersection_id)
+        .and_then(|entry| entry["green_road_ids"].as_array())
+        .unwrap()
+        .iter()
+        .map(|value| value.as_u64().unwrap() as u32)
+        .collect();
+
+    assert_ne!(before_green_road_ids, after_green_road_ids);
+    assert!(!after_green_road_ids.contains(&deleted_road_id));
+}
+
+#[test]
+fn step_vehicle_stops_before_junction_when_destination_lane_blocked() {
+    let map = make_minimal_straight_map();
+    let hab = map.find_node(0).unwrap();
+    let jct = map.find_node(1).unwrap();
+    let work = map.find_node(2).unwrap();
+
+    let first_edge = map.graph.find_edge(hab, jct).unwrap();
+    let second_edge = map.graph.find_edge(jct, work).unwrap();
+
+    // Case 1: Destination lane is blocked (vehicle v1 is near the start at 2.0)
+    {
+        let mut v0 = make_vehicle(0, hab, work);
+        v0.update_path(&map);
+        v0.position_on_lane = 480.0;
+        v0.velocity = 10.0;
+        v0.previous_velocity = 10.0;
+        v0.state = VehicleState::OnRoad;
+        v0.current_lane = Some(LaneId::Normal(first_edge, 0));
+
+        let mut v1 = make_vehicle(1, jct, work);
+        v1.spec.max_speed = 0.0;
+        v1.update_path(&map);
+        v1.position_on_lane = 2.0; // Back is at -8.0 (since length is 10.0)
+        v1.velocity = 0.0;
+        v1.previous_velocity = 0.0;
+        v1.state = VehicleState::OnRoad;
+        v1.current_lane = Some(LaneId::Normal(second_edge, 0));
+
+        let config = make_sim_config(map.clone(), 30.0);
+        let mut engine = SimulationEngine::new(config, vec![v0, v1]);
+
+        // Manually place them on the road lanes
+        engine.insert_vehicle_into_lane(LaneId::Normal(first_edge, 0), 0);
+        engine.insert_vehicle_into_lane(LaneId::Normal(second_edge, 0), 1);
+
+        // Step for a while
+        for _ in 0..50 {
+            engine.step();
+            engine.current_time += engine.config.time_step;
+        }
+
+        // v0 should stop before entering the junction (position_on_lane < 500.0)
+        assert!(
+            engine.vehicles[0].position_on_lane < 500.0,
+            "v0 should have stopped before the junction, but got position {}",
+            engine.vehicles[0].position_on_lane
+        );
+        assert_eq!(
+            engine.vehicles[0].current_lane,
+            Some(LaneId::Normal(first_edge, 0)),
+            "v0 should still be on the first edge"
+        );
+    }
+
+    // Case 2: Destination lane has enough space (vehicle v1 is further down at 20.0)
+    {
+        let mut v0 = make_vehicle(0, hab, work);
+        v0.update_path(&map);
+        v0.position_on_lane = 480.0;
+        v0.velocity = 10.0;
+        v0.previous_velocity = 10.0;
+        v0.state = VehicleState::OnRoad;
+        v0.current_lane = Some(LaneId::Normal(first_edge, 0));
+
+        let mut v1 = make_vehicle(1, jct, work);
+        v1.spec.max_speed = 0.0;
+        v1.update_path(&map);
+        v1.position_on_lane = 20.0; // Back is at 10.0 (length 10.0), gap is 10.0 >= 2.0
+        v1.velocity = 0.0;
+        v1.previous_velocity = 0.0;
+        v1.state = VehicleState::OnRoad;
+        v1.current_lane = Some(LaneId::Normal(second_edge, 0));
+
+        let config = make_sim_config(map.clone(), 30.0);
+        let mut engine = SimulationEngine::new(config, vec![v0, v1]);
+
+        // Manually place them on the road lanes
+        engine.insert_vehicle_into_lane(LaneId::Normal(first_edge, 0), 0);
+        engine.insert_vehicle_into_lane(LaneId::Normal(second_edge, 0), 1);
+
+        // Step for a while
+        for _ in 0..50 {
+            engine.step();
+            engine.current_time += engine.config.time_step;
+        }
+
+        // v0 should have entered or crossed the junction
+        assert!(
+            engine.vehicles[0].position_on_lane >= 500.0 || engine.vehicles[0].current_lane != Some(LaneId::Normal(first_edge, 0)),
+            "v0 should have crossed the junction, but got position {} on lane {:?}",
+            engine.vehicles[0].position_on_lane,
+            engine.vehicles[0].current_lane
+        );
+    }
+}
+

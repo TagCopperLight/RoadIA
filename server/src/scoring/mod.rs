@@ -45,7 +45,7 @@ fn kind_params(kind: VehicleKind) -> KindParams {
 // Returns (co2_per_j_mech, idle_co2_per_s):
 //   co2_per_j_mech: kg CO2 emitted per joule of mechanical work at the wheels
 //   idle_co2_per_s: kg CO2 emitted per second while stationary
-fn emission_params(motorization: VehicleType, kind: VehicleKind) -> (f32, f32) {
+pub(crate) fn emission_params(motorization: VehicleType, kind: VehicleKind) -> (f32, f32) {
     let k = kind_params(kind);
     match motorization {
         VehicleType::Essence => {

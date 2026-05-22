@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import { SelectedElement } from './EditModeContext';
-import { MapData, MapNode, MapEdge, InternalLane } from './map/types';
+import { MapData, MapNode, MapEdge, InternalLane, SignalPhase } from './map/types';
+
+type LocalPhase = SignalPhase & { _key: number };
+let _phaseKeyCounter = 0;
+function toLocalPhases(serverPhases: SignalPhase[]): LocalPhase[] {
+    return serverPhases.map(p => ({ ...p, _key: _phaseKeyCounter++ }));
+}
 
 const LINK_TYPE_COLORS: Record<string, string> = {
     Priority:     '#22c55e',
@@ -18,7 +24,15 @@ interface PropsPanelProps {
     onSendPacket: (id: string, data: Record<string, unknown>) => void;
 }
 
-function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacket: PropsPanelProps['onSendPacket']; onClose: () => void }) {
+function NodePanel({
+    node,
+    onSendPacket,
+    onClose,
+}: {
+    node: MapNode;
+    onSendPacket: PropsPanelProps['onSendPacket'];
+    onClose: () => void;
+}) {
     const [kind, setKind] = useState(node.kind);
     const [prevKind, setPrevKind] = useState(node.kind);
     if (node.kind !== prevKind) {
@@ -26,12 +40,69 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
         setKind(node.kind);
     }
 
+    const [phases, setPhases] = useState<LocalPhase[]>(() =>
+        toLocalPhases(node.traffic_light_controller?.phases ?? [])
+    );
+    const [prevController, setPrevController] = useState(node.traffic_light_controller);
+    if (node.traffic_light_controller !== prevController) {
+        setPrevController(node.traffic_light_controller);
+        setPhases(toLocalPhases(node.traffic_light_controller?.phases ?? []));
+    }
+
     const handleKindChange = (newKind: MapNode['kind']) => {
         setKind(newKind);
         onSendPacket('updateNode', { id: node.id, kind: newKind });
     };
 
+    const handleTrafficLightChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        onSendPacket('updateNode', { id: node.id, kind: node.kind, has_traffic_light: e.target.checked });
+    };
+
+    const handleInternalLaneTypeChange = (internal_lane_id: number, link_type: string) => {
+        onSendPacket('updateInternalLane', { intersection_id: node.id, internal_lane_id, link_type });
+    };
+
     const lanes = node.internal_lanes ?? [];
+    const movements = lanes.filter(lane => lane.link_id !== undefined);
+
+    const toggleLinkInPhase = (phaseIndex: number, linkId: number) => {
+        setPhases(prev => prev.map((phase, idx) => {
+            if (idx !== phaseIndex) return phase;
+            const exists = phase.green_link_ids.includes(linkId);
+            const newIds = exists
+                ? phase.green_link_ids.filter(id => id !== linkId)
+                : [...phase.green_link_ids, linkId];
+            return { ...phase, green_link_ids: newIds };
+        }));
+    };
+
+    const addPhase = () => {
+        setPhases(prev => [
+            ...prev,
+            {
+                _key: _phaseKeyCounter++,
+                green_link_ids: [],
+                green_duration: 10,
+                yellow_duration: 3,
+            }
+        ]);
+    };
+
+    const deletePhase = (phaseIndex: number) => {
+        setPhases(prev => prev.filter((_, idx) => idx !== phaseIndex));
+    };
+
+    const handleDurationChange = (phaseIndex: number, key: 'green_duration' | 'yellow_duration', value: number) => {
+        setPhases(prev => prev.map((phase, idx) => {
+            if (idx !== phaseIndex) return phase;
+            return { ...phase, [key]: value };
+        }));
+    };
+
+    const handleSaveTrafficLight = () => {
+        const serverPhases: SignalPhase[] = phases.map(({ _key: _, ...p }) => p);
+        onSendPacket('updateTrafficLight', { intersection_id: node.id, phases: serverPhases });
+    };
 
     const handleDelete = () => {
         onSendPacket('deleteNode', { id: node.id });
@@ -42,7 +113,7 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
         <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 uppercase tracking-wide">ID</label>
-                <span className="text-white text-sm">{node.id}</span>
+                <span className="text-white text-sm font-semibold">{node.id}</span>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -50,7 +121,7 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
                 <select
                     value={kind}
                     onChange={e => handleKindChange(e.target.value as MapNode['kind'])}
-                    className="bg-black text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200"
+                    className="bg-black text-white text-sm rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 cursor-pointer"
                 >
                     <option value="Intersection">Intersection</option>
                     <option value="Habitation">Habitation</option>
@@ -60,7 +131,15 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
 
             <div className="flex flex-col gap-1">
                 <label className="text-xs text-gray-400 uppercase tracking-wide">Traffic Light</label>
-                <span className="text-white text-sm">{node.has_traffic_light ? 'Yes' : 'No'}</span>
+                <div className="flex items-center gap-2">
+                    <input
+                        type="checkbox"
+                        checked={node.has_traffic_light || false}
+                        onChange={handleTrafficLightChange}
+                        className="h-4 w-4 rounded border-gray-600 bg-black text-white focus:ring-0 cursor-pointer accent-white"
+                    />
+                    <span className="text-white text-xs">{node.has_traffic_light ? 'Enabled' : 'Disabled'}</span>
+                </div>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -68,8 +147,115 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
                 <span className="text-white text-sm">{node.radius.toFixed(1)} m</span>
             </div>
 
-            {lanes.length > 0 && (
-                <div className="flex flex-col gap-2">
+            {/* Traffic Light Config Panel */}
+            {node.has_traffic_light && (
+                <div className="flex flex-col gap-3 border-t border-gray-600 pt-3">
+                    <div className="flex items-center justify-between">
+                        <label className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Phase Editor</label>
+                        <button
+                            onClick={addPhase}
+                            className="bg-black hover:bg-gray-800 text-white text-xs rounded px-2.5 py-1 border border-gray-600 transition-colors"
+                        >
+                            + Phase
+                        </button>
+                    </div>
+
+                    {phases.length === 0 ? (
+                        <div className="text-xs text-gray-500 text-center py-4 border border-dashed border-gray-600 rounded">
+                            No phases configured. Click &quot;+ Phase&quot;.
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
+                            {phases.map((phase, phaseIdx) => (
+                                <div key={phase._key} className="border border-gray-600 rounded p-2.5 flex flex-col gap-2 relative bg-black">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-white">Phase #{phaseIdx + 1}</span>
+                                        <button
+                                            onClick={() => deletePhase(phaseIdx)}
+                                            className="text-red-500 hover:text-red-400 text-xs transition-colors hover:underline"
+                                            title="Delete Phase"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+
+                                    {/* Durations */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] text-gray-400 uppercase tracking-wide">Green (s)</span>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={120}
+                                                value={phase.green_duration}
+                                                onChange={e => handleDurationChange(phaseIdx, 'green_duration', Math.max(1, parseFloat(e.target.value) || 1))}
+                                                className="bg-black text-white text-xs rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 w-full"
+                                            />
+                                        </div>
+                                        <div className="flex flex-col gap-1">
+                                            <span className="text-[10px] text-gray-400 uppercase tracking-wide">Yellow (s)</span>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={10}
+                                                value={phase.yellow_duration}
+                                                onChange={e => handleDurationChange(phaseIdx, 'yellow_duration', Math.max(1, parseFloat(e.target.value) || 1))}
+                                                className="bg-black text-white text-xs rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 w-full"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Allowed Movements */}
+                                    <div className="flex flex-col gap-1.5">
+                                        <span className="text-[10px] text-gray-400 uppercase tracking-wide">Green Turns</span>
+                                        {movements.length === 0 ? (
+                                            <span className="text-[10px] text-gray-500 italic">No turns detected. Add roads first.</span>
+                                        ) : (
+                                            <div className="flex flex-col gap-1 max-h-36 overflow-y-auto border border-gray-600 rounded p-1.5 bg-black">
+                                                {movements.map(lane => {
+                                                    const linkId = lane.link_id!;
+                                                    const isActive = phase.green_link_ids.includes(linkId);
+                                                    return (
+                                                        <button
+                                                            key={lane.id}
+                                                            type="button"
+                                                            onClick={() => toggleLinkInPhase(phaseIdx, linkId)}
+                                                            className={`flex items-center justify-between text-left px-2 py-1 rounded text-[10px] transition-colors border ${
+                                                                isActive
+                                                                    ? 'bg-black border-green-600 text-green-400 font-medium'
+                                                                    : 'bg-black border-transparent text-gray-400 hover:border-gray-600'
+                                                            }`}
+                                                        >
+                                                            <span className="truncate">
+                                                                Road #{lane.from_road_id} ➔ #{lane.to_road_id}
+                                                            </span>
+                                                            {isActive && (
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 ml-1" />
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <button
+                        onClick={handleSaveTrafficLight}
+                        disabled={phases.length === 0}
+                        className="w-full bg-black hover:bg-gray-800 text-white text-xs font-semibold rounded py-2 border border-gray-600 transition-colors disabled:opacity-30 disabled:hover:bg-black disabled:cursor-not-allowed"
+                    >
+                        Save Timing & Phases
+                    </button>
+                </div>
+            )}
+
+            {/* Default Internal Lanes (Only when traffic light is disabled) */}
+            {!node.has_traffic_light && lanes.length > 0 && (
+                <div className="flex flex-col gap-2 border-t border-gray-600 pt-3">
                     <label className="text-xs text-gray-400 uppercase tracking-wide">
                         Internal Lanes ({lanes.length})
                     </label>
@@ -77,14 +263,22 @@ function NodePanel({ node, onSendPacket, onClose }: { node: MapNode; onSendPacke
                         {lanes.map((lane: InternalLane) => (
                             <div
                                 key={lane.id}
-                                className="flex items-center gap-2 bg-gray-700 rounded px-2 py-1"
+                                className="flex items-center gap-2 bg-black rounded px-2 py-1.5 border border-gray-600"
                             >
                                 <span
-                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    className="w-2 h-2 rounded-full flex-shrink-0"
                                     style={{ backgroundColor: LINK_TYPE_COLORS[lane.link_type] ?? '#888' }}
                                 />
-                                <span className="text-white text-xs flex-1">{lane.link_type}</span>
-                                <span className="text-gray-400 text-xs">#{lane.id}</span>
+                                <span className="text-gray-400 text-xs w-6">#{lane.id}</span>
+                                <select
+                                    value={lane.link_type}
+                                    onChange={(e) => handleInternalLaneTypeChange(lane.id, e.target.value)}
+                                    className="flex-1 bg-black text-white text-xs rounded px-1.5 py-0.5 border border-gray-600 focus:outline-none focus:border-gray-200"
+                                >
+                                    <option value="Priority">Priority</option>
+                                    <option value="Yield">Yield</option>
+                                    <option value="Stop">Stop</option>
+                                </select>
                             </div>
                         ))}
                     </div>

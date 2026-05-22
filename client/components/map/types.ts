@@ -3,6 +3,21 @@ export interface InternalLane {
 	entry: [number, number];
 	exit: [number, number];
 	link_type: "Priority" | "Yield" | "Stop" | "TrafficLight";
+	link_id?: number;
+	from_road_id?: number;
+	to_road_id?: number;
+}
+
+export interface SignalPhase {
+	green_link_ids: number[];
+	green_duration: number;
+	yellow_duration: number;
+}
+
+export interface TrafficLightController {
+	id: number;
+	intersection_id: number;
+	phases: SignalPhase[];
 }
 
 export interface MapNode {
@@ -12,6 +27,7 @@ export interface MapNode {
 	x: number;
 	y: number;
 	has_traffic_light?: boolean;
+	traffic_light_controller?: TrafficLightController;
 	radius: number;
 	internal_lanes?: InternalLane[];
 }
@@ -44,6 +60,13 @@ export interface VehicleData {
     origin_id?: number;
     destination_id?: number;
     waypoint_ids?: number[];
+	commute_plan_id: number | null;
+}
+
+export interface VehicleUpdatePacket {
+	vehicles: VehicleData[];
+	traffic_lights: TrafficLightData[];
+	simulation_time_s: number;
 }
 
 export interface VehicleSummary {
@@ -52,6 +75,7 @@ export interface VehicleSummary {
     destination_id: number;
     motorization: Motorization;
     waypoint_ids: number[];
+	commute_plan_id: number | null;
 }
 
 export interface BusLine {
@@ -80,4 +104,8 @@ export interface ScoreData {
 	network_length: number;
 	ref_network_length: number;
 	success_rate: number;
+}
+
+export interface ScoreProgressPacket {
+	progress: number;
 }
