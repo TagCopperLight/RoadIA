@@ -21,12 +21,8 @@ Pour générer un trafic réaliste, les heures de départ et les temps d'attente
 
 ### Paramètres de distribution
 - **Fenêtre de temps** : 12 heures (43 200 s) pour chaque phase.
-- **Départ (Aller)** : Paramètres α=6.33, β=3.67. Cette distribution place le pic de départ vers le milieu/fin de la matinée (environ 8h après le début de la fenêtre).
+- **Départ (Aller)** : Paramètres α=6.33, β=3.67. Cette distribution place le pic de départ vers le milieu/fin de la matinée.
 - **Attente (Travail)** : Paramètres α=7.25, β=2.75. Simule une journée de travail standard de plusieurs heures.
-
-## Échantillonnage aléatoire
-
-Le système utilise la méthode de rejet pour échantillonner les lois Beta. Les fonctions `sample_beta` et `sample_commute_times` permettent de générer des scénarios variés pour chaque travailleur simulé.
 
 ## Cycle de vie
 
