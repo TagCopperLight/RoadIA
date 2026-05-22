@@ -88,7 +88,6 @@ sequenceDiagram
     Note over E: Début du pas (step)
     E->>V: Mémoriser velocity → previous_velocity
     E->>E: handle_departures()
-    E->>E: handle_commutes()
     E->>E: plan_movements()
     E->>E: attempt_lane_changes()
     E->>E: register_approaches()
@@ -121,14 +120,10 @@ Pour qu'un changement de voie soit validé, le moteur vérifie :
 ### handle_departures
 Gère le passage des véhicules de l'état `WaitingToDepart` à `OnRoad`.
 - **Entrée** : `&mut self`.
-- **Action** : Vérifie pour chaque véhicule en attente si son heure de départ est arrivée et si la première voie de son trajet est libre. Si oui, insère le véhicule sur la voie.
-
-### handle_commutes
-Gère les étapes des plans de trajets pendulaires (`CommutePlan`).
-- **Action** :
-    1. Injecte les véhicules pour le trajet aller.
-    2. Surveille l'arrivée des véhicules aller pour programmer le trajet retour (heure actuelle + temps d'attente).
-    3. Injecte les véhicules retour à l'heure prévue.
+- **Action** : 
+    1. Vérifie pour chaque véhicule en attente si son heure de départ est arrivée.
+    2. Pour les trajets pendulaires (`CommutePlan`), injecte les véhicules selon le cycle de vie (Aller/Retour).
+    3. Si la première voie du trajet est libre, insère le véhicule sur la voie.
 
 ### plan_movements
 Phase de décision pour tous les véhicules actifs.
@@ -182,11 +177,11 @@ Gère la sortie d'un carrefour pour entrer sur une nouvelle route.
 ### enter_junction_or_arrive
 Gère l'entrée dans un carrefour ou l'arrivée à destination.
 - **Action** : 
-    1. Si le véhicule a atteint son dernier nœud, il passe à l'état `Arrived`.
-    2. Sinon, le moteur vérifie si la voie de destination après la jonction n'est pas saturée (prévention de l'empilement).
-    3. Il existe une probabilité `direction_error_probability` que le véhicule choisisse une sortie aléatoire différente de celle prévue.
-    4. En cas d'erreur, le véhicule recalcule son trajet (`reroute_from_junction`) et son plan de conduite.
-    5. Le véhicule s'engage enfin sur la voie interne (originale ou nouvelle).
+    1. Si le véhicule a atteint son dernier nœud, il passe à l'état `Arrived`. (Pour les bus, le trajet redémarre s'ils ont des waypoints restants).
+    2. Sinon, le moteur vérifie si la voie de destination après la jonction est capable d'accueillir le véhicule (prévention de l'empilement).
+    3. Si la voie cible est saturée, le véhicule reste à l'arrêt devant l'intersection.
+    4. S'engage sur la voie interne réservée.
+    5. En cas d'arrivée, déclenche `handle_vehicle_arrival` pour gérer la suite du plan pendulaire si nécessaire.
 
 ### flush_transfers
 Applique tous les changements de voies mis en attente pendant le pas de temps.
