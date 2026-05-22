@@ -90,7 +90,7 @@ impl SimulationInstance {
         let initial_snapshot = simulation.clone();
         let engine = Arc::new(Mutex::new(simulation));
         let initial_engine = Arc::new(Mutex::new(initial_snapshot));
-        let (broadcast, _) = broadcast::channel(100);
+        let (broadcast, _) = broadcast::channel(50);
         let (score_progress_broadcast, _) = broadcast::channel(100);
         let controller = SimulationController::new();
 
@@ -152,7 +152,8 @@ impl SimulationInstance {
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
+                    let step_duration = Duration::from_secs_f32(time_step / multiplier as f32)
+                        .max(Duration::from_millis(50));
 
                     if finished {
                         instance.controller.stop();
