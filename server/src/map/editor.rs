@@ -5,6 +5,7 @@ use crate::map::roundabout::RoundaboutHandle;
 use crate::map::traffic_light::{SignalPhase, TrafficLightController, TrafficLightControllerHandle};
 use crate::simulation::config::MAX_SPEED;
 use petgraph::visit::EdgeRef;
+use std::collections::HashSet;
 
 pub fn add_node(map: &mut Map, x: f32, y: f32, kind: IntersectionKind) -> u32 {
     map.add_intersection(kind, x, y)
@@ -57,15 +58,11 @@ pub fn update_node(
             }
             
             let mut phases = Vec::new();
-            let mut all_added_links = Vec::new();
             for edge in incoming_edges {
                 let mut green_link_ids = Vec::new();
                 for lane in &map.graph[edge].lanes {
                     for link in &lane.links {
-                        if map.graph.edge_endpoints(edge).map(|(_, to)| to) == Some(idx) {
-                             green_link_ids.push(link.id);
-                             all_added_links.push(link.id);
-                        }
+                        green_link_ids.push(link.id);
                     }
                 }
                 if !green_link_ids.is_empty() {
@@ -141,7 +138,6 @@ pub fn update_internal_lane(
             for link in &mut lane.links {
                 if link.id == link_id {
                     link.link_type = link_type.clone();
-                    println!("Updated link {} to {:?}", link.id, link.link_type);
                 }
                 for foe in &mut link.foe_links {
                     if foe.id == link_id {
@@ -359,36 +355,27 @@ pub fn update_traffic_light(
         }
     };
 
-    let mut old_link_ids = Vec::new();
-    if let Some(controller) = map.traffic_lights.get(&controller_id) {
-        old_link_ids = controller.phases.iter().flat_map(|p| p.green_link_ids.iter().copied()).collect();
-    }
+    let old_link_ids: HashSet<u32> = map.traffic_lights
+        .get(&controller_id)
+        .map(|c| c.phases.iter().flat_map(|p| p.green_link_ids.iter().copied()).collect())
+        .unwrap_or_default();
 
-    let new_link_ids: Vec<u32> = phases.iter().flat_map(|p| p.green_link_ids.iter().copied()).collect();
+    let new_link_ids: HashSet<u32> = phases.iter()
+        .flat_map(|p| p.green_link_ids.iter().copied())
+        .collect();
 
     for edge_idx in map.graph.edge_indices() {
         for lane in &mut map.graph[edge_idx].lanes {
             for link in &mut lane.links {
                 if old_link_ids.contains(&link.id) && !new_link_ids.contains(&link.id) {
                     link.link_type = LinkType::Priority;
+                } else if new_link_ids.contains(&link.id) {
+                    link.link_type = LinkType::TrafficLight;
                 }
                 for foe in &mut link.foe_links {
                     if old_link_ids.contains(&foe.id) && !new_link_ids.contains(&foe.id) {
                         foe.link_type = LinkType::Priority;
-                    }
-                }
-            }
-        }
-    }
-
-    for edge_idx in map.graph.edge_indices() {
-        for lane in &mut map.graph[edge_idx].lanes {
-            for link in &mut lane.links {
-                if new_link_ids.contains(&link.id) {
-                    link.link_type = LinkType::TrafficLight;
-                }
-                for foe in &mut link.foe_links {
-                    if new_link_ids.contains(&foe.id) {
+                    } else if new_link_ids.contains(&foe.id) {
                         foe.link_type = LinkType::TrafficLight;
                     }
                 }

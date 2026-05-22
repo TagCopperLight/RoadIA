@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { SelectedElement } from './EditModeContext';
 import { MapData, MapNode, MapEdge, InternalLane, SignalPhase } from './map/types';
 
@@ -34,16 +34,18 @@ function NodePanel({
         setKind(node.kind);
     }
 
-    const [phases, setPhases] = useState<SignalPhase[]>(() => {
-        if (node.traffic_light_controller?.phases) {
-            return JSON.parse(JSON.stringify(node.traffic_light_controller.phases));
-        }
-        return [];
-    });
+    type LocalPhase = SignalPhase & { _key: number };
+    const nextKeyRef = useRef(0);
+    const toLocalPhases = (serverPhases: SignalPhase[]): LocalPhase[] =>
+        serverPhases.map(p => ({ ...p, _key: nextKeyRef.current++ }));
+
+    const [phases, setPhases] = useState<LocalPhase[]>(() =>
+        toLocalPhases(node.traffic_light_controller?.phases ?? [])
+    );
     const [prevController, setPrevController] = useState(node.traffic_light_controller);
     if (node.traffic_light_controller !== prevController) {
         setPrevController(node.traffic_light_controller);
-        setPhases(node.traffic_light_controller?.phases ? JSON.parse(JSON.stringify(node.traffic_light_controller.phases)) : []);
+        setPhases(toLocalPhases(node.traffic_light_controller?.phases ?? []));
     }
 
     const handleKindChange = (newKind: MapNode['kind']) => {
@@ -77,6 +79,7 @@ function NodePanel({
         setPhases(prev => [
             ...prev,
             {
+                _key: nextKeyRef.current++,
                 green_link_ids: [],
                 green_duration: 10,
                 yellow_duration: 3,
@@ -96,7 +99,8 @@ function NodePanel({
     };
 
     const handleSaveTrafficLight = () => {
-        onSendPacket('updateTrafficLight', { intersection_id: node.id, phases });
+        const serverPhases: SignalPhase[] = phases.map(({ _key: _, ...p }) => p);
+        onSendPacket('updateTrafficLight', { intersection_id: node.id, phases: serverPhases });
     };
 
     const handleDelete = () => {
@@ -162,7 +166,7 @@ function NodePanel({
                     ) : (
                         <div className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
                             {phases.map((phase, phaseIdx) => (
-                                <div key={phaseIdx} className="border border-gray-600 rounded p-2.5 flex flex-col gap-2 relative bg-black">
+                                <div key={phase._key} className="border border-gray-600 rounded p-2.5 flex flex-col gap-2 relative bg-black">
                                     <div className="flex justify-between items-center">
                                         <span className="text-xs font-bold text-white">Phase #{phaseIdx + 1}</span>
                                         <button
@@ -183,7 +187,7 @@ function NodePanel({
                                                 min={1}
                                                 max={120}
                                                 value={phase.green_duration}
-                                                onChange={e => handleDurationChange(phaseIdx, 'green_duration', parseFloat(e.target.value) || 0)}
+                                                onChange={e => handleDurationChange(phaseIdx, 'green_duration', Math.max(1, parseFloat(e.target.value) || 1))}
                                                 className="bg-black text-white text-xs rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 w-full"
                                             />
                                         </div>
@@ -194,7 +198,7 @@ function NodePanel({
                                                 min={1}
                                                 max={10}
                                                 value={phase.yellow_duration}
-                                                onChange={e => handleDurationChange(phaseIdx, 'yellow_duration', parseFloat(e.target.value) || 0)}
+                                                onChange={e => handleDurationChange(phaseIdx, 'yellow_duration', Math.max(1, parseFloat(e.target.value) || 1))}
                                                 className="bg-black text-white text-xs rounded px-2 py-1 border border-gray-600 focus:outline-none focus:border-gray-200 w-full"
                                             />
                                         </div>
