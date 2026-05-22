@@ -20,12 +20,10 @@ interface PropsPanelProps {
 
 function NodePanel({
     node,
-    mapData,
     onSendPacket,
     onClose,
 }: {
     node: MapNode;
-    mapData: MapData;
     onSendPacket: PropsPanelProps['onSendPacket'];
     onClose: () => void;
 }) {
@@ -159,7 +157,7 @@ function NodePanel({
 
                     {phases.length === 0 ? (
                         <div className="text-xs text-gray-500 text-center py-4 border border-dashed border-gray-600 rounded">
-                            No phases configured. Click "+ Phase".
+                            No phases configured. Click &quot;+ Phase&quot;.
                         </div>
                     ) : (
                         <div className="flex flex-col gap-3 max-h-72 overflow-y-auto pr-1">
@@ -456,7 +454,7 @@ export default function PropertiesPanel({ selectedElement, mapData, onClose, onS
         const node = mapData.nodes.find(n => n.id === selectedElement.id);
         if (!node) return null;
         title = 'Intersection';
-        content = <NodePanel node={node} mapData={mapData} onSendPacket={onSendPacket} onClose={onClose} />;
+        content = <NodePanel node={node} onSendPacket={onSendPacket} onClose={onClose} />;
     } else {
         const canonical = mapData.edges.find(e => e.id === selectedElement.canonicalId);
         if (!canonical) return null;
