@@ -11,7 +11,7 @@
   "dependencies": {
     "@pixi/react": "^8.0.5",
     "leaflet": "^1.9.4",
-    "next": "16.2.4",
+    "next": "16.2.6",
     "pixi-viewport": "^6.0.3",
     "pixi.js": "^8.17.1",
     "react": "19.2.5",
@@ -25,7 +25,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.4",
+    "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
