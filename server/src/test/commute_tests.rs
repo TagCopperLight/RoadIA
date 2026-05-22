@@ -144,7 +144,6 @@ fn commute_plan_runs_outbound_then_return() {
 async fn simulation_instance_uses_front_vehicle_count_as_plan_count() {
     let mut map = make_minimal_straight_map();
     map.settings.vehicle_count = 3;
-    map.settings.simulation_duration = 120.0;
 
     let instance = SimulationInstance::new(map);
     let eng = instance.initial_engine.lock().await;

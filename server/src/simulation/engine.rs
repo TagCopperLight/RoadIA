@@ -943,8 +943,12 @@ impl SimulationEngine {
                 self.vehicles[vidx].path_index = 0;
                 self.vehicles[vidx].position_on_lane = 0.0;
                 self.vehicles[vidx].velocity = 0.0;
+                self.vehicles[vidx].current_lane = None;
                 self.vehicles[vidx].drive_plan.clear();
+                self.vehicles[vidx].registered_link_ids.clear();
+                self.vehicles[vidx].trip.departure_time = self.current_time;
                 self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: None });
+                self.enqueue_departure(vidx);
                 return;
             }
             self.vehicles[vidx].position_on_lane = road_len;
@@ -1086,8 +1090,12 @@ impl SimulationEngine {
         if bus.path.len() < 2 {
             return false;
         }
+        let vidx = self.vehicles.len();
         self.vehicles.push(bus);
+        self.vehicle_lane_positions.push(None);
+        self.vehicle_indices_by_id.insert(vehicle_id, vidx);
         self.bus_lines.push(BusLine { id: bl.id, name: bl.name.clone(), stop_node_ids: bl.stop_node_ids.clone(), vehicle_id });
+        self.enqueue_departure(vidx);
         true
     }
 }

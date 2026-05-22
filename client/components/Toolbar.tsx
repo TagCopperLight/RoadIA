@@ -153,7 +153,7 @@ function Separator() {
     return <div className="w-px h-[26px] bg-white opacity-20" />;
 }
 
-const SPEED_PRESETS = [1, 3, 5, 10] as const;
+const SPEED_PRESETS = [1, 3, 5, 10, 30] as const;
 
 export default function Toolbar() {
     const ws = useWs();
