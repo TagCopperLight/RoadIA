@@ -87,6 +87,8 @@ Structure principale représentant un véhicule actif.
     - `arrived_at` : Instant précis de l'arrivée (`Option<f32>`).
     - `lane_change_cooldown` : Temps restant avant de pouvoir changer de voie à nouveau (s).
     - `desired_velocity` : Vitesse que le véhicule tente d'atteindre, influencée par la limite de vitesse et le comportement du conducteur (m/s).
+    - `commute_plan_id` : Identifiant du plan pendulaire associé (`Option<u64>`).
+    - `path_index` : Index du nœud actuel dans le trajet `path`.
 
 ## Fonctions globales
 
