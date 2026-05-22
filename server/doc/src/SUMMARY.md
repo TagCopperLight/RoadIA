@@ -1,6 +1,7 @@
 # Summary
 
 - [Introduction](index.md)
+- [Architecture](architecture.md)
 - [API](api/index.md)
 	- [HTTP handlers](api/handlers.md)
 	- [Runner / Server entrypoints](api/runner.md)
