@@ -10,7 +10,11 @@ import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket'
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
 function Header() {
-    const { isScoringLoading, setIsScoringLoading, setScoreProgress, showScore, setShowSettings } = useEditMode();
+    const {
+        isScoringLoading, setIsScoringLoading, setScoreProgress, showScore, setShowSettings,
+        mode, setMode, setSimState, setShowScore, setDensityView, setIsDensityLoading,
+        setSimulationResetAt, setSelectedElement, setPendingRoadFrom, setShowIntersections,
+    } = useEditMode();
     const ws = useWs();
     const router = useRouter();
     const params = useParams();
@@ -107,15 +111,23 @@ function Header() {
                     />
                 </div>
                 <div className='flex text-[15px] font-medium pl-1' ref={menuRef}>
-                    {MENU_ITEMS.map((item) => (
+                    {MENU_ITEMS.map((item) => {
+                        const isDisabled =
+                            (item === 'Statistiques' && (isScoringLoading || showScore)) ||
+                            (item === 'Simulation' && mode === 'simulation') ||
+                            (item === 'Édition' && mode === 'edit');
+                        return (
                         <div key={item} className='relative mr-[14px]'>
                             <p
                                 onClick={() => {
-                                    if (item === 'Statistiques') { if (!isScoringLoading && !showScore) { ws?.send('requestScore', {}); setScoreProgress(null); setIsScoringLoading(true); } return; }
+                                    if (isDisabled) return;
+                                    if (item === 'Statistiques') { ws?.send('requestScore', {}); setScoreProgress(null); setIsScoringLoading(true); return; }
                                     if (item === 'Fichier') { setOpenMenu(openMenu === 'Fichier' ? null : 'Fichier'); return; }
                                     if (item === 'Paramètres') { setOpenMenu(null); setShowSettings(true); return; }
+                                    if (item === 'Simulation') { setSelectedElement(null); setPendingRoadFrom(null); setShowIntersections(true); setMode('simulation'); return; }
+                                    if (item === 'Édition') { ws?.send('resetSimulation', {}); setSimState('stopped'); setShowScore(false); setDensityView(false); setIsDensityLoading(false); setSimulationResetAt(prev => prev + 1); setSelectedElement(null); setPendingRoadFrom(null); setMode('edit'); return; }
                                 }}
-                                className={`transition-opacity select-none ${item === 'Statistiques' && (isScoringLoading || showScore) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-50'}`}
+                                className={`transition-opacity select-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-50'}`}
                             >
                                 {item}
                             </p>
@@ -136,7 +148,8 @@ function Header() {
                                 </div>
                             )}
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
             <button className='ml-auto cursor-pointer bg-black hover:bg-neutral-800 transition-colors rounded-[10px] flex items-center justify-center'>

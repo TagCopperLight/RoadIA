@@ -7,10 +7,10 @@ interface VehicleProps {
 }
 
 const MOTOR_STYLE: Record<Motorization, { color: number; w: number; h: number }> = {
-    Hybride:    { color: 0xA855F7, w: 10, h: 5 },
-    Electrique: { color: 0x06B6D4, w: 8,  h: 4 },
-    Essence:    { color: 0xF59E0B, w: 10, h: 5 },
-    Diesel:     { color: 0x8B7355, w: 10, h: 5 },
+    Hybride: { color: 0xA855F7, w: 10, h: 5 },
+    Electrique: { color: 0x06B6D4, w: 8, h: 4 },
+    Essence: { color: 0xF59E0B, w: 10, h: 5 },
+    Diesel: { color: 0x8B7355, w: 10, h: 5 },
 };
 
 const BUS_STYLE = { color: 0x22C55E, w: 18, h: 5 };
@@ -27,18 +27,15 @@ export function Vehicle({ data }: VehicleProps) {
         g.fill();
     }, [style.color, style.w, style.h]);
 
-    if (data.state === 'Arrived') {
+    if (data.state === 'Arrived' || data.state === 'Waiting') {
         return null;
     }
-
-    const alpha = data.state === 'Waiting' ? 0.45 : 1.0;
 
     return (
         <pixiGraphics
             x={data.x}
             y={data.y}
             rotation={data.heading ?? 0}
-            alpha={alpha}
             draw={drawCar}
         />
     );
