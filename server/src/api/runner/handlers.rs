@@ -12,6 +12,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::api::websocket::ws_handler;
 use crate::api::runner::map_generator::create_osm_map;
 use crate::map::model::MapSettings;
+use crate::simulation::config::ScoreWeights;
 use super::runner::SimulationInstance;
 
 fn validate_map_settings(settings: &MapSettings) -> Result<(), (axum::http::StatusCode, String)> {
@@ -20,15 +21,6 @@ fn validate_map_settings(settings: &MapSettings) -> Result<(), (axum::http::Stat
             "Simulation start time must be between 0 and {} seconds",
             MapSettings::MAX_SIMULATION_START_TIME_S as u32
         )));
-    }
-    if !(0.0..=MapSettings::MAX_SIMULATION_DURATION_S).contains(&settings.simulation_duration) {
-        return Err((axum::http::StatusCode::BAD_REQUEST, format!(
-            "Simulation duration must be between 0 and {} seconds",
-            MapSettings::MAX_SIMULATION_DURATION_S as u32
-        )));
-    }
-    if settings.simulation_start_time > settings.simulation_duration {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "Simulation start time must be less than or equal to simulation duration".to_string()));
     }
     if !(0.0..=1.0).contains(&settings.time_step) || settings.time_step == 0.0 {
         return Err((axum::http::StatusCode::BAD_REQUEST, "Time step must be greater than 0 and at most 1 second".to_string()));
@@ -304,6 +296,7 @@ async fn update_simulation_settings_handler(
 
     {
         let mut engine = instance.engine.lock().await;
+        engine.config.score_weights = ScoreWeights::from_settings(&payload);
         engine.config.map.settings = payload;
 
         if let Some(fid) = file_uuid {

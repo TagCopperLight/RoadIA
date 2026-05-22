@@ -13,7 +13,6 @@ type Section = 'simulation' | 'budget' | 'score';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const SIMULATION_START_TIME_MAX_S = 39_600;
-const SIMULATION_DURATION_MAX_S = 86_400;
 const TIME_STEP_MIN_S = 0.01;
 const TIME_STEP_MAX_S = 1;
 
@@ -121,16 +120,6 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                                             value={form.vehicle_count}
                                             min={1} max={5000} step={50}
                                             onChange={v => set('vehicle_count', v)}
-                                        />
-                                    </FieldRow>
-                                    <FieldRow
-                                        label="Durée de simulation"
-                                        hint="En secondes"
-                                    >
-                                        <NumberInput
-                                            value={form.simulation_duration}
-                                            min={60} max={SIMULATION_DURATION_MAX_S} step={60}
-                                            onChange={v => set('simulation_duration', v)}
                                         />
                                     </FieldRow>
                                     <FieldRow
