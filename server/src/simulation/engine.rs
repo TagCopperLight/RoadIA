@@ -699,8 +699,41 @@ impl SimulationEngine {
             }
         }
 
-        for (vidx, from_lane, to_lane) in pending {
+        // Cancel mutual swaps: two vehicles at similar positions crossing lanes would
+        // pass through each other since partition_point uses strict < and misses same-pos pairs.
+        let swap_threshold = LC2013_SAFE_GAP_FRONT;
+        let mut cancelled: HashSet<usize> = HashSet::new();
+
+        // Index pending by (from, to) for O(n) lookup instead of O(n²).
+        let mut by_pair: HashMap<(LaneId, LaneId), Vec<(usize, f32)>> = HashMap::new();
+        for (i, &(vidx, from, to)) in pending.iter().enumerate() {
+            by_pair.entry((from, to)).or_default().push((i, self.vehicles[vidx].position_on_lane));
+        }
+        for (i, &(vidx, af, at)) in pending.iter().enumerate() {
+            if let Some(opposites) = by_pair.get(&(at, af)) {
+                let pa = self.vehicles[vidx].position_on_lane;
+                for &(j, pb) in opposites {
+                    if (pa - pb).abs() < swap_threshold {
+                        cancelled.insert(i);
+                        cancelled.insert(j);
+                    }
+                }
+            }
+        }
+
+        for (idx, (vidx, from_lane, to_lane)) in pending.into_iter().enumerate() {
+            if cancelled.contains(&idx) {
+                continue;
+            }
             if self.vehicles[vidx].current_lane != Some(from_lane) {
+                continue;
+            }
+            // Re-check gaps against the live lane state (reflects moves already applied this step).
+            let pos = self.vehicles[vidx].position_on_lane;
+            let v_len = self.vehicles[vidx].spec.length;
+            let (front_gap, _) = self.vehicle_ahead_in_lane(to_lane, pos);
+            let (rear_gap, _) = self.vehicle_behind_in_lane(to_lane, pos, v_len);
+            if front_gap < LC2013_SAFE_GAP_FRONT || rear_gap < LC2013_SAFE_GAP_REAR {
                 continue;
             }
             self.remove_vehicle_from_lane(from_lane, vidx);
