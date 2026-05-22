@@ -8,6 +8,8 @@ use crate::simulation::commute::CommutePlanState;
 use crate::simulation::engine::{Simulation, SimulationEngine};
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleState, VehicleType};
 use crate::test::{make_minimal_straight_map, make_sim_config, make_standard_spec};
+use crate::map::model::Map;
+use crate::map::intersection::build_intersections;
 
 #[test]
 fn commute_plan_new_is_deterministic() {
@@ -151,4 +153,29 @@ async fn simulation_instance_uses_front_vehicle_count_as_plan_count() {
     assert_eq!(eng.commute_plans.len(), 3);
     assert_eq!(eng.vehicles.len(), 6);
     assert!(eng.vehicles.iter().all(|vehicle| vehicle.commute_plan_id.is_some()));
+}
+
+#[test]
+fn create_random_commutes_supports_one_way_paths() {
+    let mut map = Map::new();
+    let _hab = map.add_intersection(crate::map::intersection::IntersectionKind::Habitation, 0.0, 0.0);
+    let _jct = map.add_intersection(crate::map::intersection::IntersectionKind::Intersection, 500.0, 0.0);
+    let _work = map.add_intersection(crate::map::intersection::IntersectionKind::Workplace, 1000.0, 0.0);
+
+    // One-way roads from hab -> jct and jct -> work only.
+    map.add_road(0, 1, 1, 40.0, 500.0);
+    map.add_road(1, 2, 1, 40.0, 500.0);
+    build_intersections(&mut map);
+
+    let mut rng = ChaCha20Rng::seed_from_u64(7);
+    let generated = create_random_commutes_with_rng(&map, 1, &mut rng);
+
+    // Should create an outbound vehicle even if the reverse path does not exist.
+    assert_eq!(generated.commute_plans.len(), 1);
+    assert_eq!(generated.vehicles.len(), 1);
+
+    let plan = &generated.commute_plans[0];
+    let outbound = &generated.vehicles[0];
+    assert_eq!(outbound.commute_plan_id, Some(plan.id));
+    assert_eq!(outbound.trip.departure_time, plan.outbound_departure_time_s);
 }

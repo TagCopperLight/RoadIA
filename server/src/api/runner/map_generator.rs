@@ -112,16 +112,14 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
         return GeneratedCommutes { vehicles, commute_plans };
     }
 
-    // Pre-calculate commute pairs that are reachable in both directions.
+    // Pre-calculate commute pairs that are reachable from habitation -> workplace.
     let mut valid_pairs = Vec::new();
     for &h in &habitations {
         for &w in &workplaces {
             if h == w {
                 continue;
             }
-            if crate::simulation::vehicle::fastest_path(map, h, w).is_some()
-                && crate::simulation::vehicle::fastest_path(map, w, h).is_some()
-            {
+            if crate::simulation::vehicle::fastest_path(map, h, w).is_some() {
                 valid_pairs.push((h, w));
             }
         }
@@ -151,7 +149,7 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
         };
         let spec = VehicleSpec::new(VehicleKind::Car, max_speed, 4.0, 3.0, 1.0, length);
 
-        let commute_plan = if map.settings.use_day_night_cycle {
+        let mut commute_plan = if map.settings.use_day_night_cycle {
             CommutePlan::random(
                 commute_plan_id,
                 outbound_vehicle_id,
@@ -168,6 +166,14 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
             )
         };
 
+        // If using day/night sampling, prefer early departures within a short window
+        // so vehicles appear soon after simulation start for better UX.
+        if map.settings.use_day_night_cycle {
+            const EARLY_COMMUTE_WINDOW_S: f32 = 600.0;
+            commute_plan.outbound_departure_time_s =
+                map.settings.simulation_start_time + rng.random_range(0.0..EARLY_COMMUTE_WINDOW_S);
+        }
+
         let outbound_trip = TripRequest {
             origin,
             destination,
@@ -179,21 +185,32 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
             departure_time: f32::MAX,
         };
 
+        // Build outbound vehicle (required). If outbound path doesn't exist, skip.
         let mut outbound_vehicle = Vehicle::new(outbound_vehicle_id, spec, outbound_trip, motorization);
         outbound_vehicle.commute_plan_id = Some(commute_plan_id);
         if !outbound_vehicle.update_path(map) {
             continue;
         }
 
-        let mut return_vehicle = Vehicle::new(return_vehicle_id, spec, return_trip, motorization);
-        return_vehicle.commute_plan_id = Some(commute_plan_id);
-        if !return_vehicle.update_path(map) {
-            continue;
-        }
+        // Only create a return vehicle if a path exists back from destination -> origin.
+        let has_return_path = crate::simulation::vehicle::fastest_path(map, destination, origin).is_some();
+        if has_return_path {
+            let mut return_vehicle = Vehicle::new(return_vehicle_id, spec, return_trip, motorization);
+            return_vehicle.commute_plan_id = Some(commute_plan_id);
+            if !return_vehicle.update_path(map) {
+                // If return path unexpectedly fails, push outbound only.
+                vehicles.push(outbound_vehicle);
+                commute_plans.push(commute_plan);
+                continue;
+            }
 
-        vehicles.push(outbound_vehicle);
-        vehicles.push(return_vehicle);
-        commute_plans.push(commute_plan);
+            vehicles.push(outbound_vehicle);
+            vehicles.push(return_vehicle);
+            commute_plans.push(commute_plan);
+        } else {
+            vehicles.push(outbound_vehicle);
+            commute_plans.push(commute_plan);
+        }
     }
 
     GeneratedCommutes { vehicles, commute_plans }

@@ -27,16 +27,18 @@ export function Vehicle({ data }: VehicleProps) {
         g.fill();
     }, [style.color, style.w, style.h]);
 
-    if (data.state === 'Arrived' || data.state === 'Waiting') {
+    if (data.state === 'Arrived') {
         return null;
     }
+
+    const alpha = data.state === 'Waiting' ? 0.45 : 1.0;
 
     return (
         <pixiGraphics
             x={data.x}
             y={data.y}
             rotation={data.heading ?? 0}
-            alpha={1.0}
+            alpha={alpha}
             draw={drawCar}
         />
     );
