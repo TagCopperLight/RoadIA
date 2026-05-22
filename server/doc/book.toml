@@ -2,6 +2,3 @@
 title = "documentation"
 authors = []
 language = "en"
-
-[output.html]
-additional-js = ["mermaid-loader.js", "mermaid-init.js", "katex-loader.js", "katex-init.js"]

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e08d1819.js";
+            window.path_to_searchindex_js = "../searchindex-3ae62e47.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c58d40f7.js"></script>
+        <script src="../toc-98ddbbda.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -175,181 +175,41 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="websocket-protocol"><a class="header" href="#websocket-protocol">WebSocket protocol</a></h1>
-<p>Fichier principal: <code>src/api/websocket.rs</code>.
-Ce chapitre décrit le protocole JSON échangé sur <code>/ws</code>, les structures de données sérialisées par le serveur et la logique interne qui relie le socket à une <code>SimulationInstance</code>.</p>
-<h2 id="connexion"><a class="header" href="#connexion">Connexion</a></h2>
-<h3 id="connectparams"><a class="header" href="#connectparams"><code>ConnectParams</code></a></h3>
-<p>Paramètres de requête attendus lors de l’ouverture du WebSocket.</p>
+<p>Résumé du protocole échangé via <code>/ws</code> (fichier principal: <code>src/api/websocket.rs</code>).</p>
+<p>Paramètres de connexion (query):</p>
 <ul>
-<li><code>uuid</code> : identifiant de la simulation à rejoindre.</li>
-<li><code>token</code> : jeton d’authentification associé à cette simulation.
-Si l’un des deux est invalide, la connexion est immédiatement rejetée avec une fermeture <code>Unauthorized</code>.</li>
+<li><code>uuid</code>: identifiant de l’instance de simulation (UUID)</li>
+<li><code>token</code>: jeton d’authentification pour l’instance</li>
 </ul>
-<h2 id="paquets-clients"><a class="header" href="#paquets-clients">Paquets clients</a></h2>
-<h3 id="clientpacket"><a class="header" href="#clientpacket"><code>ClientPacket</code></a></h3>
-<p>Le client envoie une seule étiquette JSON <code>id</code> et un objet <code>data</code>. Les variantes actuelles sont les suivantes:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Variante</th><th>Rôle</th></tr>
-</thead>
-<tbody>
-<tr><td><code>StartSimulation</code></td><td>Démarre l’exécution du moteur.</td></tr>
-<tr><td><code>StopSimulation</code></td><td>Arrête l’exécution du moteur.</td></tr>
-<tr><td><code>ResetSimulation</code></td><td>Réinitialise l’état courant de la simulation.</td></tr>
-<tr><td><code>AddNode</code></td><td>Ajoute un noeud de carte (<code>x</code>, <code>y</code>, <code>kind</code>).</td></tr>
-<tr><td><code>DeleteNode</code></td><td>Supprime un noeud (<code>id</code>).</td></tr>
-<tr><td><code>UpdateNode</code></td><td>Change le type d’un noeud (<code>id</code>, <code>kind</code>).</td></tr>
-<tr><td><code>AddRoad</code></td><td>Ajoute une route orientée (<code>from_id</code>, <code>to_id</code>, <code>lane_count</code>, <code>speed_limit</code>).</td></tr>
-<tr><td><code>DeleteRoad</code></td><td>Supprime une route (<code>id</code>).</td></tr>
-<tr><td><code>UpdateRoad</code></td><td>Modifie la limite de vitesse (<code>id</code>, <code>speed_limit</code>), et éventuellement le nombre de voies (<code>lane_count</code>).</td></tr>
-<tr><td><code>SetSpeed</code></td><td>Modifie la vitesse d’exécution du worker (<code>multiplier</code>).</td></tr>
-<tr><td><code>RequestScore</code></td><td>Demande un score complet.</td></tr>
-<tr><td><code>RequestDensity</code></td><td>Demande une carte de densité par route.</td></tr>
-<tr><td><code>AddWaypoints</code></td><td>Ajoute des points de passage à un véhicule (<code>vehicle_id</code>, <code>node_ids</code>).</td></tr>
-<tr><td><code>RequestVehicles</code></td><td>Demande la liste détaillée des véhicules.</td></tr>
-<tr><td><code>CreateBusLine</code></td><td>Crée une ligne de bus (<code>name</code>, <code>stop_node_ids</code>).</td></tr>
-<tr><td><code>DeleteBusLine</code></td><td>Supprime une ligne de bus (<code>bus_line_id</code>).</td></tr>
-<tr><td><code>RequestBusLines</code></td><td>Demande la liste des lignes de bus.</td></tr>
-</tbody>
-</table>
-</div>
-<p>Le message <code>UpdateRoad</code> accepte aussi un <code>lane_count</code> optionnel dans la version actuelle du serveur.</p>
-<h2 id="paquets-serveur"><a class="header" href="#paquets-serveur">Paquets serveur</a></h2>
-<h3 id="serverpacket"><a class="header" href="#serverpacket"><code>ServerPacket</code></a></h3>
-<p>| Variante | Rôle |
-| <code>Map</code> | Instantané complet de la carte. |
-| <code>VehicleUpdate</code> | État temps réel des véhicules et des feux. |
-| <code>MapEdit</code> | Réponse à une opération d’édition de carte. |
-| <code>Score</code> | Résultat complet de la simulation. |
-| <code>SimulationFinished</code> | Notification de fin de simulation. |
-| <code>DensityMap</code> | Résultat de la requête de densité par route. |
-| <code>VehicleList</code> | Liste détaillée des véhicules. |
-| <code>BusLineList</code> | Liste des lignes de bus. |</p>
-<h2 id="fonctions-de-contrôle-du-socket"><a class="header" href="#fonctions-de-contrôle-du-socket">Fonctions de contrôle du socket</a></h2>
-<h3 id="ws_handler"><a class="header" href="#ws_handler">ws_handler</a></h3>
-<p>Valide l’accès et initialise la connexion WebSocket.</p>
+<p>Paquets clients (<code>ClientPacket</code>):</p>
 <ul>
-<li><strong>Entrées</strong> : <code>ws: WebSocketUpgrade</code>, <code>params: ConnectParams</code>, <code>state: Arc&lt;AppState&gt;</code>.</li>
-<li><strong>Action</strong> : Vérifie la validité du <code>uuid</code> de simulation et du <code>token</code>. Si valide, passe le socket à <code>ws_loop</code>.</li>
-<li><strong>Retour</strong> : <code>Response</code>.</li>
+<li><code>StartSimulation</code>, <code>StopSimulation</code>, <code>ResetSimulation</code></li>
+<li><code>AddNode { x, y, kind }</code>, <code>DeleteNode { id }</code>, <code>MoveNode { id, x, y }</code>, <code>UpdateNode { id, kind }</code></li>
+<li><code>AddRoad { from_id, to_id, lane_count, speed_limit }</code>, <code>DeleteRoad { id }</code>, <code>UpdateRoad { id, speed_limit }</code></li>
 </ul>
-<h3 id="ws_loop"><a class="header" href="#ws_loop">ws_loop</a></h3>
-<p>Gère la communication bidirectionnelle continue.</p>
+<p>Paquets serveur (<code>ServerPacket</code>):</p>
 <ul>
-<li><strong>Entrées</strong> : <code>socket: WebSocket</code>, <code>instance: Arc&lt;SimulationInstance&gt;</code>, <code>state: Arc&lt;AppState&gt;</code>, <code>uuid: Uuid</code>.</li>
-<li><strong>Action</strong> :
-<ol>
-<li>Envoie l’état initial de la carte au client.</li>
-<li>Gère en parallèle les messages entrants du client (via <code>handle_client_packet</code>) et les messages sortants du worker (broadcast).</li>
-<li>Gère la déconnexion et le nettoyage de l’instance si plus aucun client n’est connecté.</li>
-</ol>
-</li>
+<li><code>Map { nodes, edges }</code> — état complet de la carte</li>
+<li><code>VehicleUpdate { vehicles, traffic_lights }</code> — positions et états des véhicules</li>
+<li><code>MapEdit { success, error, nodes, edges }</code> — réponse aux opérations d’édition</li>
+<li><code>Score { score, total_trip_time, total_emitted_co2, network_length, total_distance_traveled, success_rate }</code></li>
 </ul>
-<h3 id="process_incoming_msg"><a class="header" href="#process_incoming_msg">process_incoming_msg</a></h3>
-<p>Traite un message brut reçu depuis le socket.</p>
+<p>Notes d’implémentation:</p>
 <ul>
-<li><strong>Action</strong> : Décode le JSON en <code>ClientPacket</code> et appelle <code>handle_client_packet</code>.</li>
-<li><strong>Retour</strong> : <code>bool</code> (continuer la boucle).</li>
+<li>Les messages sont JSON sérialisés via serde/serde_json.</li>
+<li>Les modifications de carte sont refusées si la simulation est en cours.</li>
+<li>La fonction <code>serialize_map</code> et <code>serialize_vehicle</code> contrôlent le format côté serveur.</li>
 </ul>
-<h3 id="process_broadcast_msg"><a class="header" href="#process_broadcast_msg">process_broadcast_msg</a></h3>
-<p>Relaye un message interne du serveur vers le client.</p>
-<ul>
-<li><strong>Action</strong> : Sérialise le <code>ServerPacket</code> et l’envoie sur le socket.</li>
-<li><strong>Retour</strong> : <code>bool</code>.</li>
-</ul>
-<h3 id="handle_client_packet"><a class="header" href="#handle_client_packet">handle_client_packet</a></h3>
-<p>Point d’entrée de la logique métier du WebSocket.</p>
-<ul>
-<li><strong>Entrées</strong> : <code>packet: ClientPacket</code>, <code>socket</code>, <code>instance</code>.</li>
-<li><strong>Action</strong> : Distribue l’action vers les fonctions appropriées (moteur ou éditeur) en vérifiant les droits (ex: interdiction d’éditer si la simulation tourne).</li>
-</ul>
-<h3 id="send_edit_error"><a class="header" href="#send_edit_error">send_edit_error</a></h3>
-<p>Envoie un paquet <code>MapEdit</code> signalant un échec au client.</p>
-<h3 id="broadcast_map_edit_success"><a class="header" href="#broadcast_map_edit_success">broadcast_map_edit_success</a></h3>
-<p>Diffuse un paquet <code>MapEdit</code> signalant un succès à tous les clients connectés.</p>
-<h3 id="serialize_map"><a class="header" href="#serialize_map">serialize_map</a></h3>
-<p>Transforme la structure <code>Map</code> en données JSON pour le frontend.</p>
-<ul>
-<li><strong>Entrées</strong> : <code>map: &amp;Map</code>.</li>
-<li><strong>Action</strong> : Parcourt le graphe pour extraire les positions des nœuds, leurs types, et les caractéristiques des routes (voies, longueur, vitesse).</li>
-<li><strong>Retour</strong> : <code>(Vec&lt;Value&gt;, Vec&lt;Value&gt;)</code> (Liste des nœuds, Liste des arêtes).</li>
-</ul>
-<h3 id="serialize_vehicle"><a class="header" href="#serialize_vehicle"><code>serialize_vehicle</code></a></h3>
-<p>Produit la représentation détaillée d’un véhicule pour le flux temps réel. Le format inclut l’identifiant, la position, l’orientation, le type logique, l’état, la motorisation, l’origine, la destination et les waypoints.</p>
-<h3 id="serialize_vehicle_summary"><a class="header" href="#serialize_vehicle_summary"><code>serialize_vehicle_summary</code></a></h3>
-<p>Produit une version condensée d’un véhicule, utilisée pour les listes et les réponses plus légères.</p>
-<h3 id="serialize_bus_line"><a class="header" href="#serialize_bus_line"><code>serialize_bus_line</code></a></h3>
-<p>Produit la sérialisation d’une ligne de bus avec son identifiant, son nom, ses arrêts et le véhicule associé.</p>
-<h3 id="serialize_intersection_kind"><a class="header" href="#serialize_intersection_kind"><code>serialize_intersection_kind</code></a></h3>
-<p>Convertit une chaîne reçue du client en <code>IntersectionKind</code>. Cette fonction centralise la validation des chaînes comme <code>Habitation</code>, <code>Intersection</code> et <code>Workplace</code>.</p>
-<h3 id="serialize_traffic_lights"><a class="header" href="#serialize_traffic_lights"><code>serialize_traffic_lights</code></a></h3>
-<p>Construit la vue JSON des contrôleurs de feux actifs. Pour chaque contrôleur, le serveur liste les routes actuellement vertes sous forme de <code>green_road_ids</code>.</p>
-<h2 id="formes-de-données-importantes"><a class="header" href="#formes-de-données-importantes">Formes de données importantes</a></h2>
-<h3 id="carte"><a class="header" href="#carte">Carte</a></h3>
-<p>Le paquet <code>Map</code> contient deux tableaux:</p>
-<ul>
-<li><code>nodes</code> : noeuds du graphe avec position, métadonnées et liste des <code>internal_lanes</code> (trajectoires d’intersection);</li>
-<li><code>edges</code> : routes avec longueur, vitesse, nombre de voies et largeur de voie.</li>
-</ul>
-<h3 id="véhicule"><a class="header" href="#véhicule">Véhicule</a></h3>
-<p>Le paquet <code>VehicleUpdate</code> contient:</p>
-<ul>
-<li><code>vehicles</code> : positions et états de tous les véhicules;</li>
-<li><code>traffic_lights</code> : ensemble des feux et de leurs routes ouvertes.</li>
-</ul>
-<h3 id="score"><a class="header" href="#score">Score</a></h3>
-<p>Le paquet <code>Score</code> expose les mesures finales:</p>
-<ul>
-<li><code>score</code> : Valeur finale sur 100.</li>
-<li><code>total_trip_time</code> / <code>ref_total_trip_time</code> : Temps cumulé réel vs théorique.</li>
-<li><code>total_emitted_co2</code> / <code>ref_total_emitted_co2</code> : CO2 cumulé réel vs théorique.</li>
-<li><code>network_length</code> / <code>ref_network_length</code> : Longueur d’infrastructure réelle vs borne inférieure de Steiner.</li>
-<li><code>success_rate</code> : Ratio de véhicules arrivés à destination.</li>
-</ul>
-<h2 id="ce-quil-faut-retenir"><a class="header" href="#ce-quil-faut-retenir">Ce qu’il faut retenir</a></h2>
-<ul>
-<li>Le WebSocket est le canal de temps réel de la simulation.</li>
-<li>L’édition de carte est bloquée tant que la simulation tourne.</li>
-<li>Le serveur distingue toujours entre les réponses légères (<code>VehicleList</code>, <code>BusLineList</code>) et les instantanés complets (<code>Map</code>, <code>MapEdit</code>).</li>
-</ul>
-<h2 id="exemples-json"><a class="header" href="#exemples-json">Exemples JSON</a></h2>
-<h3 id="client---serveur-démarrer-simulation"><a class="header" href="#client---serveur-démarrer-simulation">Client -&gt; Serveur (Démarrer simulation)</a></h3>
-<pre><code class="language-json">{ "id": "StartSimulation", "data": {} }
-</code></pre>
-<h3 id="client---serveur-ajouter-noeud"><a class="header" href="#client---serveur-ajouter-noeud">Client -&gt; Serveur (Ajouter noeud)</a></h3>
-<pre><code class="language-json">{ "id": "AddNode", "data": { "x": 123.4, "y": 56.7, "kind": "Intersection" } }
-</code></pre>
-<h3 id="serveur---client-mise-à-jour-véhicules"><a class="header" href="#serveur---client-mise-à-jour-véhicules">Serveur -&gt; Client (Mise à jour véhicules)</a></h3>
-<pre><code class="language-json">{
-	"id": "VehicleUpdate",
-	"data": {
-		"vehicles": [ { "id": 1001, "x": 12.3, "y": 45.6, "heading": 1.57, "kind": "Car", "state": "Moving" } ],
-		"traffic_lights": [ { "id": 5, "green_road_ids": [2, 3] } ]
-	}
-}
-</code></pre>
-<h2 id="runtime-sequence-websocket"><a class="header" href="#runtime-sequence-websocket">Runtime sequence (WebSocket)</a></h2>
-<pre><code class="language-mermaid">sequenceDiagram
-	participant Client
-	participant WS
-	Client-&gt;&gt;WS: open /ws?uuid&amp;token
-	WS--&gt;&gt;Client: Map (initial)
-	Client-&gt;&gt;WS: AddNode / StartSimulation / UpdateRoad
-	WS--&gt;&gt;Client: MapEdit (ack) or Map (new state)
-	WS--&gt;&gt;Client: VehicleUpdate (periodic)
-	WS--&gt;&gt;Client: Score (when simulation ends)
-</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../api/map_generator.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../api/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../api/ws_examples.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../api/runner.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -359,11 +219,11 @@ Si l’un des deux est invalide, la connexion est immédiatement rejetée avec u
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../api/map_generator.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../api/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../api/ws_examples.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../api/runner.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -376,22 +236,6 @@ Si l’un des deux est invalide, la connexion est immédiatement rejetée avec u
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>
@@ -408,10 +252,6 @@ Si l’un des deux est invalide, la connexion est immédiatement rejetée avec u
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid-loader-1508ae7a.js"></script>
-        <script src="../mermaid-init-49a54d84.js"></script>
-        <script src="../katex-loader-d2c37f60.js"></script>
-        <script src="../katex-init-c90d5c99.js"></script>
 
 
 
