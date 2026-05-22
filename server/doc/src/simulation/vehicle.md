@@ -112,7 +112,7 @@ Crée une nouvelle instance de véhicule.
 Calcule ou met à jour le chemin complet du véhicule (incluant les points de passage forcés).
 
 - **Entrées** : `map: &Map`.
-- **Action** : Remplit le champ `self.path` en concaténant les segments de chemin les plus rapides.
+- **Action** : Remplit le champ `self.path` en concaténant les segments de chemin les plus rapides. Gère les **points de passage (Waypoints)** obligatoires pour les bus afin de respecter les arrêts prévus.
 
 ### compute_acceleration
 Calcule l'accélération à appliquer selon le modèle IDM (Intelligent Driver Model).
