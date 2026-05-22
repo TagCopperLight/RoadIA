@@ -17,6 +17,7 @@ describe('budget module unit tests', () => {
                 from: 0,
                 to: 1,
                 lane_count: 2,
+                lane_width: 3.5,
                 length: 100,
                 speed_limit: 50,
             };
@@ -31,6 +32,7 @@ describe('budget module unit tests', () => {
                 from: 0,
                 to: 1,
                 lane_count: 3,
+                lane_width: 3.5,
                 length: 50,
                 speed_limit: 50,
             };
@@ -51,6 +53,7 @@ describe('budget module unit tests', () => {
                 x: 10,
                 y: 20,
                 kind: 'Intersection',
+                name: 'Intersection Node',
                 radius: 5,
             };
             const cost = nodeCost(node);
@@ -64,6 +67,7 @@ describe('budget module unit tests', () => {
                 x: 10,
                 y: 20,
                 kind: 'Habitation',
+                name: 'Habitation Node',
                 radius: 10,
             };
             const cost = nodeCost(node);
@@ -77,6 +81,7 @@ describe('budget module unit tests', () => {
                 x: 10,
                 y: 20,
                 kind: 'Workplace',
+                name: 'Workplace Node',
                 radius: 0,
             };
             const cost = nodeCost(node);
@@ -89,15 +94,12 @@ describe('budget module unit tests', () => {
         it('should sum all nodes and edges correctly', () => {
             const mapData: MapData = {
                 nodes: [
-                    { id: 1, x: 0, y: 0, kind: 'Habitation', radius: 5 }, // 150k + 10k = 160k
-                    { id: 2, x: 100, y: 0, kind: 'Workplace', radius: 10 }, // 200k + 20k = 220k
+                    { id: 1, x: 0, y: 0, kind: 'Habitation', name: 'Hab', radius: 5 }, // 150k + 10k = 160k
+                    { id: 2, x: 100, y: 0, kind: 'Workplace', name: 'Work', radius: 10 }, // 200k + 20k = 220k
                 ],
                 edges: [
-                    { id: 1, from: 1, to: 2, lane_count: 2, length: 100, speed_limit: 50 }, // 500 * 100 * 2 = 100k
+                    { id: 1, from: 1, to: 2, lane_count: 2, lane_width: 3.5, length: 100, speed_limit: 50 }, // 500 * 100 * 2 = 100k
                 ],
-                settings: {
-                    traffic_lights: {},
-                },
             };
 
             const total = calculateCost(mapData);
@@ -108,8 +110,8 @@ describe('budget module unit tests', () => {
 
     describe('estimateRoadCost', () => {
         it('should estimate road cost based on Euclidean distance minus node radii', () => {
-            const fromNode: MapNode = { id: 1, x: 0, y: 0, kind: 'Intersection', radius: 10 };
-            const toNode: MapNode = { id: 2, x: 120, y: 0, kind: 'Intersection', radius: 10 };
+            const fromNode: MapNode = { id: 1, x: 0, y: 0, kind: 'Intersection', name: 'From', radius: 10 };
+            const toNode: MapNode = { id: 2, x: 120, y: 0, kind: 'Intersection', name: 'To', radius: 10 };
             // Distance = 120. Net distance = 120 - 10 - 10 = 100.
             const estCost = estimateRoadCost(fromNode, toNode, 2);
             // 500 * 100 * 2 = 100,000
@@ -117,8 +119,8 @@ describe('budget module unit tests', () => {
         });
 
         it('should return 0 cost if nodes overlap or distance is less than sum of radii', () => {
-            const fromNode: MapNode = { id: 1, x: 0, y: 0, kind: 'Intersection', radius: 10 };
-            const toNode: MapNode = { id: 2, x: 15, y: 0, kind: 'Intersection', radius: 10 };
+            const fromNode: MapNode = { id: 1, x: 0, y: 0, kind: 'Intersection', name: 'From', radius: 10 };
+            const toNode: MapNode = { id: 2, x: 15, y: 0, kind: 'Intersection', name: 'To', radius: 10 };
             // Distance = 15. Net distance = 15 - 10 - 10 = -5 -> clamped to 0.
             const estCost = estimateRoadCost(fromNode, toNode, 2);
             expect(estCost).toBe(0);
