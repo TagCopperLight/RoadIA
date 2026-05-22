@@ -952,7 +952,7 @@ impl SimulationEngine {
             will_pass: true,
         };
 
-        if is_link_open(
+        let link_open = is_link_open(
             &link,
             v,
             &ego,
@@ -963,7 +963,26 @@ impl SimulationEngine {
             LOOK_AHEAD,
             STOP_DWELL_TIME,
             &self.green_links,
-        ) {
+        );
+
+        let mut space_ok = true;
+        if link_open {
+            if v.path_index + 2 < v.path.len() {
+                if let Some(dest_edge) = self.config.map.graph.find_edge(v.path[v.path_index + 1], v.path[v.path_index + 2]) {
+                    let to_lane = LaneId::Normal(dest_edge, link.lane_destination_id);
+                    if let Some(list) = self.vehicles_by_lane.get(&to_lane) {
+                        if let Some(&rear_idx) = list.first() {
+                            let lv = &self.vehicles[rear_idx];
+                            if lv.position_on_lane - lv.spec.length < self.config.minimum_gap {
+                                space_ok = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if link_open && space_ok {
             // Point of no return: vehicle cannot decelerate to v_pass before the junction.
             let d_stop = v.velocity * v.velocity / (2.0 * v.spec.comfortable_deceleration);
             if entry.distance > 0.0 && entry.distance <= d_stop {
@@ -973,6 +992,7 @@ impl SimulationEngine {
         } else {
             (entry.v_wait.max(0.0), Some(entry.distance))
         }
+
     }
 
     fn find_link(&self, link_id: u32) -> Option<&crate::map::road::Link> {
