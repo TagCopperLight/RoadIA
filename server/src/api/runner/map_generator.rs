@@ -151,13 +151,22 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
         };
         let spec = VehicleSpec::new(VehicleKind::Car, max_speed, 4.0, 3.0, 1.0, length);
 
-        let commute_plan = CommutePlan::random(
-            commute_plan_id,
-            outbound_vehicle_id,
-            return_vehicle_id,
-            map.settings.simulation_start_time,
-            rng,
-        );
+        let commute_plan = if map.settings.use_day_night_cycle {
+            CommutePlan::random(
+                commute_plan_id,
+                outbound_vehicle_id,
+                return_vehicle_id,
+                map.settings.simulation_start_time,
+                rng,
+            )
+        } else {
+            CommutePlan::immediate(
+                commute_plan_id,
+                outbound_vehicle_id,
+                return_vehicle_id,
+                map.settings.simulation_start_time,
+            )
+        };
 
         let outbound_trip = TripRequest {
             origin,

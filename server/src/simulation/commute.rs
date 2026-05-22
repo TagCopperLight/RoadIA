@@ -45,6 +45,15 @@ impl CommutePlan {
         }
     }
 
+    pub fn immediate(
+        id: u64,
+        outbound_vehicle_id: u64,
+        return_vehicle_id: u64,
+        simulation_start_time_s: f32,
+    ) -> Self {
+        Self::new(id, outbound_vehicle_id, return_vehicle_id, simulation_start_time_s, 0.0)
+    }
+
     pub fn random<R: Rng + ?Sized>(
         id: u64,
         outbound_vehicle_id: u64,

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, EditTool } from './EditModeContext';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
 // Inline SVG icons
 
 function IconSelect() {
@@ -112,6 +114,26 @@ function IconBus() {
     );
 }
 
+function IconDayNight({ dayNight }: { dayNight: boolean }) {
+    return dayNight ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="5" />
+            <line x1="12" y1="1" x2="12" y2="3" strokeLinecap="round" />
+            <line x1="12" y1="21" x2="12" y2="23" strokeLinecap="round" />
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" strokeLinecap="round" />
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" strokeLinecap="round" />
+            <line x1="1" y1="12" x2="3" y2="12" strokeLinecap="round" />
+            <line x1="21" y1="12" x2="23" y2="12" strokeLinecap="round" />
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" strokeLinecap="round" />
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" strokeLinecap="round" />
+        </svg>
+    ) : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+    );
+}
+
 function IconDensity() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -155,7 +177,7 @@ function Separator() {
 
 const SPEED_PRESETS = [1, 3, 5, 10, 30] as const;
 
-export default function Toolbar() {
+export default function Toolbar({ uuid }: { uuid: string }) {
     const ws = useWs();
     const [speedMultiplier, setSpeedMultiplier] = useState(3);
     const {
@@ -163,6 +185,7 @@ export default function Toolbar() {
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
         densityView, setDensityView, isDensityLoading, setIsDensityLoading,
         showIntersections, setShowIntersections,
+        mapSettings, setMapSettings,
     } = useEditMode();
 
     const switchToEdit = () => {
@@ -208,6 +231,26 @@ export default function Toolbar() {
         setSimState('stopped');
         setShowScore(false);
         setSimulationResetAt(prev => prev + 1);
+    };
+
+    const handleDayNightToggle = async () => {
+        if (!mapSettings || simState !== 'stopped') return;
+        const updated = { ...mapSettings, use_day_night_cycle: !mapSettings.use_day_night_cycle };
+        try {
+            const res = await fetch(`${API_URL}/api/simulations/${uuid}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            if (!res.ok) return;
+            setMapSettings(updated);
+            ws?.send('resetSimulation', {});
+            setSimState('stopped');
+            setShowScore(false);
+            setSimulationResetAt(prev => prev + 1);
+        } catch {
+            // network error — no-op
+        }
     };
 
     const selectTool = (tool: EditTool) => {
@@ -283,6 +326,15 @@ export default function Toolbar() {
                                 title={showIntersections ? 'Hide Intersections' : 'Show Intersections'}
                             >
                                 <IconIntersection />
+                            </ToolButton>
+                            <Separator />
+                            <ToolButton
+                                onClick={handleDayNightToggle}
+                                isSelected={mapSettings ? !mapSettings.use_day_night_cycle : false}
+                                disabled={simState !== 'stopped' || !mapSettings}
+                                title={mapSettings?.use_day_night_cycle ? 'Day/Night Cycle (click for Immediate)' : 'Immediate Departure (click for Day/Night)'}
+                            >
+                                <IconDayNight dayNight={mapSettings?.use_day_night_cycle ?? true} />
                             </ToolButton>
                         </>
                     )}

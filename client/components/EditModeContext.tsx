@@ -16,6 +16,7 @@ export interface MapSettings {
     success_weight: number;
     pollution_weight: number;
     infrastructure_weight: number;
+    use_day_night_cycle: boolean;
 }
 
 export type AppMode = "edit" | "simulation";
