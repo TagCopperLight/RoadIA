@@ -99,20 +99,20 @@ function IconBus() {
 
 function IconDayNight({ dayNight }: { dayNight: boolean }) {
     return dayNight ? (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="5" />
-            <line x1="12" y1="1" x2="12" y2="3" strokeLinecap="round" />
-            <line x1="12" y1="21" x2="12" y2="23" strokeLinecap="round" />
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" strokeLinecap="round" />
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" strokeLinecap="round" />
-            <line x1="1" y1="12" x2="3" y2="12" strokeLinecap="round" />
-            <line x1="21" y1="12" x2="23" y2="12" strokeLinecap="round" />
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" strokeLinecap="round" />
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" strokeLinecap="round" />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.9 4.9 1.4 1.4" />
+            <path d="m17.7 17.7 1.4 1.4" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m6.3 17.7-1.4 1.4" />
+            <path d="m19.1 4.9-1.4 1.4" />
         </svg>
     ) : (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            <path d="M13 2L4.09 13.5H11l-1 8.5L20 10.5H13.5L13 2z" />
         </svg>
     );
 }
