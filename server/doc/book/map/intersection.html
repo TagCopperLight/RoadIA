@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
+            window.path_to_searchindex_js = "../searchindex-e08d1819.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5b6ca4d7.js"></script>
+        <script src="../toc-c58d40f7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -176,47 +176,218 @@
                     <main>
                         <h1 id="intersections"><a class="header" href="#intersections">Intersections</a></h1>
 <p>Fichier: <code>src/map/intersection.rs</code>.</p>
-<p>Concepts principaux:</p>
+<p>Les intersections transforment deux routes abstraites en une géométrie de traversée, puis en règles de priorité et de conflit exploitables par le moteur.</p>
+<h2 id="types-de-base"><a class="header" href="#types-de-base">Types de base</a></h2>
+<h3 id="intersectionkind"><a class="header" href="#intersectionkind"><code>IntersectionKind</code></a></h3>
+<p>Type fonctionnel du noeud.</p>
 <ul>
-<li><code>Intersection</code> contient <code>internal_lanes</code> (type <code>InternalLane</code>) définissant les mouvements à l’intérieur d’un carrefour.</li>
-<li><code>build_intersections(map)</code> construit les <code>InternalLane</code> et <code>Link</code> pour chaque noeud du graphe: calcule entrées/sorties, crée <code>link_id</code> et identifie les <code>foe_links</code> (conflits entre mouvements).</li>
-<li>Fonctions utilitaires: <code>segments_intersect</code>, <code>boundary_point</code>, <code>lane_boundary_point</code>, <code>is_link_open</code>, <code>time_window_conflict</code>, etc.</li>
+<li><code>Habitation</code> : zone d’origine potentielle pour les véhicules.</li>
+<li><code>Intersection</code> : carrefour standard.</li>
+<li><code>Workplace</code> : zone de destination potentielle.</li>
 </ul>
-<p>Règles de priorité et ouverture de lien:</p>
+<h3 id="intersection"><a class="header" href="#intersection"><code>Intersection</code></a></h3>
+<p>Noeud du graphe routier.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td>Identifiant public du noeud.</td></tr>
+<tr><td><code>kind</code></td><td>Rôle fonctionnel du noeud.</td></tr>
+<tr><td><code>center_coordinates</code></td><td>Position du carrefour.</td></tr>
+<tr><td><code>radius</code></td><td>Rayon utilisé pour la géométrie d’entrée/sortie.</td></tr>
+<tr><td><code>internal_lanes</code></td><td>Trajectoires internes construites par <code>build_intersections</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="internallane"><a class="header" href="#internallane"><code>InternalLane</code></a></h3>
+<p>Trajectoire à l’intérieur du carrefour.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id</code></td><td>Identifiant interne.</td></tr>
+<tr><td><code>from_lane_id</code></td><td>Voie d’entrée.</td></tr>
+<tr><td><code>to_lane_id</code></td><td>Voie de sortie.</td></tr>
+<tr><td><code>length</code></td><td>Longueur géométrique du passage.</td></tr>
+<tr><td><code>speed_limit</code></td><td>Limite de vitesse pour ce passage.</td></tr>
+<tr><td><code>entry</code></td><td>Point d’entrée géométrique.</td></tr>
+<tr><td><code>exit</code></td><td>Point de sortie géométrique.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="approachdata"><a class="header" href="#approachdata"><code>ApproachData</code></a></h3>
+<p>Fenêtre temporelle réservée par un véhicule sur un lien.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Champ</th><th>Rôle</th></tr>
+</thead>
+<tbody>
+<tr><td><code>arrival_time</code></td><td>Heure prévue d’entrée.</td></tr>
+<tr><td><code>leave_time</code></td><td>Heure prévue de sortie.</td></tr>
+<tr><td><code>arrival_speed</code></td><td>Vitesse à l’entrée.</td></tr>
+<tr><td><code>leave_speed</code></td><td>Vitesse à la sortie.</td></tr>
+<tr><td><code>will_pass</code></td><td>Indique si le véhicule devrait effectivement franchir le carrefour.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="linkstate"><a class="header" href="#linkstate"><code>LinkState</code></a></h3>
+<p>État dynamique associé à un lien, surtout pour savoir quels véhicules l’ont réservé.</p>
 <ul>
-<li><code>LinkType</code> influence le comportement (<code>Priority</code>, <code>Yield</code>, <code>Stop</code>, <code>TrafficLight</code>).</li>
-<li><code>is_link_open</code> prend en compte le type de lien, l’état des feux (<code>green_links</code>), véhicules présents et conflit temporel d’approche.</li>
+<li><code>approaching</code> : table <code>vehicle_id -&gt; ApproachData</code>.</li>
 </ul>
-<p>Ces algorithmes sont centraux pour la logique d’intersection du simulateur.</p>
-<h2 id="worked-example-two-conflicting-movements"><a class="header" href="#worked-example-two-conflicting-movements">Worked example: two conflicting movements</a></h2>
-<p>Imaginons une intersection simple avec deux mouvements en conflit: <code>A→B</code> (link id 101) et <code>C→D</code> (link id 201). Leur <code>DrivePlanEntry</code> fournit des fenêtres d’arrivée/départ estimées.</p>
-<p>Supposons:</p>
+<h2 id="construction-des-mouvements"><a class="header" href="#construction-des-mouvements">Construction des mouvements</a></h2>
+<h3 id="build_intersectionsmap"><a class="header" href="#build_intersectionsmap"><code>build_intersections(map)</code></a></h3>
+<p>Recalcule toute la topologie d’intersection à partir du graphe actuel.</p>
 <ul>
-<li>Ego (<code>link_id=101</code>): <code>arrival_time = 12.0</code> s, <code>leave_time = 12.8</code> s</li>
-<li>Foe (<code>link_id=201</code>): <code>arrival_time = 12.3</code> s, <code>leave_time = 13.0</code> s</li>
-</ul>
-<p>La fonction <code>time_window_conflict([12.0,12.8], [12.3,13.0])</code> renvoie <code>true</code> (fenêtres se chevauchent). Si <code>foe</code> a priorité, <code>is_link_open</code> retournera <code>false</code> pour l’ego.</p>
-<h3 id="mermaid-diagram-conflict-schematic"><a class="header" href="#mermaid-diagram-conflict-schematic">Mermaid diagram: conflict schematic</a></h3>
-<pre><code class="language-mermaid">flowchart LR
-	subgraph Intersection
-		A[Approach A]
-		B[Approach B]
-		C[Approach C]
-		D[Approach D]
-	end
-	A -- "link 101" --&gt; B
-	C -- "link 201" --&gt; D
-</code></pre>
-<h2 id="worked-example-priority--traffic-lights"><a class="header" href="#worked-example-priority--traffic-lights">Worked example: priority &amp; traffic lights</a></h2>
+<li><strong>Entrée</strong> : <code>map: &amp;mut Map</code>.</li>
+<li><strong>Action</strong> :
 <ol>
-<li>Si <code>link.link_type == TrafficLight</code> et <code>green_links</code> contient <code>link.id</code>, <code>is_link_open</code> autorise le passage (si les voies internes ne sont pas occupées).</li>
-<li>Si <code>link.link_type == Stop</code>, l’ego doit rester arrêté jusqu’à l’absence de conflit temporel avec ses <code>foe_links</code>.</li>
-<li>Si <code>link.link_type == Yield</code>, on vérifie <code>foe_is_to_the_right</code> pour appliquer priorité à droite lorsque pertinent.</li>
+<li>Réinitialise les identifiants de liens globaux de la carte.</li>
+<li>Pour chaque intersection, vide les trajectoires internes (<code>internal_lanes</code>).</li>
+<li>Pour chaque route, vide la liste des liens sortants des voies.</li>
+<li>Appelle <code>build_intersection</code> pour chaque nœud du graphe.</li>
 </ol>
-<h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging tips</a></h2>
+</li>
+<li><strong>Post-conditions</strong> : La carte est prête pour la simulation avec des intersections configurées géométriquement et logiquement.</li>
+</ul>
+<h3 id="build_intersectionmap-junction"><a class="header" href="#build_intersectionmap-junction"><code>build_intersection(map, junction)</code></a></h3>
+<p>Construit les mouvements et détecte les conflits pour un carrefour unique.</p>
 <ul>
-<li>Inspecter la table <code>link_states: HashMap&lt;u32, LinkState&gt;</code> pour afficher les <code>ApproachData</code> actuels.</li>
-<li>Visualiser <code>intersection.internal_lanes</code> et <code>link.foe_links</code> pour comprendre les blocages.</li>
+<li><strong>Entrées</strong> :
+<ul>
+<li><code>map: &amp;mut Map</code>.</li>
+<li><code>junction: NodeIndex</code>.</li>
+</ul>
+</li>
+<li><strong>Action</strong> :
+<ol>
+<li>Identifie toutes les routes entrantes et sortantes.</li>
+<li>Génère toutes les paires possibles (route_entrante, route_sortante) si elles ne font pas demi-tour (U-turn).</li>
+<li><strong>RawLink</strong> : Utilise une structure interne temporaire pour stocker les caractéristiques de chaque liaison candidate :
+<ul>
+<li>Arêtes source et destination.</li>
+<li>Indices de voies.</li>
+<li>Coordonnées de l’entrée et de la sortie sur le bord du carrefour.</li>
+</ul>
+</li>
+<li>Crée les <code>InternalLane</code> et les <code>Link</code> (liens logiques).</li>
+<li>Analyse les intersections géométriques entre les trajectoires pour peupler les listes de conflits (<code>foe_links</code>).</li>
+<li>Assigne les priorités (Stop, Yield, Priority) selon la configuration ou les types de routes.</li>
+</ol>
+</li>
+</ul>
+<h2 id="aides-géométriques"><a class="header" href="#aides-géométriques">Aides géométriques</a></h2>
+<h3 id="node_coords"><a class="header" href="#node_coords">node_coords</a></h3>
+<p>Récupère les coordonnées d’un nœud.</p>
+<ul>
+<li><strong>Retour</strong> : <code>(f32, f32)</code>.</li>
+</ul>
+<h3 id="boundary_point"><a class="header" href="#boundary_point">boundary_point</a></h3>
+<p>Calcule un point à la périphérie de l’intersection (en fonction de son rayon) dans la direction d’un voisin.</p>
+<ul>
+<li><strong>Entrées</strong> : centre (jx, jy), rayon, point cible (px, py).</li>
+<li><strong>Retour</strong> : <code>(f32, f32)</code>.</li>
+</ul>
+<h3 id="segments_intersect"><a class="header" href="#segments_intersect">segments_intersect</a></h3>
+<p>Détermine si deux segments de droite <code>(p1, p2)</code> et <code>(p3, p4)</code> se croisent physiquement. Utilisé pour la détection de conflits de trajectoires.</p>
+<ul>
+<li><strong>Retour</strong> : <code>bool</code>.</li>
+</ul>
+<h3 id="lane_boundary_point"><a class="header" href="#lane_boundary_point">lane_boundary_point</a></h3>
+<p>Décale un point de bordure perpendiculairement à la direction de la route pour aligner une voie spécifique.</p>
+<ul>
+<li><strong>Entrées</strong> : point de base, vecteur perpendiculaire, index de la voie, largeur de voie.</li>
+<li><strong>Retour</strong> : <code>(f32, f32)</code>.</li>
+</ul>
+<h3 id="dist"><a class="header" href="#dist">dist</a></h3>
+<p>Calcule la distance Euclidienne entre deux points.</p>
+<ul>
+<li><strong>Retour</strong> : <code>f32</code>.</li>
+</ul>
+<h3 id="cross"><a class="header" href="#cross">cross</a></h3>
+<p>Calcule le produit vectoriel de deux vecteurs (OA et OB). Utilisé pour tester l’orientation de points.</p>
+<ul>
+<li><strong>Retour</strong> : <code>f32</code>.</li>
+</ul>
+<h3 id="on_segment"><a class="header" href="#on_segment">on_segment</a></h3>
+<p>Vérifie si un point <code>q</code> se trouve sur le segment <code>pr</code>.</p>
+<ul>
+<li><strong>Retour</strong> : <code>bool</code>.</li>
+</ul>
+<h3 id="lerp"><a class="header" href="#lerp">lerp</a></h3>
+<p>Interpolation linéaire entre deux valeurs <code>a</code> et <code>b</code>.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>a</code>, <code>b</code>, <code>t</code> (facteur entre 0 et 1).</li>
+<li><strong>Retour</strong> : <code>f32</code>.</li>
+</ul>
+<h3 id="perp_right"><a class="header" href="#perp_right">perp_right</a></h3>
+<p>Calcule le vecteur perpendiculaire à droite d’un vecteur directionnel donné.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>dx</code>, <code>dy</code>.</li>
+<li><strong>Retour</strong> : <code>(f32, f32)</code>.</li>
+</ul>
+<h2 id="arbitrage-et-priorité"><a class="header" href="#arbitrage-et-priorité">Arbitrage et priorité</a></h2>
+<h3 id="foe_is_to_the_right"><a class="header" href="#foe_is_to_the_right">foe_is_to_the_right</a></h3>
+<p>Détermine si un lien adverse se trouve à la droite du lien courant (priorité à droite).</p>
+<ul>
+<li><strong>Retour</strong> : <code>bool</code>.</li>
+</ul>
+<h3 id="time_window_conflict"><a class="header" href="#time_window_conflict">time_window_conflict</a></h3>
+<p>Vérifie si deux fenêtres d’occupation d’une intersection se chevauchent.</p>
+<ul>
+<li><strong>Entrées</strong> : heures d’arrivée et de sortie des deux véhicules, vitesses, impatience.</li>
+<li><strong>Action</strong> : Compare les intervalles temporels en tenant compte des marges de sécurité.</li>
+<li><strong>Retour</strong> : <code>bool</code>.</li>
+</ul>
+<h3 id="is_link_open"><a class="header" href="#is_link_open">is_link_open</a></h3>
+<p>Vérifie si un véhicule peut s’engager sur un lien à un instant donné.</p>
+<ul>
+<li><strong>Entrées</strong> : <code>link</code>, <code>vehicle</code>, <code>ego_data</code>, <code>link_states</code>, <code>vehicles_by_lane</code>, <code>vehicles</code>, <code>junction_id</code>, <code>look_ahead</code>, <code>stop_dwell_time</code>, <code>green_links</code>.</li>
+<li><strong>Action</strong> :
+<ul>
+<li>Vérifie si le lien est contrôlé par un feu et si celui-ci est vert.</li>
+<li>Applique l’arrêt obligatoire (dwell time) pour les panneaux Stop.</li>
+<li>Pour chaque lien adverse en conflit (<code>foe_link</code>) :
+<ul>
+<li>Vérifie si un véhicule plus prioritaire a déjà réservé une fenêtre temporelle conflictuelle.</li>
+<li>Applique la règle de priorité à droite si les deux véhicules ont la même priorité de base.</li>
+</ul>
+</li>
+<li>Vérifie si la zone de conflit interne est déjà occupée physiquement.</li>
+<li>Gère l’impatience : un véhicule bloqué trop longtemps réduit ses marges de sécurité perçues.</li>
+</ul>
+</li>
+<li><strong>Retour</strong> : <code>bool</code>.</li>
+</ul>
+<pre><code class="language-mermaid">graph TD
+    Start[Appel is_link_open] --&gt; Internal{Déjà dans carrefour?}
+    Internal -- Oui --&gt; Open[Retour True]
+    Internal -- Non --&gt; Stop{Type Stop?}
+    Stop -- Oui --&gt; Dwell{Attendu assez longtemps?}
+    Dwell -- Non --&gt; Closed[Retour False]
+    Dwell -- Oui --&gt; TL{Type Feu?}
+    Stop -- Non --&gt; TL
+    TL -- Rouge --&gt; Closed
+    TL -- Vert/Pas de feu --&gt; Foes[Parcours foe_links]
+    Foes --&gt; MustYield{Prioritaire sur Foe?}
+    MustYield -- Non --&gt; NextFoe[Foe suivant]
+    MustYield -- Oui --&gt; Conflict{Conflit temporel?}
+    Conflict -- Oui --&gt; Closed
+    Conflict -- Non --&gt; NextFoe
+    NextFoe -- Plus de foes --&gt; Occupied{Zone interne occupée?}
+    Occupied -- Oui --&gt; Closed
+    Occupied -- Non --&gt; Open
+</code></pre>
+<h2 id="ce-quil-faut-retenir"><a class="header" href="#ce-quil-faut-retenir">Ce qu’il faut retenir</a></h2>
+<ul>
+<li><code>build_intersections</code> est appelée après toute modification de la topologie.</li>
+<li>Les conflits sont résolus à partir de la géométrie et des fenêtres temporelles.</li>
+<li><code>ApproachData</code> et <code>LinkState</code> sont les objets centraux de l’arbitrage.</li>
 </ul>
 
                     </main>
@@ -227,7 +398,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../map/link_ids.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../map/editor.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -241,7 +412,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../map/link_ids.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../map/editor.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -286,10 +457,10 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid-loader-58f8d2c4.js"></script>
-        <script src="../mermaid-init-1ea3646b.js"></script>
-        <script src="../katex-loader-1f369d43.js"></script>
-        <script src="../katex-init-7f5dd265.js"></script>
+        <script src="../mermaid-loader-1508ae7a.js"></script>
+        <script src="../mermaid-init-49a54d84.js"></script>
+        <script src="../katex-loader-d2c37f60.js"></script>
+        <script src="../katex-init-c90d5c99.js"></script>
 
 
 
