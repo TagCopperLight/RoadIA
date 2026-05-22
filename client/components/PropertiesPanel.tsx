@@ -1,8 +1,14 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { SelectedElement } from './EditModeContext';
 import { MapData, MapNode, MapEdge, InternalLane, SignalPhase } from './map/types';
+
+type LocalPhase = SignalPhase & { _key: number };
+let _phaseKeyCounter = 0;
+function toLocalPhases(serverPhases: SignalPhase[]): LocalPhase[] {
+    return serverPhases.map(p => ({ ...p, _key: _phaseKeyCounter++ }));
+}
 
 const LINK_TYPE_COLORS: Record<string, string> = {
     Priority:     '#22c55e',
@@ -33,11 +39,6 @@ function NodePanel({
         setPrevKind(node.kind);
         setKind(node.kind);
     }
-
-    type LocalPhase = SignalPhase & { _key: number };
-    const nextKeyRef = useRef(0);
-    const toLocalPhases = (serverPhases: SignalPhase[]): LocalPhase[] =>
-        serverPhases.map(p => ({ ...p, _key: nextKeyRef.current++ }));
 
     const [phases, setPhases] = useState<LocalPhase[]>(() =>
         toLocalPhases(node.traffic_light_controller?.phases ?? [])
@@ -79,7 +80,7 @@ function NodePanel({
         setPhases(prev => [
             ...prev,
             {
-                _key: nextKeyRef.current++,
+                _key: _phaseKeyCounter++,
                 green_link_ids: [],
                 green_duration: 10,
                 yellow_duration: 3,
