@@ -36,6 +36,7 @@ export function Vehicle({ data }: VehicleProps) {
             x={data.x}
             y={data.y}
             rotation={data.heading ?? 0}
+            alpha={1.0}
             draw={drawCar}
         />
     );

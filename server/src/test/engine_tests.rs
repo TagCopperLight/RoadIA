@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+use crate::api::runner::map_generator::create_traffic_light_test_map;
+use crate::api::websocket::serialize_traffic_lights;
+use crate::map::editor::delete_road;
 use crate::simulation::engine::{lane_insert_sorted, Simulation, SimulationEngine};
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleState};
 use crate::test::{make_minimal_straight_map, make_sim_config, make_vehicle};
@@ -256,4 +259,37 @@ fn step_impatience_resets_after_moving() {
     assert_eq!(engine.vehicles[0].state, VehicleState::Arrived);
     // After arriving, impatience should be zero (reset when moving freely)
     assert_eq!(engine.vehicles[0].impatience, 0.0);
+}
+
+#[test]
+fn rebuild_runtime_caches_refreshes_traffic_light_road_ids_after_edit() {
+    let map = create_traffic_light_test_map();
+    let controller_id = *map.traffic_lights.keys().next().unwrap();
+    let mut engine = SimulationEngine::new(make_sim_config(map, 300.0), vec![]);
+
+    let before = serialize_traffic_lights(&engine.config.map, &engine.controller_green_road_ids);
+    let before_green_road_ids: Vec<u32> = before[0]["green_road_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|value| value.as_u64().unwrap() as u32)
+        .collect();
+    assert!(!before_green_road_ids.is_empty());
+
+    let deleted_road_id = before_green_road_ids[0];
+    delete_road(&mut engine.config.map, deleted_road_id).unwrap();
+    engine.rebuild_runtime_caches();
+
+    let after = serialize_traffic_lights(&engine.config.map, &engine.controller_green_road_ids);
+    let after_green_road_ids: Vec<u32> = after
+        .iter()
+        .find(|entry| entry["id"].as_u64().unwrap() as u32 == engine.config.map.traffic_lights[&controller_id].intersection_id)
+        .and_then(|entry| entry["green_road_ids"].as_array())
+        .unwrap()
+        .iter()
+        .map(|value| value.as_u64().unwrap() as u32)
+        .collect();
+
+    assert_ne!(before_green_road_ids, after_green_road_ids);
+    assert!(!after_green_road_ids.contains(&deleted_road_id));
 }

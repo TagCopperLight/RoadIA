@@ -44,6 +44,13 @@ export interface VehicleData {
     origin_id?: number;
     destination_id?: number;
     waypoint_ids?: number[];
+	commute_plan_id: number | null;
+}
+
+export interface VehicleUpdatePacket {
+	vehicles: VehicleData[];
+	traffic_lights: TrafficLightData[];
+	simulation_time_s: number;
 }
 
 export interface VehicleSummary {
@@ -52,6 +59,7 @@ export interface VehicleSummary {
     destination_id: number;
     motorization: Motorization;
     waypoint_ids: number[];
+	commute_plan_id: number | null;
 }
 
 export interface BusLine {
@@ -80,4 +88,8 @@ export interface ScoreData {
 	network_length: number;
 	ref_network_length: number;
 	success_rate: number;
+}
+
+export interface ScoreProgressPacket {
+	progress: number;
 }

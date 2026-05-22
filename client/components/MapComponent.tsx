@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePacket, useWs } from '@/app/websocket/websocket';
 import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
-import { BusLine, MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary } from './map/types';
+import { BusLine, MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary, VehicleUpdatePacket, ScoreProgressPacket } from './map/types';
 import ScoreModal from './ScoreModal';
 import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
@@ -17,6 +17,8 @@ import { calculateCost, estimateRoadCost, estimateNodeCost, DEFAULT_BUDGET_CONFI
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
+const clampProgress = (value: number) => Math.max(0, Math.min(100, value));
+
 export default function MapComponent({ uuid }: { uuid: string }) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
@@ -25,12 +27,14 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
 	const [roadDensity, setRoadDensity] = useState<Map<number, number>>(new Map());
+	const [simulationTime, setSimulationTime] = useState(0);
 	const [editError, setEditError] = useState<string | null>(null);
 	const ws = useWs();
 	const {
 		mode, editTool, selectedElement, pendingRoadFrom, simState,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
+		scoreProgress, setScoreProgress,
 		densityView, setDensityView, isDensityLoading, setIsDensityLoading,
 		showIntersections,
 		showSettings, setShowSettings, mapSettings, setMapSettings,
@@ -46,7 +50,12 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	useEffect(() => {
 		fetch(`${API_URL}/api/simulations/${uuid}/settings`)
 			.then(r => r.json())
-			.then(data => setMapSettings(data))
+			.then(data => {
+				setMapSettings(data);
+				if (typeof data?.simulation_start_time === 'number') {
+					setSimulationTime(data.simulation_start_time);
+				}
+			})
 			.catch(() => {});
 	}, [uuid, setMapSettings]);
 
@@ -81,7 +90,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 
 	usePacket("vehicleUpdate", (data) => {
 		if (simStateRef.current === 'stopped' || modeRef.current === 'edit') return;
-		const update = data as { vehicles?: VehicleData[], traffic_lights?: TrafficLightData[] };
+		const update = data as VehicleUpdatePacket;
 		if (update && Array.isArray(update.vehicles)) {
 			setVehicles(update.vehicles as VehicleData[]);
 		}
@@ -94,6 +103,9 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				);
 				return changed ? next : prev;
 			});
+		}
+		if (typeof update?.simulation_time_s === 'number') {
+			setSimulationTime(update.simulation_time_s);
 		}
 	});
 
@@ -113,8 +125,17 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 
 	usePacket("score", (data) => {
 		setScore(data as ScoreData);
+		setScoreProgress(100);
 		setIsScoringLoading(false);
 		setShowScore(true);
+	});
+
+	usePacket("scoreProgress", (data) => {
+		const result = data as ScoreProgressPacket;
+		if (typeof result?.progress === 'number') {
+			const nextProgress = clampProgress(result.progress);
+			setScoreProgress(prev => Math.max(prev ?? 0, nextProgress));
+		}
 	});
 
 	usePacket("densityMap", (data) => {
@@ -176,9 +197,20 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			setRoadDensity(new Map());
 			setDensityView(false);
 			setIsDensityLoading(false);
+			setSimulationTime(mapSettings?.simulation_start_time ?? 0);
 		}, 0);
 		return () => clearTimeout(t);
-	}, [simulationResetAt]); // eslint-disable-line react-hooks/exhaustive-deps
+	}, [simulationResetAt, mapSettings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+	const formatSimulationTime = (seconds: number) => {
+		const totalSeconds = Math.max(0, Math.floor(seconds));
+		const hours = Math.floor(totalSeconds / 3600);
+		const minutes = Math.floor((totalSeconds % 3600) / 60);
+		const secs = totalSeconds % 60;
+		return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+	};
+	const scoreProgressValue = scoreProgress === null ? null : clampProgress(scoreProgress);
+	const scoreProgressLabel = scoreProgressValue === null ? null : Math.round(scoreProgressValue);
 
 	const handleAddNode = useCallback((x: number, y: number) => {
 		if (mapData) {
@@ -318,6 +350,11 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 				<BudgetHUD mapData={mapData} />
 				<Legend />
+				{mode === 'simulation' && (
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-black/80 text-white rounded-full shadow-md px-4 py-2 z-30 font-mono text-sm tabular-nums pointer-events-none">
+						{formatSimulationTime(simulationTime)}
+					</div>
+				)}
 				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
 					<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 				</div>
@@ -329,9 +366,24 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 
 				{isScoringLoading && (
-					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
-						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
-						<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-3 rounded-2xl shadow-lg z-40 min-w-[280px]">
+						<div className="flex items-center gap-3">
+							<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
+							<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
+							{scoreProgressLabel !== null && (
+								<span className="ml-auto text-sm font-semibold text-neutral-900 tabular-nums">
+									{scoreProgressLabel}%
+								</span>
+							)}
+						</div>
+						{scoreProgressValue !== null && (
+							<div className="mt-3 h-2 w-full rounded-full bg-neutral-200 overflow-hidden">
+								<div
+									className="h-full rounded-full bg-neutral-900 transition-[width] duration-150"
+									style={{ width: `${scoreProgressValue}%` }}
+								/>
+							</div>
+						)}
 					</div>
 				)}
 
@@ -343,7 +395,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 
 				{showScore && score && (
-					<ScoreModal score={score} onClose={() => setShowScore(false)} />
+					<ScoreModal score={score} onClose={() => { setShowScore(false); setScoreProgress(null); }} />
 				)}
 
 				{showSettings && (

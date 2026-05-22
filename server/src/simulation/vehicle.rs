@@ -81,6 +81,7 @@ pub struct Vehicle {
     pub id: u64,
     pub spec: VehicleSpec,
     pub trip: TripRequest,
+    pub commute_plan_id: Option<u64>,
     pub state: VehicleState,
     pub motorization: VehicleType,
     pub waypoints: Vec<NodeIndex>,
@@ -120,6 +121,7 @@ impl Vehicle {
             id,
             spec,
             trip,
+            commute_plan_id: None,
             state: VehicleState::WaitingToDepart,
             motorization,
             waypoints: Vec::new(),
@@ -139,7 +141,7 @@ impl Vehicle {
         }
     }
 
-    pub fn update_path(&mut self, map: &Map) {
+    pub fn update_path(&mut self, map: &Map) -> bool {
         let mut stops: Vec<NodeIndex> = self.waypoints.clone();
         stops.push(self.trip.destination);
         let mut full_path = vec![self.trip.origin];
@@ -147,14 +149,29 @@ impl Vehicle {
         for &stop in &stops {
             match fastest_path(map, current, stop) {
                 Some(seg) => {
+                    if seg.len() < 2 {
+                        self.path.clear();
+                        self.path_index = 0;
+                        return false;
+                    }
                     full_path.extend_from_slice(&seg[1..]);
                     current = stop;
                 }
-                None => return,
+                None => {
+                    self.path.clear();
+                    self.path_index = 0;
+                    return false;
+                }
             }
+        }
+        if full_path.len() < 2 {
+            self.path.clear();
+            self.path_index = 0;
+            return false;
         }
         self.path = full_path;
         self.path_index = 0;
+        true
     }
 
     pub fn compute_acceleration(
