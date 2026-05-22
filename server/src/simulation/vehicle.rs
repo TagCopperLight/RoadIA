@@ -160,10 +160,8 @@ impl Vehicle {
                 None => return,
             }
         }
-        // Ensure path_index points to the current node within the new path
-        let new_index = full_path.iter().position(|&n| n == start).unwrap_or(0);
         self.path = full_path;
-        self.path_index = new_index;
+        self.path_index = 0; // full_path always starts at `start`
         // NOTE: Do NOT clear drive_plan/registered_link_ids here. The simulation engine
         // will rebuild them naturally when rebuild_drive_plan is called in the next step.
         // Clearing them prematurely would cause enter_junction_or_arrive to abort movement.

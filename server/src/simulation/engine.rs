@@ -611,11 +611,8 @@ impl SimulationEngine {
         self.vehicles[vidx].path_index += 1;
 
         let pi = self.vehicles[vidx].path_index;
-        let vid = self.vehicles[vidx].id;
-        let path_len = self.vehicles[vidx].path.len();
         let current_node_idx = self.vehicles[vidx].path.get(pi).copied();
-        let _current_node_id = current_node_idx.map(|ni| self.config.map.graph[ni].id);
-        
+
         // Check if current node is a waypoint and consume it
         if let Some(current_idx) = current_node_idx {
             if let Some(pos) = self.vehicles[vidx].waypoints.iter().position(|&w| w == current_idx) {
@@ -661,7 +658,6 @@ impl SimulationEngine {
         let road_len = self.config.map.graph[in_edge].length;
         let pi = self.vehicles[vidx].path_index;
         let path_len = self.vehicles[vidx].path.len();
-        let vid = self.vehicles[vidx].id;
 
         if pi + 1 >= path_len - 1 {
             if matches!(self.vehicles[vidx].spec.kind, VehicleKind::Bus) {
