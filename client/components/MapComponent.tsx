@@ -31,7 +31,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	const [editError, setEditError] = useState<string | null>(null);
 	const ws = useWs();
 	const {
-		mode, editTool, selectedElement, pendingRoadFrom, simState,
+		mode, editTool, selectedElement, pendingRoadFrom,
 		setSelectedElement, setPendingRoadFrom, setEditTool, simulationResetAt,
 		showScore, setShowScore, isScoringLoading, setIsScoringLoading,
 		scoreProgress, setScoreProgress,
@@ -59,10 +59,8 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			.catch(() => {});
 	}, [uuid, setMapSettings]);
 
-	const simStateRef = useRef(simState);
 	const modeRef = useRef(mode);
 	useEffect(() => {
-		simStateRef.current = simState;
 		modeRef.current = mode;
 	});
 
@@ -75,6 +73,13 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			ws?.send('requestBusLines', {});
 		}
 	}, [editTool, ws]);
+
+	// Request the current vehicle snapshot when entering simulation mode or after a reset.
+	useEffect(() => {
+		if (mode === 'simulation') {
+			ws?.send('requestVehicleUpdate', {});
+		}
+	}, [mode, simulationResetAt, ws]);
 
 	// Refs for auto-selecting newly created nodes
 	const pendingNewNodeRef = useRef(false);
@@ -89,7 +94,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	});
 
 	usePacket("vehicleUpdate", (data) => {
-		if (simStateRef.current === 'stopped' || modeRef.current === 'edit') return;
+		if (modeRef.current === 'edit') return;
 		const update = data as VehicleUpdatePacket;
 		if (update && Array.isArray(update.vehicles)) {
 			setVehicles(update.vehicles as VehicleData[]);
