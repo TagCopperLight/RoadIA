@@ -13,15 +13,22 @@ RoadIA est un éditeur de réseau routier et un simulateur de trafic en temps r�
 
 ---
 
-## Docker
+## Installation et lancement avec Docker
 
-### Prérequis
+### 1. Cloner le projet avec Git
+
+```bash
+git clone https://github.com/TagCopperLight/RoadIA
+cd RoadIA
+```
+
+### 2. Prérequis
 
 - Docker 20.10+
 - Docker Compose v2 (plugin, `docker compose`)
 
-### Lancement
-2
+### 3. Lancement
+
 ```bash
 docker compose up --build
 ```
@@ -29,6 +36,8 @@ docker compose up --build
 Services:
 - **client** — application Next.js
 - **server** — API Rust et moteur de simulation
+
+On peut accéder à l'application sur `http://localhost:3000`.
 
 ---
 
@@ -41,11 +50,12 @@ git clone https://github.com/TagCopperLight/RoadIA
 cd RoadIA
 ```
 
+ou cliquer sur `Code` puis `Download ZIP`.
+
 ### 2. Prérequis
 
 - **Frontend**: Node.js 25+, npm
 - **Backend**: Rust stable (1.88+), Cargo
-- **Optionnel**: Docker et Docker Compose si vous souhaitez lancer l'application via conteneurs
 
 ### 3. Installer et lancer le frontend
 
@@ -81,6 +91,8 @@ Commandes utiles:
 cargo build --release   # compilation optimisée
 cargo test --all-features   # exécution des tests
 ```
+
+Il est aussi possible de télécharger un binaire précompilé sur la page [releases](https://github.com/TagCopperLight/RoadIA/releases).
 
 ---
 
