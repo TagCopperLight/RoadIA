@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::api::websocket::{ServerPacket, serialize_vehicle, serialize_traffic_lights};
 use crate::simulation::config::SimulationConfig;
 use crate::simulation::engine::{Simulation, SimulationEngine};
-use crate::api::runner::map_generator::{create_random_vehicles, create_osm_map};
+use crate::api::runner::map_generator::{create_random_commutes, create_osm_map};
 
 
 #[derive(Clone)]
@@ -46,6 +46,7 @@ pub struct SimulationInstance {
     pub engine: Arc<Mutex<SimulationEngine>>,
     pub initial_engine: Arc<Mutex<SimulationEngine>>,
     pub broadcast: broadcast::Sender<ServerPacket>,
+    pub score_progress_broadcast: broadcast::Sender<ServerPacket>,
     pub controller: SimulationController,
     pub active_connections: AtomicUsize,
     pub speed_multiplier: AtomicU32,
@@ -54,29 +55,43 @@ pub struct SimulationInstance {
 
 impl SimulationInstance {
     pub fn new(map: crate::map::model::Map) -> Arc<Self> {
-        let vehicle_count = map.settings.vehicle_count;
-        let end_time = map.settings.simulation_duration;
-        let vehicles = create_random_vehicles(&map, vehicle_count);
+        let commute_plan_count = map.settings.vehicle_count;
+        let end_time = if map.settings.use_day_night_cycle {
+            86_400.0f32
+        } else {
+            map.settings.simulation_start_time + 3_600.0f32
+        };
+        println!(
+            "Simulation settings: vehicle_count={}, simulation_start_time={}, time_step={}",
+            map.settings.vehicle_count,
+            map.settings.simulation_start_time,
+            map.settings.time_step,
+        );
+        let generated = create_random_commutes(&map, commute_plan_count);
         let token = generate_token();
 
         let config = SimulationConfig {
-            start_time: 0.0,
+            start_time: map.settings.simulation_start_time,
             end_time,
-            time_step: 0.05,
+            time_step: map.settings.time_step,
             minimum_gap: 2.0,
             score_weights: crate::simulation::config::ScoreWeights::from_settings(&map.settings),
             map,
         };
 
-        let mut simulation = SimulationEngine::new(config, vehicles);
-        for vehicle in &mut simulation.vehicles {
-            vehicle.update_path(&simulation.config.map);
+        let mut simulation = SimulationEngine::new_with_commutes(config, generated.vehicles, generated.commute_plans);
+
+        // Recreate bus vehicles from saved bus lines in the map
+        simulation.next_bus_line_id = simulation.config.map.next_bus_line_id;
+        for bl in simulation.config.map.bus_lines.clone() {
+            simulation.add_bus_from_saved(&bl);
         }
 
         let initial_snapshot = simulation.clone();
         let engine = Arc::new(Mutex::new(simulation));
         let initial_engine = Arc::new(Mutex::new(initial_snapshot));
-        let (broadcast, _) = broadcast::channel(100);
+        let (broadcast, _) = broadcast::channel(50);
+        let (score_progress_broadcast, _) = broadcast::channel(100);
         let controller = SimulationController::new();
 
         let instance = Arc::new(Self {
@@ -84,6 +99,7 @@ impl SimulationInstance {
             engine,
             initial_engine,
             broadcast,
+            score_progress_broadcast,
             controller,
             active_connections: AtomicUsize::new(0),
             speed_multiplier: AtomicU32::new(3),
@@ -108,37 +124,41 @@ impl SimulationInstance {
                     let start = tokio::time::Instant::now();
                     let multiplier = instance.speed_multiplier.load(Ordering::Relaxed) as usize;
 
-                    let (vehicles_data, traffic_lights_data, time_step) = {
+                    let (map_snapshot, vehicles_snapshot, controller_green_road_ids, simulation_time_s, time_step, finished) = {
                         let mut eng = instance.engine.lock().await;
                         for _ in 0..multiplier {
                             eng.step();
                             eng.current_time += eng.config.time_step;
                         }
-                        let vehicles = eng.vehicles
-                            .iter()
-                            .map(|v| serialize_vehicle(v, &eng.config.map))
-                            .collect::<Vec<_>>();
-                        let tl = serialize_traffic_lights(&eng.config.map, &eng.green_links);
+                        let map_snapshot = eng.config.map.clone();
+                        let vehicles_snapshot = eng.vehicles.clone();
+                        let controller_green_road_ids = eng.controller_green_road_ids.clone();
+                        let finished = eng.all_vehicles_arrived || eng.current_time >= eng.config.end_time;
                         let ts = eng.config.time_step;
-                        (vehicles, tl, ts)
+                        (map_snapshot, vehicles_snapshot, controller_green_road_ids, eng.current_time, ts, finished)
                     };
+
+                    let mut vehicles_data = Vec::with_capacity(vehicles_snapshot.len());
+                    for vehicle in &vehicles_snapshot {
+                        vehicles_data.push(serialize_vehicle(vehicle, &map_snapshot));
+                    }
+                    let traffic_lights_data = serialize_traffic_lights(&map_snapshot, &controller_green_road_ids);
 
                     let packet = ServerPacket::VehicleUpdate {
                         vehicles: vehicles_data,
                         traffic_lights: traffic_lights_data,
+                        simulation_time_s,
                     };
                     let _ = instance.broadcast.send(packet);
 
                     let elapsed = start.elapsed();
-                    let step_duration = Duration::from_secs_f32(time_step / multiplier as f32);
+                    let step_duration = Duration::from_secs_f32(time_step / multiplier as f32)
+                        .max(Duration::from_millis(50));
 
-                    {
-                        let engine = instance.engine.lock().await;
-                        if engine.all_vehicles_arrived || engine.current_time >= engine.config.end_time {
-                            instance.controller.stop();
-                            let _ = instance.broadcast.send(ServerPacket::SimulationFinished {});
-                            println!("Simulation finished");
-                        }
+                    if finished {
+                        instance.controller.stop();
+                        let _ = instance.broadcast.send(ServerPacket::SimulationFinished {});
+                        println!("Simulation finished");
                     }
 
                     drop(instance);

@@ -12,7 +12,27 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::api::websocket::ws_handler;
 use crate::api::runner::map_generator::create_osm_map;
 use crate::map::model::MapSettings;
+use crate::simulation::config::ScoreWeights;
 use super::runner::SimulationInstance;
+
+fn validate_map_settings(settings: &MapSettings) -> Result<(), (axum::http::StatusCode, String)> {
+    if !(0.0..=MapSettings::MAX_SIMULATION_START_TIME_S).contains(&settings.simulation_start_time) {
+        return Err((axum::http::StatusCode::BAD_REQUEST, format!(
+            "Simulation start time must be between 0 and {} seconds",
+            MapSettings::MAX_SIMULATION_START_TIME_S as u32
+        )));
+    }
+    if !(0.0..=1.0).contains(&settings.time_step) || settings.time_step == 0.0 {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Time step must be greater than 0 and at most 1 second".to_string()));
+    }
+
+    let weight_sum = settings.time_weight + settings.success_weight + settings.pollution_weight + settings.infrastructure_weight;
+    if (weight_sum - 1.0).abs() > 0.01 {
+        return Err((axum::http::StatusCode::BAD_REQUEST, "Score weights must sum to 1.0".to_string()));
+    }
+
+    Ok(())
+}
 
 pub struct AppState {
     pub simulations: Arc<RwLock<HashMap<Uuid, Arc<SimulationInstance>>>>,
@@ -267,10 +287,7 @@ async fn update_simulation_settings_handler(
     axum::extract::Path(uuid): axum::extract::Path<Uuid>,
     Json(payload): Json<MapSettings>,
 ) -> Result<Json<serde_json::Value>, (axum::http::StatusCode, String)> {
-    let weight_sum = payload.time_weight + payload.success_weight + payload.pollution_weight + payload.infrastructure_weight;
-    if (weight_sum - 1.0).abs() > 0.01 {
-        return Err((axum::http::StatusCode::BAD_REQUEST, "Score weights must sum to 1.0".to_string()));
-    }
+    validate_map_settings(&payload)?;
 
     let simulations = state.simulations.read().await;
     let instance = simulations.get(&uuid).ok_or_else(|| (axum::http::StatusCode::NOT_FOUND, "Simulation not found".to_string()))?;
@@ -279,6 +296,7 @@ async fn update_simulation_settings_handler(
 
     {
         let mut engine = instance.engine.lock().await;
+        engine.config.score_weights = ScoreWeights::from_settings(&payload);
         engine.config.map.settings = payload;
 
         if let Some(fid) = file_uuid {

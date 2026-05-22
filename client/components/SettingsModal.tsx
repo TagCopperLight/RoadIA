@@ -12,6 +12,12 @@ interface SettingsModalProps {
 type Section = 'simulation' | 'budget' | 'score';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+<<<<<<< HEAD
+=======
+const SIMULATION_START_TIME_MAX_S = 39_600;
+const TIME_STEP_MIN_S = 0.01;
+const TIME_STEP_MAX_S = 1;
+>>>>>>> origin/dev
 
 export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
     const { setMapSettings, setSimState, setShowScore, setSimulationResetAt } = useEditMode();
@@ -110,8 +116,13 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                             {section === 'simulation' && (
                                 <div className="space-y-5">
                                     <FieldRow
+<<<<<<< HEAD
                                         label="Nombre de véhicules"
                                         hint="Simulés lors de chaque simulation"
+=======
+                                        label="Nombre de trajets"
+                                        hint="Chaque trajet crée 2 véhicules"
+>>>>>>> origin/dev
                                     >
                                         <NumberInput
                                             value={form.vehicle_count}
@@ -120,6 +131,7 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                                         />
                                     </FieldRow>
                                     <FieldRow
+<<<<<<< HEAD
                                         label="Durée de simulation"
                                         hint="En secondes"
                                     >
@@ -127,6 +139,25 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                                             value={form.simulation_duration}
                                             min={60} max={3600} step={60}
                                             onChange={v => set('simulation_duration', v)}
+=======
+                                        label="Heure de début"
+                                        hint="En secondes depuis minuit"
+                                    >
+                                        <NumberInput
+                                            value={form.simulation_start_time}
+                                            min={0} max={SIMULATION_START_TIME_MAX_S} step={300}
+                                            onChange={v => set('simulation_start_time', v)}
+                                        />
+                                    </FieldRow>
+                                    <FieldRow
+                                        label="Pas de temps"
+                                        hint="Entre 0 et 1 seconde"
+                                    >
+                                        <NumberInput
+                                            value={form.time_step}
+                                            min={TIME_STEP_MIN_S} max={TIME_STEP_MAX_S} step={TIME_STEP_MIN_S}
+                                            onChange={v => set('time_step', v)}
+>>>>>>> origin/dev
                                         />
                                     </FieldRow>
                                 </div>

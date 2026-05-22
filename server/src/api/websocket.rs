@@ -9,15 +9,18 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tokio::sync::broadcast;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use crate::map::intersection::IntersectionKind;
 use crate::map::model::Map;
 use crate::map::editor;
+use crate::scoring::Score;
 use crate::simulation::engine::Simulation;
+use crate::simulation::engine::SimulationEngine;
 use crate::simulation::vehicle::{LaneId, Vehicle, VehicleKind, VehicleState, VehicleType};
+use crate::simulation::engine::BusLine;
 use crate::api::runner::runner::SimulationInstance;
 use crate::api::runner::handlers::AppState;
-use crate::api::runner::map_generator::create_random_vehicles;
+use crate::api::runner::map_generator::create_random_commutes;
 
 #[derive(Debug, Deserialize)]
 pub struct ConnectParams {
@@ -41,8 +44,12 @@ pub enum ClientPacket {
     SetSpeed { multiplier: u32 },
     RequestScore {},
     RequestDensity {},
+    RequestVehicleUpdate {},
     AddWaypoints { vehicle_id: u64, node_ids: Vec<u32> },
     RequestVehicles {},
+    CreateBusLine { name: String, stop_node_ids: Vec<u32> },
+    DeleteBusLine { bus_line_id: u64 },
+    RequestBusLines {},
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -50,7 +57,7 @@ pub enum ClientPacket {
 #[serde(rename_all = "camelCase")]
 pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
-    VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value> },
+    VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value>, simulation_time_s: f32 },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
     Score {
         score: f32,
@@ -61,9 +68,11 @@ pub enum ServerPacket {
         network_length: f32,
         ref_network_length: f32,
         success_rate: f32, },
+    ScoreProgress { progress: f32 },
     SimulationFinished {},
     DensityMap { edges: Vec<Value> },
     VehicleList { vehicles: Vec<Value> },
+    BusLineList { bus_lines: Vec<Value> },
 }
 
 pub async fn ws_handler(
@@ -113,6 +122,7 @@ async fn ws_loop(
 ) {
     instance.active_connections.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let mut rx = instance.broadcast.subscribe();
+    let mut score_progress_rx = instance.score_progress_broadcast.subscribe();
     println!("New WebSocket client connected");
 
     // Send initial map state immediately on connect
@@ -138,6 +148,17 @@ async fn ws_loop(
             }
             packet = rx.recv() => {
                 match packet {
+                    Ok(packet) => {
+                        if !process_broadcast_msg(packet, &mut socket).await {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            score_progress = score_progress_rx.recv() => {
+                match score_progress {
                     Ok(packet) => {
                         if !process_broadcast_msg(packet, &mut socket).await {
                             break;
@@ -199,6 +220,69 @@ async fn process_broadcast_msg(packet: ServerPacket, socket: &mut WebSocket) -> 
     true
 }
 
+#[cfg(test)]
+pub(crate) fn run_score_request_with_progress(
+    sim: SimulationEngine,
+    broadcast: broadcast::Sender<ServerPacket>,
+) {
+    run_score_request_with_progress_internal(
+        sim,
+        ScoreRequestChannels {
+            score: broadcast.clone(),
+            progress: broadcast,
+        },
+    );
+}
+
+#[derive(Clone)]
+struct ScoreRequestChannels {
+    score: broadcast::Sender<ServerPacket>,
+    progress: broadcast::Sender<ServerPacket>,
+}
+
+fn run_score_request_with_progress_internal(
+    mut sim: SimulationEngine,
+    channels: ScoreRequestChannels,
+) {
+    for vehicle in &mut sim.vehicles {
+        vehicle.update_path(&sim.config.map);
+    }
+
+    let remaining_duration = (sim.config.end_time - sim.current_time).max(0.0);
+    let total_ticks = if sim.config.time_step > 0.0 {
+        (remaining_duration / sim.config.time_step).ceil().max(1.0) as usize
+    } else {
+        1
+    };
+    let report_every = (total_ticks / 100).max(1);
+
+    let mut completed_ticks = 0usize;
+    while sim.current_time < sim.config.end_time {
+        sim.step();
+        sim.current_time += sim.config.time_step;
+        completed_ticks += 1;
+
+        if completed_ticks % report_every == 0 {
+            let progress = ((completed_ticks as f32 / total_ticks as f32) * 100.0).min(99.0);
+            let _ = channels.progress.send(ServerPacket::ScoreProgress { progress });
+        }
+    }
+
+    let _ = channels.progress.send(ServerPacket::ScoreProgress { progress: 100.0 });
+
+    let score: Score = sim.get_score();
+    let _ = channels.score.send(ServerPacket::Score {
+        score: score.score,
+        total_trip_time: score.total_trip_time,
+        ref_total_trip_time: score.ref_total_trip_time,
+        total_emitted_co2: score.total_emitted_co2,
+        ref_total_emitted_co2: score.ref_total_emitted_co2,
+        network_length: score.network_length,
+        ref_network_length: score.ref_network_length,
+        success_rate: score.success_rate,
+    });
+}
+
 async fn handle_client_packet(
     packet: ClientPacket,
     socket: &mut WebSocket,
@@ -210,7 +294,10 @@ async fn handle_client_packet(
         }
 
         ClientPacket::RequestScore {} => {
-            let broadcast = instance.broadcast.clone();
+            let channels = ScoreRequestChannels {
+                score: instance.broadcast.clone(),
+                progress: instance.score_progress_broadcast.clone(),
+            };
             let engine = instance.initial_engine.clone();
             tokio::spawn(async move {
                 let sim_clone = {
@@ -218,22 +305,11 @@ async fn handle_client_packet(
                     eng.clone()
                 };
 
-                let score = tokio::task::spawn_blocking(move || {
-                    let mut sim = sim_clone;
-                    sim.run();
-                    sim.get_score()
-                }).await.expect("score computation panicked");
+                let _ = channels.progress.send(ServerPacket::ScoreProgress { progress: 1.0 });
 
-                let _ = broadcast.send(ServerPacket::Score {
-                    score: score.score,
-                    total_trip_time: score.total_trip_time,
-                    ref_total_trip_time: score.ref_total_trip_time,
-                    total_emitted_co2: score.total_emitted_co2,
-                    ref_total_emitted_co2: score.ref_total_emitted_co2,
-                    network_length: score.network_length,
-                    ref_network_length: score.ref_network_length,
-                    success_rate: score.success_rate,
-                });
+                tokio::task::spawn_blocking(move || {
+                    run_score_request_with_progress_internal(sim_clone, channels)
+                }).await.expect("score computation panicked");
             });
         }
 
@@ -285,6 +361,23 @@ async fn handle_client_packet(
             });
         }
 
+        ClientPacket::RequestVehicleUpdate {} => {
+            let eng = instance.engine.lock().await;
+            let map_snapshot = eng.config.map.clone();
+            let vehicles = eng.vehicles.iter()
+                .map(|vehicle| serialize_vehicle(vehicle, &map_snapshot))
+                .collect::<Vec<_>>();
+            let traffic_lights = serialize_traffic_lights(&map_snapshot, &eng.controller_green_road_ids);
+            let packet = ServerPacket::VehicleUpdate {
+                vehicles,
+                traffic_lights,
+                simulation_time_s: eng.current_time,
+            };
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
+            }
+        }
+
         ClientPacket::StopSimulation {} => {
             instance.controller.stop();
         }
@@ -292,40 +385,38 @@ async fn handle_client_packet(
         ClientPacket::ResetSimulation {} => {
             instance.controller.stop();
             let mut eng = instance.engine.lock().await;
-            eng.current_time = 0.0;
-            eng.vehicles_by_lane.clear();
-            eng.link_states.clear();
-
-            for vehicle in &mut eng.vehicles {
-                vehicle.state = VehicleState::WaitingToDepart;
-                vehicle.position_on_lane = 0.0;
-                vehicle.velocity = 0.0;
-                vehicle.previous_velocity = 0.0;
-                vehicle.path = Vec::new();
-                vehicle.path_index = 0;
-                vehicle.current_lane = None;
-                vehicle.drive_plan = Vec::new();
-                vehicle.registered_link_ids = Vec::new();
-                vehicle.waiting_time = 0.0;
-                vehicle.impatience = 0.0;
-            }
-
-            eng.config.end_time = eng.config.map.settings.simulation_duration;
-            let new_count = eng.config.map.settings.vehicle_count;
+            eng.config.start_time = eng.config.map.settings.simulation_start_time;
+            eng.config.end_time = if eng.config.map.settings.use_day_night_cycle {
+                86_400.0f32
+            } else {
+                eng.config.map.settings.simulation_start_time + 3_600.0f32
+            };
+            eng.config.time_step = eng.config.map.settings.time_step;
+            let commute_plan_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();
-            eng.vehicles = create_random_vehicles(&map_snapshot, new_count);
-            eng.all_vehicles_arrived = false;
-            for vehicle in eng.vehicles.iter_mut() {
-                vehicle.update_path(&map_snapshot);
+            let generated = create_random_commutes(&map_snapshot, commute_plan_count);
+            *eng = crate::simulation::engine::SimulationEngine::new_with_commutes(
+                eng.config.clone(),
+                generated.vehicles,
+                generated.commute_plans,
+            );
+
+            // Recreate bus vehicles from saved bus lines (preserves user's bus lines across resets)
+            eng.bus_lines.clear();
+            eng.next_bus_line_id = map_snapshot.next_bus_line_id;
+            for bl in &map_snapshot.bus_lines {
+                eng.add_bus_from_saved(bl);
             }
 
             let vehicles: Vec<Value> = eng.vehicles.iter()
                 .map(|v| serialize_vehicle_summary(v, &map_snapshot))
                 .collect();
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
             let snapshot = eng.clone();
             drop(eng);
             *instance.initial_engine.lock().await = snapshot;
             let _ = instance.broadcast.send(ServerPacket::VehicleList { vehicles });
+            let _ = instance.broadcast.send(ServerPacket::BusLineList { bus_lines });
         }
 
         ClientPacket::SetSpeed { multiplier } => {
@@ -342,10 +433,16 @@ async fn handle_client_packet(
                 Ok(k) => k,
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
-            let mut eng = instance.engine.lock().await;
-            editor::add_node(&mut eng.config.map, x, y, kind);
-            let (nodes, edges) = serialize_map(&eng.config.map);
-            drop(eng);
+            let (nodes, edges) = {
+                let mut eng = instance.engine.lock().await;
+                editor::add_node(&mut eng.config.map, x, y, kind);
+                eng.rebuild_runtime_caches();
+                let map_snapshot = eng.config.map.clone();
+                let snapshot = eng.clone();
+                drop(eng);
+                *instance.initial_engine.lock().await = snapshot;
+                serialize_map(&map_snapshot)
+            };
             broadcast_map_edit_success(&instance.broadcast, nodes, edges);
         }
 
@@ -354,15 +451,26 @@ async fn handle_client_packet(
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = instance.engine.lock().await;
-            match editor::delete_node(&mut eng.config.map, id) {
-                Ok(()) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::delete_node(&mut eng.config.map, id) {
+                    Ok(()) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
                 }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
                 Err(e) => {
-                    drop(eng);
                     send_edit_error(socket, &e).await;
                 }
             }
@@ -378,17 +486,26 @@ async fn handle_client_packet(
                 Ok(k) => k,
                 Err(e) => { send_edit_error(socket, &e).await; return; }
             };
-            let mut eng = instance.engine.lock().await;
-            match editor::update_node(&mut eng.config.map, id, kind) {
-                Ok(()) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::update_node(&mut eng.config.map, id, kind) {
+                    Ok(()) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
                 }
-                Err(e) => {
-                    drop(eng);
-                    send_edit_error(socket, &e).await;
-                }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
+                Err(e) => send_edit_error(socket, &e).await,
             }
         }
 
@@ -397,17 +514,26 @@ async fn handle_client_packet(
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = instance.engine.lock().await;
-            match editor::add_road(&mut eng.config.map, from_id, to_id, lane_count, speed_limit) {
-                Ok(_road_id) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::add_road(&mut eng.config.map, from_id, to_id, lane_count, speed_limit) {
+                    Ok(_road_id) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
                 }
-                Err(e) => {
-                    drop(eng);
-                    send_edit_error(socket, &e).await;
-                }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
+                Err(e) => send_edit_error(socket, &e).await,
             }
         }
 
@@ -416,17 +542,26 @@ async fn handle_client_packet(
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = instance.engine.lock().await;
-            match editor::delete_road(&mut eng.config.map, id) {
-                Ok(()) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::delete_road(&mut eng.config.map, id) {
+                    Ok(()) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
                 }
-                Err(e) => {
-                    drop(eng);
-                    send_edit_error(socket, &e).await;
-                }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
+                Err(e) => send_edit_error(socket, &e).await,
             }
         }
 
@@ -435,17 +570,26 @@ async fn handle_client_packet(
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
             }
-            let mut eng = instance.engine.lock().await;
-            match editor::update_road(&mut eng.config.map, id, speed_limit, lane_count) {
-                Ok(()) => {
-                    let (nodes, edges) = serialize_map(&eng.config.map);
-                    drop(eng);
-                    broadcast_map_edit_success(&instance.broadcast, nodes, edges);
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::update_road(&mut eng.config.map, id, speed_limit, lane_count) {
+                    Ok(()) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
                 }
-                Err(e) => {
-                    drop(eng);
-                    send_edit_error(socket, &e).await;
-                }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
+                Err(e) => send_edit_error(socket, &e).await,
             }
         }
 
@@ -474,6 +618,55 @@ async fn handle_client_packet(
                 .collect();
             drop(eng);
             let packet = ServerPacket::VehicleList { vehicles };
+            if let Ok(text) = serde_json::to_string(&packet) {
+                let _ = socket.send(Message::Text(text)).await;
+            }
+        }
+
+        ClientPacket::CreateBusLine { name, stop_node_ids } => {
+            if stop_node_ids.len() < 2 {
+                return;
+            }
+            let mut eng = instance.engine.lock().await;
+
+            let bus_line_id = eng.next_bus_line_id;
+            eng.next_bus_line_id += 1;
+            let saved = crate::map::model::SavedBusLine { id: bus_line_id, name, stop_node_ids };
+            eng.config.map.bus_lines.push(saved.clone());
+            eng.config.map.next_bus_line_id = eng.next_bus_line_id;
+
+            if !eng.add_bus_from_saved(&saved) {
+                eng.config.map.bus_lines.pop();
+                eng.next_bus_line_id -= 1;
+                eng.config.map.next_bus_line_id = eng.next_bus_line_id;
+                return;
+            }
+
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
+            drop(eng);
+            let _ = instance.broadcast.send(ServerPacket::BusLineList { bus_lines });
+        }
+
+        ClientPacket::DeleteBusLine { bus_line_id } => {
+            let mut eng = instance.engine.lock().await;
+            if let Some(pos) = eng.bus_lines.iter().position(|bl| bl.id == bus_line_id) {
+                let vehicle_id = eng.bus_lines[pos].vehicle_id;
+                eng.bus_lines.remove(pos);
+                eng.config.map.bus_lines.retain(|bl| bl.id != bus_line_id);
+                if let Some(v) = eng.vehicles.iter_mut().find(|v| v.id == vehicle_id) {
+                    v.state = VehicleState::Arrived;
+                }
+            }
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
+            drop(eng);
+            let _ = instance.broadcast.send(ServerPacket::BusLineList { bus_lines });
+        }
+
+        ClientPacket::RequestBusLines {} => {
+            let eng = instance.engine.lock().await;
+            let bus_lines: Vec<Value> = eng.bus_lines.iter().map(serialize_bus_line).collect();
+            drop(eng);
+            let packet = ServerPacket::BusLineList { bus_lines };
             if let Ok(text) = serde_json::to_string(&packet) {
                 let _ = socket.send(Message::Text(text)).await;
             }
@@ -595,6 +788,7 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
         "origin_id": sim_map.graph[vehicle.trip.origin].id,
         "destination_id": sim_map.graph[vehicle.trip.destination].id,
         "waypoint_ids": waypoint_ids,
+        "commute_plan_id": vehicle.commute_plan_id,
     })
 }
 
@@ -613,6 +807,16 @@ pub fn serialize_vehicle_summary(vehicle: &Vehicle, map: &Map) -> Value {
             VehicleType::Diesel     => "Diesel",
         },
         "waypoint_ids": waypoint_ids,
+        "commute_plan_id": vehicle.commute_plan_id,
+    })
+}
+
+fn serialize_bus_line(bl: &BusLine) -> Value {
+    json!({
+        "id": bl.id,
+        "name": bl.name,
+        "stop_node_ids": bl.stop_node_ids,
+        "vehicle_id": bl.vehicle_id,
     })
 }
 
@@ -625,28 +829,17 @@ fn serialize_intersection_kind(s: &str) -> Result<IntersectionKind, String> {
     }
 }
 
-pub fn serialize_traffic_lights(map: &Map, green_links: &HashSet<u32>) -> Vec<Value> {
+pub fn serialize_traffic_lights(
+    map: &Map,
+    controller_green_road_ids: &HashMap<u32, Vec<u32>>,
+) -> Vec<Value> {
     map.traffic_lights
         .values()
         .map(|controller| {
-            let green_road_ids: Vec<u32> = map
-                .graph
-                .edge_indices()
-                .filter_map(|e| {
-                    let road = &map.graph[e];
-                    let is_green = road.lanes.iter().any(|lane| {
-                        lane.links.iter().any(|link| {
-                            green_links.contains(&link.id)
-                                && map
-                                    .graph
-                                    .edge_endpoints(e)
-                                    .map(|(_, to)| map.graph[to].id == controller.intersection_id)
-                                    .unwrap_or(false)
-                        })
-                    });
-                    if is_green { Some(road.id) } else { None }
-                })
-                .collect();
+            let green_road_ids = controller_green_road_ids
+                .get(&controller.id)
+                .cloned()
+                .unwrap_or_default();
 
             json!({
                 "id": controller.intersection_id,

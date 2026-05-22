@@ -1,8 +1,17 @@
 'use client';
 
+<<<<<<< HEAD
 import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, EditTool } from './EditModeContext';
 
+=======
+import { useState } from 'react';
+import { useWs } from '@/app/websocket/websocket';
+import { useEditMode, EditTool } from './EditModeContext';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+>>>>>>> origin/dev
 // Inline SVG icons
 
 function IconSelect() {
@@ -60,6 +69,7 @@ function IconReset() {
     );
 }
 
+<<<<<<< HEAD
 function IconModeEdit() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -77,6 +87,8 @@ function IconModeSimulation() {
         </svg>
     );
 }
+=======
+>>>>>>> origin/dev
 
 function IconWaypoints() {
     return (
@@ -98,6 +110,42 @@ function IconIntersection() {
     );
 }
 
+<<<<<<< HEAD
+=======
+function IconBus() {
+    return (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="2" y="5" width="20" height="12" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
+            <line x1="8" y1="5" x2="8" y2="10" />
+            <line x1="16" y1="5" x2="16" y2="10" />
+            <circle cx="6.5" cy="19" r="1.5" fill="currentColor" stroke="none" />
+            <circle cx="17.5" cy="19" r="1.5" fill="currentColor" stroke="none" />
+        </svg>
+    );
+}
+
+function IconDayNight({ dayNight }: { dayNight: boolean }) {
+    return dayNight ? (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4" />
+            <path d="M12 2v2" />
+            <path d="M12 20v2" />
+            <path d="m4.9 4.9 1.4 1.4" />
+            <path d="m17.7 17.7 1.4 1.4" />
+            <path d="M2 12h2" />
+            <path d="M20 12h2" />
+            <path d="m6.3 17.7-1.4 1.4" />
+            <path d="m19.1 4.9-1.4 1.4" />
+        </svg>
+    ) : (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M13 2L4.09 13.5H11l-1 8.5L20 10.5H13.5L13 2z" />
+        </svg>
+    );
+}
+
+>>>>>>> origin/dev
 function IconDensity() {
     return (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -139,6 +187,7 @@ function Separator() {
     return <div className="w-px h-[26px] bg-white opacity-20" />;
 }
 
+<<<<<<< HEAD
 export default function Toolbar() {
     const ws = useWs();
     const {
@@ -160,6 +209,21 @@ export default function Toolbar() {
         setMode('edit');
     };
 
+=======
+const SPEED_PRESETS = [1, 3, 5, 10, 30] as const;
+
+export default function Toolbar({ uuid }: { uuid: string }) {
+    const ws = useWs();
+    const [speedMultiplier, setSpeedMultiplier] = useState(3);
+    const {
+        mode, editTool, simState,
+        setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
+        densityView, setDensityView, isDensityLoading, setIsDensityLoading,
+        showIntersections, setShowIntersections,
+        mapSettings, setMapSettings,
+    } = useEditMode();
+
+>>>>>>> origin/dev
     const handleDensityToggle = () => {
         if (densityView) {
             setDensityView(false);
@@ -169,6 +233,7 @@ export default function Toolbar() {
         }
     };
 
+<<<<<<< HEAD
     const switchToSimulation = () => {
         setSelectedElement(null);
         setPendingRoadFrom(null);
@@ -176,6 +241,8 @@ export default function Toolbar() {
         setMode('simulation');
     };
 
+=======
+>>>>>>> origin/dev
     const handlePlayPause = () => {
         if (simState === 'running') {
             ws?.send('stopSimulation', {});
@@ -193,6 +260,29 @@ export default function Toolbar() {
         setSimulationResetAt(prev => prev + 1);
     };
 
+<<<<<<< HEAD
+=======
+    const handleDayNightToggle = async () => {
+        if (!mapSettings || simState !== 'stopped') return;
+        const updated = { ...mapSettings, use_day_night_cycle: !mapSettings.use_day_night_cycle };
+        try {
+            const res = await fetch(`${API_URL}/api/simulations/${uuid}/settings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updated),
+            });
+            if (!res.ok) return;
+            setMapSettings(updated);
+            ws?.send('resetSimulation', {});
+            setSimState('stopped');
+            setShowScore(false);
+            setSimulationResetAt(prev => prev + 1);
+        } catch {
+            // network error — no-op
+        }
+    };
+
+>>>>>>> origin/dev
     const selectTool = (tool: EditTool) => {
         setEditTool(tool);
         setSelectedElement(null);
@@ -221,6 +311,13 @@ export default function Toolbar() {
                             <ToolButton onClick={() => selectTool('waypoints')} isSelected={editTool === 'waypoints'} title="Waypoints">
                                 <IconWaypoints />
                             </ToolButton>
+<<<<<<< HEAD
+=======
+                            <Separator />
+                            <ToolButton onClick={() => selectTool('bus')} isSelected={editTool === 'bus'} title="Bus Lines">
+                                <IconBus />
+                            </ToolButton>
+>>>>>>> origin/dev
                         </>
                     ) : (
                         <>
@@ -232,6 +329,24 @@ export default function Toolbar() {
                                 <IconReset />
                             </ToolButton>
                             <Separator />
+<<<<<<< HEAD
+=======
+                            {SPEED_PRESETS.map(speed => (
+                                <button
+                                    key={speed}
+                                    onClick={() => {
+                                        ws?.send('setSpeed', { multiplier: speed });
+                                        setSpeedMultiplier(speed);
+                                    }}
+                                    title={`${speed}× speed`}
+                                    className={`px-2 py-[10px] text-xs font-medium transition-opacity text-white cursor-pointer
+                                        ${speedMultiplier === speed ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
+                                >
+                                    {speed}×
+                                </button>
+                            ))}
+                            <Separator />
+>>>>>>> origin/dev
                             <ToolButton
                                 onClick={handleDensityToggle}
                                 isSelected={densityView}
@@ -248,10 +363,23 @@ export default function Toolbar() {
                             >
                                 <IconIntersection />
                             </ToolButton>
+<<<<<<< HEAD
+=======
+                            <Separator />
+                            <ToolButton
+                                onClick={handleDayNightToggle}
+                                isSelected={mapSettings ? !mapSettings.use_day_night_cycle : false}
+                                disabled={simState !== 'stopped' || !mapSettings}
+                                title={mapSettings?.use_day_night_cycle ? 'Day/Night Cycle (click for Immediate)' : 'Immediate Departure (click for Day/Night)'}
+                            >
+                                <IconDayNight dayNight={mapSettings?.use_day_night_cycle ?? true} />
+                            </ToolButton>
+>>>>>>> origin/dev
                         </>
                     )}
                 </div>
 
+<<<<<<< HEAD
                 {/* Right: mode toggle */}
                 <ToolButton
                     onClick={mode === 'edit' ? switchToSimulation : switchToEdit}
@@ -259,6 +387,8 @@ export default function Toolbar() {
                 >
                     {mode === 'edit' ? <IconModeSimulation /> : <IconModeEdit />}
                 </ToolButton>
+=======
+>>>>>>> origin/dev
             </div>
         </div>
     );

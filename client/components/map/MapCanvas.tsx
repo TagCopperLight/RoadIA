@@ -165,7 +165,11 @@ export function MapCanvas({
 							onAddRoad={isEditMode && editTool === 'addRoad'
 								? () => onAddRoad(node.id)
 								: undefined}
+<<<<<<< HEAD
 							onWaypointClick={isEditMode && editTool === 'waypoints'
+=======
+							onWaypointClick={isEditMode && (editTool === 'waypoints' || editTool === 'bus')
+>>>>>>> origin/dev
 								? () => onWaypointNodeClick(node.id)
 								: undefined}
 						/>
