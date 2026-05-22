@@ -5,7 +5,6 @@ import { BusLine } from './map/types';
 
 export interface MapSettings {
     vehicle_count: number;
-    simulation_duration: number;
     simulation_start_time: number;
     time_step: number;
     max_budget: number;

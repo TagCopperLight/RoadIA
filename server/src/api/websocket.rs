@@ -368,7 +368,6 @@ async fn handle_client_packet(
             instance.controller.stop();
             let mut eng = instance.engine.lock().await;
             eng.config.start_time = eng.config.map.settings.simulation_start_time;
-            eng.config.end_time = eng.config.map.settings.simulation_duration;
             eng.config.time_step = eng.config.map.settings.time_step;
             let commute_plan_count = eng.config.map.settings.vehicle_count;
             let map_snapshot = eng.config.map.clone();

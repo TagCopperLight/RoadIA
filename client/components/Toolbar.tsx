@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useWs } from '@/app/websocket/websocket';
 import { useEditMode, EditTool } from './EditModeContext';
 
@@ -152,8 +153,11 @@ function Separator() {
     return <div className="w-px h-[26px] bg-white opacity-20" />;
 }
 
+const SPEED_PRESETS = [1, 3, 5, 10, 30] as const;
+
 export default function Toolbar() {
     const ws = useWs();
+    const [speedMultiplier, setSpeedMultiplier] = useState(3);
     const {
         mode, editTool, simState,
         setMode, setEditTool, setSimState, setSelectedElement, setPendingRoadFrom, setSimulationResetAt, setShowScore,
@@ -248,6 +252,21 @@ export default function Toolbar() {
                             <ToolButton onClick={handleReset} title="Reset">
                                 <IconReset />
                             </ToolButton>
+                            <Separator />
+                            {SPEED_PRESETS.map(speed => (
+                                <button
+                                    key={speed}
+                                    onClick={() => {
+                                        ws?.send('setSpeed', { multiplier: speed });
+                                        setSpeedMultiplier(speed);
+                                    }}
+                                    title={`${speed}× speed`}
+                                    className={`px-2 py-[10px] text-xs font-medium transition-opacity text-white cursor-pointer
+                                        ${speedMultiplier === speed ? 'opacity-100' : 'opacity-30 hover:opacity-60'}`}
+                                >
+                                    {speed}×
+                                </button>
+                            ))}
                             <Separator />
                             <ToolButton
                                 onClick={handleDensityToggle}
