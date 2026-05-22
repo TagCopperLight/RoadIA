@@ -22,6 +22,7 @@
 	- [Configuration](simulation/config.md)
 	- [Engine details](simulation/engine.md)
 	- [Vehicle model](simulation/vehicle.md)
+	- [Commute Plans](simulation/commute.md)
 	- [Kinematics helpers](simulation/kinematics.md)
 	- [DrivePlan & LinkState examples](simulation/drive_plan.md)
 - [Scoring](scoring.md)

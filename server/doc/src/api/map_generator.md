@@ -30,7 +30,7 @@ Génère une liste de véhicules avec des trajets aléatoires mais valides.
     1. Identifie tous les nœuds de type `Habitation` et `Workplace`.
     2. Utilise un parcours en largeur (BFS) pour identifier les paires (départ, arrivée) qui sont réellement connectées.
     3. Crée des véhicules avec des spécifications variées (Voitures, Bus) et des types de moteurs différents.
-    4. Répartit les départs sur les 100 premières secondes de la simulation.
+    4. Répartit les départs sur 24h en utilisant des **plans de trajets pendulaires (`CommutePlan`)** pour simuler un cycle de vie complet.
 - **Retour** : `Vec<Vehicle>`.
 
 ### create_connected_map
