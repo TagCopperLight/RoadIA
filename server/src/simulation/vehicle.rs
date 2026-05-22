@@ -144,8 +144,15 @@ impl Vehicle {
     pub fn update_path(&mut self, map: &Map) -> bool {
         let mut stops: Vec<NodeIndex> = self.waypoints.clone();
         stops.push(self.trip.destination);
-        let mut full_path = vec![self.trip.origin];
-        let mut current = self.trip.origin;
+
+        let start = if !self.path.is_empty() && self.path_index < self.path.len() {
+            self.path[self.path_index]
+        } else {
+            self.trip.origin
+        };
+
+        let mut full_path = vec![start];
+        let mut current = start;
         for &stop in &stops {
             match fastest_path(map, current, stop) {
                 Some(seg) => {
@@ -170,7 +177,10 @@ impl Vehicle {
             return false;
         }
         self.path = full_path;
-        self.path_index = 0;
+        self.path_index = 0; // full_path always starts at `start`
+        // NOTE: Do NOT clear drive_plan/registered_link_ids here. The simulation engine
+        // will rebuild them naturally when rebuild_drive_plan is called in the next step.
+        // Clearing them prematurely would cause enter_junction_or_arrive to abort movement.
         true
     }
 
