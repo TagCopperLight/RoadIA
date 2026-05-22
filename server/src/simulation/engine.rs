@@ -7,13 +7,14 @@ use crate::simulation::commute::{CommutePlan, CommutePlanState};
 use crate::simulation::config::{
     SimulationConfig, IMPATIENCE_RATE, LOOK_AHEAD, MIN_CREEP_SPEED, STOP_DWELL_TIME,
     LC2013_COOLDOWN, LC2013_SPEED_GAIN_THRESHOLD, LC2013_SAFE_GAP_FRONT,
-    LC2013_SAFE_GAP_REAR, LC2013_MAX_DECEL_FOLLOWER,
+    LC2013_SAFE_GAP_REAR, LC2013_MAX_DECEL_FOLLOWER, NAVIGATION_MISTAKE_PROBABILITY,
 };
 use crate::map::intersection::{ApproachData, LinkState, is_link_open};
 use crate::scoring::Score;
 use crate::simulation::kinematics;
 use crate::simulation::vehicle::{DrivePlanEntry, LaneId, TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleState, VehicleType};
 use petgraph::graph::{EdgeIndex, NodeIndex};
+use petgraph::visit::EdgeRef;
 
 pub trait Simulation {
     fn new(config: SimulationConfig, vehicles: Vec<Vehicle>) -> Self;
@@ -896,17 +897,22 @@ impl SimulationEngine {
 
         let (mut ahead_dist, mut ahead_vel) = self.vehicle_ahead_info(vidx, lane_id);
         let speed_limit = self.lane_speed_limit(vidx);
+        let effective_limit = if self.vehicles[vidx].is_reckless {
+            self.vehicles[vidx].spec.max_speed
+        } else {
+            speed_limit
+        };
         let desired;
 
         // Use IDM for stopping, setting the speed to 0 isn't working
         if let Some(dist) = stop_dist {
-            desired = speed_limit;
+            desired = effective_limit;
             if dist < ahead_dist {
                 ahead_dist = dist;
                 ahead_vel = 0.0;
             }
         } else {
-            desired = speed_limit.min(safe_speed);
+            desired = effective_limit.min(safe_speed);
         }
 
         let accel = self.vehicles[vidx].compute_acceleration(
@@ -1180,7 +1186,7 @@ impl SimulationEngine {
 
         self.vehicles[vidx].position_on_lane -= road_len;
 
-        let via_internal_lane_id = match self.vehicles[vidx].drive_plan.first() {
+        let planned_via_il_id = match self.vehicles[vidx].drive_plan.first() {
             Some(entry) => entry.via_internal_lane_id,
             None => {
                 // No drive plan -> stay stopped until next rebuild
@@ -1196,11 +1202,79 @@ impl SimulationEngine {
         if let Some(pos) = self.vehicles[vidx].waypoints.iter().position(|&w| w == junction_node) {
             self.vehicles[vidx].waypoints.remove(pos);
         }
+
+        let via_internal_lane_id = self
+            .maybe_apply_navigation_mistake(vidx, planned_via_il_id, pi, junction_node, in_edge)
+            .unwrap_or(planned_via_il_id);
+
         let to_lane = LaneId::Internal(junction_id, via_internal_lane_id);
 
         self.vehicles[vidx].current_lane = Some(to_lane);
         self.vehicles[vidx].drive_plan.remove(0);
         self.pending_transfers.push(PendingTransfer { vehicle_idx: vidx, from_lane, to_lane: Some(to_lane) });
+    }
+
+    fn maybe_apply_navigation_mistake(
+        &mut self,
+        vidx: usize,
+        planned_via_il_id: u32,
+        path_index: usize,
+        junction_node: NodeIndex,
+        in_edge: EdgeIndex,
+    ) -> Option<u32> {
+        if rand::random::<f32>() >= NAVIGATION_MISTAKE_PROBABILITY {
+            return None;
+        }
+
+        // Determine which road was planned so we can exclude it.
+        let planned_to_node = self.vehicles[vidx].path.get(path_index + 2).copied()?;
+        let planned_out_edge = self.config.map.graph.find_edge(junction_node, planned_to_node)?;
+        let planned_road_id = self.config.map.graph[planned_out_edge].id;
+
+        // Find the current lane index on the incoming edge.
+        let lane_idx = match self.vehicles[vidx].current_lane {
+            Some(LaneId::Normal(e, lid)) if e == in_edge => lid as usize,
+            _ => 0,
+        };
+
+        // Collect links on this lane that lead to a different road.
+        let alternatives: Vec<(u32, u32)> = self.config.map.graph[in_edge]
+            .lanes
+            .get(lane_idx)
+            .map(|lane| {
+                lane.links.iter()
+                    .filter(|l| l.destination_road_id != planned_road_id)
+                    .map(|l| (l.via_internal_lane_id, l.destination_road_id))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if alternatives.is_empty() {
+            return None;
+        }
+
+        let (wrong_il_id, wrong_road_id) = alternatives[rand::random_range(0..alternatives.len())];
+
+        // Resolve which NodeIndex the wrong road exits to from this junction.
+        let wrong_to_node = self.config.map.graph
+            .edges_directed(junction_node, petgraph::Direction::Outgoing)
+            .find(|e| e.weight().id == wrong_road_id)
+            .map(|e| e.target())?;
+
+        // Reroute from the wrong exit node to the original destination.
+        let destination = self.vehicles[vidx].trip.destination;
+        let new_route = crate::simulation::vehicle::fastest_path(
+            &self.config.map,
+            wrong_to_node,
+            destination,
+        )?;
+
+        // Splice: keep [origin … junction_node] then append the rerouted segment.
+        self.vehicles[vidx].path.truncate(path_index + 2);
+        self.vehicles[vidx].path.extend_from_slice(&new_route);
+
+        let _ = planned_via_il_id;
+        Some(wrong_il_id)
     }
 
     fn check_if_all_vehicles_arrived(&mut self) {

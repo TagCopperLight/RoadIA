@@ -875,6 +875,7 @@ pub fn serialize_vehicle(vehicle: &Vehicle, sim_map: &Map) -> Value {
         "destination_id": sim_map.graph[vehicle.trip.destination].id,
         "waypoint_ids": waypoint_ids,
         "commute_plan_id": vehicle.commute_plan_id,
+        "is_reckless": vehicle.is_reckless,
     })
 }
 
@@ -894,6 +895,7 @@ pub fn serialize_vehicle_summary(vehicle: &Vehicle, map: &Map) -> Value {
         },
         "waypoint_ids": waypoint_ids,
         "commute_plan_id": vehicle.commute_plan_id,
+        "is_reckless": vehicle.is_reckless,
     })
 }
 

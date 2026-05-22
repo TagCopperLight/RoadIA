@@ -9,6 +9,7 @@ use crate::map::model::Map;
 use crate::map::osm_parser;
 use crate::map::roundabout;
 use crate::simulation::commute::CommutePlan;
+use crate::simulation::config::RECKLESS_PROBABILITY;
 use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec, VehicleType};
 
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
@@ -185,9 +186,12 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
             departure_time: f32::MAX,
         };
 
+        let is_reckless = rng.random::<f32>() < RECKLESS_PROBABILITY;
+
         // Build outbound vehicle (required). If outbound path doesn't exist, skip.
         let mut outbound_vehicle = Vehicle::new(outbound_vehicle_id, spec, outbound_trip, motorization);
         outbound_vehicle.commute_plan_id = Some(commute_plan_id);
+        outbound_vehicle.is_reckless = is_reckless;
         if !outbound_vehicle.update_path(map) {
             continue;
         }
@@ -197,6 +201,7 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
         if has_return_path {
             let mut return_vehicle = Vehicle::new(return_vehicle_id, spec, return_trip, motorization);
             return_vehicle.commute_plan_id = Some(commute_plan_id);
+            return_vehicle.is_reckless = is_reckless;
             if !return_vehicle.update_path(map) {
                 // If return path unexpectedly fails, push outbound only.
                 vehicles.push(outbound_vehicle);

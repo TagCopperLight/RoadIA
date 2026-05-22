@@ -15,10 +15,15 @@ const MOTOR_STYLE: Record<Motorization, { color: number; w: number; h: number }>
 
 const BUS_STYLE = { color: 0x22C55E, w: 18, h: 5 };
 
+const RECKLESS_COLOR = 0xEF4444;
+
 export function Vehicle({ data }: VehicleProps) {
-    const style = data.kind === 'Bus'
+    const baseStyle = data.kind === 'Bus'
         ? BUS_STYLE
         : data.motorization ? MOTOR_STYLE[data.motorization] : MOTOR_STYLE.Essence;
+    const style = data.is_reckless
+        ? { ...baseStyle, color: RECKLESS_COLOR }
+        : baseStyle;
 
     const drawCar = useCallback((g: Graphics) => {
         g.clear();

@@ -52,6 +52,9 @@ pub const IMPATIENCE_RATE: f32 = 0.05;
 pub const MIN_CREEP_SPEED: f32 = 1.0;
 pub const LANE_WIDTH: f32 = 7.5;
 
+pub const RECKLESS_PROBABILITY: f32 = 0.01;
+pub const NAVIGATION_MISTAKE_PROBABILITY: f32 = 0.0005;
+
 pub const LC2013_COOLDOWN: f32 = 3.0;
 pub const LC2013_SPEED_GAIN_THRESHOLD: f32 = 1.5;
 pub const LC2013_SAFE_GAP_FRONT: f32 = 10.0;

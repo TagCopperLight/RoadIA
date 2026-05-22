@@ -61,6 +61,7 @@ export interface VehicleData {
     destination_id?: number;
     waypoint_ids?: number[];
 	commute_plan_id: number | null;
+    is_reckless?: boolean;
 }
 
 export interface VehicleUpdatePacket {
@@ -76,6 +77,7 @@ export interface VehicleSummary {
     motorization: Motorization;
     waypoint_ids: number[];
 	commute_plan_id: number | null;
+    is_reckless?: boolean;
 }
 
 export interface BusLine {

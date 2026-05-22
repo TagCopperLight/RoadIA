@@ -103,6 +103,8 @@ pub struct Vehicle {
     pub emitted_co2: f32,
     pub distance_traveled: f32,
     pub arrived_at: Option<f32>,
+
+    pub is_reckless: bool,
 }
 
 pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Option<Vec<NodeIndex>> {
@@ -140,6 +142,7 @@ impl Vehicle {
             emitted_co2: 0.0,
             distance_traveled: 0.0,
             arrived_at: None,
+            is_reckless: false,
         }
     }
 
