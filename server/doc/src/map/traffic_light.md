@@ -8,11 +8,11 @@ Ce chapitre décrit les contrôleurs de feux associés à une intersection et le
 
 ### `SignalPhase`
 
-Une phase décrit l'état d'un feu tricolore pendant une durée donnée.
+Une phase décrit l'état d'un feu tricolore pendant une durée donnée. Le moteur alterne entre les phases séquentiellement.
 
-- `green_link_ids` : liste des liens autorisés pendant cette phase;
-- `green_duration` : durée du vert;
-- `yellow_duration` : durée du jaune.
+- `green_link_ids` : liste des liens autorisés (ouverts) pendant cette phase;
+- `green_duration` : durée pendant laquelle les liens sont au vert (s);
+- `yellow_duration` : durée du jaune (période de transition avant la phase suivante) (s).
 
 ### `TrafficLightController`
 
