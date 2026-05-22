@@ -13,6 +13,7 @@ Type fonctionnel du noeud.
 - `Habitation` : zone d'origine potentielle pour les véhicules.
 - `Intersection` : carrefour standard.
 - `Workplace` : zone de destination potentielle.
+- `TrafficLight` : intersection contrôlée par des feux tricolores.
 
 ### `Intersection`
 
@@ -88,7 +89,7 @@ Construit les mouvements et détecte les conflits pour un carrefour unique.
         - Coordonnées de l'entrée et de la sortie sur le bord du carrefour.
     4. Crée les `InternalLane` et les `Link` (liens logiques).
     5. Analyse les intersections géométriques entre les trajectoires pour peupler les listes de conflits (`foe_links`).
-    6. Assigne les priorités (Stop, Yield, Priority) selon la configuration ou les types de routes.
+    6. Assigne les priorités (Stop, Yield, Priority) selon la configuration. L'utilisateur peut modifier ce type via l'éditeur.
 
 ## Aides géométriques
 

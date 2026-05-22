@@ -30,8 +30,27 @@ Petit handle renvoyé par les fonctions de création pour référencer un contr�
 
 - `controller_id` : identifiant à réutiliser pour la suite.
 
+## États et dynamique
+
+### `TrafficLightRuntimeState`
+
+Structure interne utilisée par le moteur de simulation pour suivre l'évolution temporelle de chaque contrôleur.
+
+- `phase_index` : index de la phase actuelle dans le vecteur `phases`.
+- `time_in_phase` : temps écoulé depuis le début de la phase actuelle (s).
+
+## Cycle de mise à jour
+
+À chaque pas de simulation, le moteur effectue les opérations suivantes :
+
+1. **Incrémentation** : Ajoute `delta_t` au `time_in_phase` de chaque contrôleur.
+2. **Transition** : Si le temps dépasse la durée totale de la phase (`green_duration + yellow_duration`), le contrôleur passe à la phase suivante (ou revient à la première) et réinitialise son compteur.
+3. **Actualisation des liens** : La liste globale `green_links` est vidée puis remplie avec les identifiants de liens (`green_link_ids`) de toutes les phases actuellement au vert (celles dont le `time_in_phase` est inférieur à `green_duration`).
+
+> **Note sur le jaune** : Pendant la `yellow_duration`, aucun lien n'est ajouté à `green_links` pour ce contrôleur, ce qui interdit tout nouvel engagement dans le carrefour.
+
 ## Lecture fonctionnelle
 
 - les phases sont définies en termes de liens internes autorisés;
 - le moteur utilise ces phases pour remplir `green_links`;
-- le client n'interagit pas directement avec la structure interne du contrôleur, seulement via les identifiants de liens et les paquets WebSocket.
+- le client interagit avec les contrôleurs via l'éditeur pour modifier les durées et les compositions des phases.
