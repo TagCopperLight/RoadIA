@@ -22,6 +22,8 @@ git clone https://github.com/TagCopperLight/RoadIA
 cd RoadIA
 ```
 
+ou cliquer sur `Code` puis `Download ZIP`.
+
 ### 2. Prérequis
 
 - Docker 20.10+
@@ -37,7 +39,7 @@ Services:
 - **client** — application Next.js
 - **server** — API Rust et moteur de simulation
 
-On peut accéder à l'application sur `http://localhost:3000`.
+Le serveur de développement sera disponible sur http://localhost:3000.
 
 ---
 
