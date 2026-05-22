@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3ae62e47.js";
+            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-98ddbbda.js"></script>
+        <script src="../toc-5b6ca4d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -188,6 +188,36 @@
 <li><code>is_link_open</code> prend en compte le type de lien, l’état des feux (<code>green_links</code>), véhicules présents et conflit temporel d’approche.</li>
 </ul>
 <p>Ces algorithmes sont centraux pour la logique d’intersection du simulateur.</p>
+<h2 id="worked-example-two-conflicting-movements"><a class="header" href="#worked-example-two-conflicting-movements">Worked example: two conflicting movements</a></h2>
+<p>Imaginons une intersection simple avec deux mouvements en conflit: <code>A→B</code> (link id 101) et <code>C→D</code> (link id 201). Leur <code>DrivePlanEntry</code> fournit des fenêtres d’arrivée/départ estimées.</p>
+<p>Supposons:</p>
+<ul>
+<li>Ego (<code>link_id=101</code>): <code>arrival_time = 12.0</code> s, <code>leave_time = 12.8</code> s</li>
+<li>Foe (<code>link_id=201</code>): <code>arrival_time = 12.3</code> s, <code>leave_time = 13.0</code> s</li>
+</ul>
+<p>La fonction <code>time_window_conflict([12.0,12.8], [12.3,13.0])</code> renvoie <code>true</code> (fenêtres se chevauchent). Si <code>foe</code> a priorité, <code>is_link_open</code> retournera <code>false</code> pour l’ego.</p>
+<h3 id="mermaid-diagram-conflict-schematic"><a class="header" href="#mermaid-diagram-conflict-schematic">Mermaid diagram: conflict schematic</a></h3>
+<pre><code class="language-mermaid">flowchart LR
+	subgraph Intersection
+		A[Approach A]
+		B[Approach B]
+		C[Approach C]
+		D[Approach D]
+	end
+	A -- "link 101" --&gt; B
+	C -- "link 201" --&gt; D
+</code></pre>
+<h2 id="worked-example-priority--traffic-lights"><a class="header" href="#worked-example-priority--traffic-lights">Worked example: priority &amp; traffic lights</a></h2>
+<ol>
+<li>Si <code>link.link_type == TrafficLight</code> et <code>green_links</code> contient <code>link.id</code>, <code>is_link_open</code> autorise le passage (si les voies internes ne sont pas occupées).</li>
+<li>Si <code>link.link_type == Stop</code>, l’ego doit rester arrêté jusqu’à l’absence de conflit temporel avec ses <code>foe_links</code>.</li>
+<li>Si <code>link.link_type == Yield</code>, on vérifie <code>foe_is_to_the_right</code> pour appliquer priorité à droite lorsque pertinent.</li>
+</ol>
+<h2 id="debugging-tips"><a class="header" href="#debugging-tips">Debugging tips</a></h2>
+<ul>
+<li>Inspecter la table <code>link_states: HashMap&lt;u32, LinkState&gt;</code> pour afficher les <code>ApproachData</code> actuels.</li>
+<li>Visualiser <code>intersection.internal_lanes</code> et <code>link.foe_links</code> pour comprendre les blocages.</li>
+</ul>
 
                     </main>
 
@@ -197,7 +227,7 @@
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../simulation/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../map/link_ids.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -211,7 +241,7 @@
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../simulation/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../map/link_ids.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -224,6 +254,22 @@
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>
@@ -240,6 +286,8 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="../mermaid-loader-58f8d2c4.js"></script>
+        <script src="../mermaid-init-1ea3646b.js"></script>
 
 
 

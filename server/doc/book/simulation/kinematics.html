@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-e08d1819.js";
+            window.path_to_searchindex_js = "../searchindex-a8bb04b6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-c58d40f7.js"></script>
+        <script src="../toc-5b6ca4d7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -176,41 +176,74 @@
                     <main>
                         <h1 id="kinematics-helpers"><a class="header" href="#kinematics-helpers">Kinematics helpers</a></h1>
 <p>Fichier: <code>src/simulation/kinematics.rs</code>.</p>
-<p>Les fonctions de ce module servent à convertir une distance restante, une vitesse courante et des bornes d’accélération en temps estimé ou en vitesse d’arrêt possible. Elles sont utilisées par le moteur pour réserver les intersections et construire les <code>DrivePlanEntry</code>.</p>
-<p>Unités: distances en mètres, vitesses en mètres par seconde, durées en secondes.</p>
+<p>Ce chapitre donne des exemples numériques pour les fonctions utilitaires: <code>arrival_time</code>, <code>leave_time</code>, <code>v_stop_at</code>, <code>approach_speed</code>.</p>
+<p>Unités: distances en mètres (m), vitesses en m/s, durées en secondes (s).</p>
 <h2 id="v_stop_atdist-d_max"><a class="header" href="#v_stop_atdist-d_max"><code>v_stop_at(dist, d_max)</code></a></h2>
-<p>Cette fonction calcule la vitesse maximale qui permettrait de s’arrêter exactement sur une distance <code>dist</code> avec une décélération confortable <code>d_max</code>. La relation utilisée est celle du mouvement uniformément décéléré: $v = \sqrt{2 d_{max} \cdot dist}$.</p>
-<p>Exemple d’ordre de grandeur: sur 25 m avec une décélération de 3 m/s², la vitesse d’arrêt théorique est d’environ 12,25 m/s.</p>
+<ul>
+<li>Formule: $v = \sqrt{2,d_{max},dist}$</li>
+</ul>
+<p>Exemple:</p>
+<ul>
+<li>distance = 25 m, d_max = 3.0 m/s²</li>
+</ul>
+<pre><code class="language-text">v = sqrt(2 * 3.0 * 25) = sqrt(150) ≈ 12.247 m/s
+</code></pre>
+<p>Interprétation: une vitesse jusqu’à ~12.25 m/s peut être arrêtée sur 25 m avec décélération 3.0 m/s².</p>
 <h2 id="arrival_timedist-v0-v1-a_max-d_max"><a class="header" href="#arrival_timedist-v0-v1-a_max-d_max"><code>arrival_time(dist, v0, v1, a_max, d_max)</code></a></h2>
-<p>Cette fonction estime le temps minimal nécessaire pour parcourir <code>dist</code> en partant de <code>v0</code> et en rejoignant <code>v1</code>, tout en respectant une accélération maximale <code>a_max</code> et une décélération maximale <code>d_max</code>.</p>
-<p>Le moteur s’en sert pour savoir quand un véhicule atteindra une jonction et quand il la quittera. Lorsque la distance est courte, la fonction tient compte du fait qu’il n’y a pas toujours une phase de croisière: tout peut être consacré à accélérer ou à freiner.</p>
+<ul>
+<li>Calcule le temps minimal pour parcourir <code>dist</code> en partant à <code>v0</code> et en arrivant à <code>v1</code> sous contraintes d’accélération/décélération.</li>
+</ul>
+<p>Exemple numérique simple (cas accélération):</p>
+<ul>
+<li>dist = 100 m, v0 = 10 m/s, v1 = 20 m/s, a_max = 2.0 m/s², d_max = 2.0 m/s²</li>
+</ul>
+<p>Calcul conceptuel (résumé):</p>
+<ol>
+<li>Estimer le temps nécessaire pour accélérer de 10→20 m/s avec a_max = 2.0: t_acc = (v1 - v0)/a_max = 5.0 s.</li>
+<li>Distance parcourue pendant l’accélération approximative: s_acc = (v0 + v1)/2 * t_acc = 15 * 5 = 75 m.</li>
+<li>Reste à parcourir en croisière: s_cruise = 100 - 75 = 25 m.</li>
+<li>Temps de croisière: t_cruise = s_cruise / v1 = 25 / 20 = 1.25 s.</li>
+<li>Total approximé: t_total ≈ t_acc + t_cruise = 6.25 s.</li>
+</ol>
+<blockquote>
+<p>Note: l’implémentation exacte de <code>arrival_time</code> tient compte des limites, des phases et renvoie une valeur proche de ce calcul.</p>
+</blockquote>
 <h2 id="leave_timet_arrive-lane_len-veh_len-v_arrive-v_leave"><a class="header" href="#leave_timet_arrive-lane_len-veh_len-v_arrive-v_leave"><code>leave_time(t_arrive, lane_len, veh_len, v_arrive, v_leave)</code></a></h2>
-<p>Cette fonction transforme une heure d’arrivée en heure de sortie estimée, en considérant la longueur utile de la voie, la longueur du véhicule et une vitesse moyenne bornée. Elle produit une fenêtre temporelle plus réaliste qu’un simple instant ponctuel, ce qui évite de faire se chevaucher artificiellement plusieurs véhicules dans une même intersection.</p>
+<ul>
+<li>Règle: estimer le temps de sortie en supposant une vitesse moyenne bornée ≥ 0.1 m/s.</li>
+</ul>
+<p>Exemple:</p>
+<ul>
+<li>t_arrive = 12.0 s, lane_len = 8.0 m, veh_len = 4.0 m, v_arrive = 5.0 m/s, v_leave = 13.9 m/s</li>
+</ul>
+<ol>
+<li>avg_speed ≈ max( (5.0 + 13.9)/2, 0.1 ) = 9.45 m/s</li>
+<li>t_leave = 12.0 + (lane_len + veh_len) / avg_speed = 12.0 + 12.0 / 9.45 ≈ 13.27 s</li>
+</ol>
 <h2 id="approach_speedlink_type-road_speed_limit"><a class="header" href="#approach_speedlink_type-road_speed_limit"><code>approach_speed(link_type, road_speed_limit)</code></a></h2>
-<p>Cette fonction choisit la vitesse d’approche cible d’un lien selon sa priorité:</p>
 <ul>
-<li>un lien prioritaire conserve la vitesse de la route,</li>
-<li>un lien en cédez-le-passage est volontairement plus lent,</li>
-<li>un arrêt impose une vitesse nulle,</li>
-<li>un feu tricolore se comporte comme une route normale tant qu’il est vert.</li>
-</ul>
-<h2 id="ce-quil-faut-retenir"><a class="header" href="#ce-quil-faut-retenir">Ce qu’il faut retenir</a></h2>
+<li>Heuristiques:
 <ul>
-<li><code>v_stop_at</code> répond à la question: “à quelle vitesse dois-je être pour pouvoir m’arrêter à temps ?”</li>
-<li><code>arrival_time</code> répond à la question: “quand vais-je arriver au carrefour ?”</li>
-<li><code>leave_time</code> répond à la question: “quand aurai-je complètement dégagé le carrefour ?”</li>
-<li><code>approach_speed</code> répond à la question: “à quelle vitesse dois-je aborder ce lien ?”</li>
+<li><code>Priority</code> → <code>road_speed_limit</code></li>
+<li><code>Yield</code> → <code>0.7 * road_speed_limit</code></li>
+<li><code>Stop</code> → <code>0.0</code></li>
+<li><code>TrafficLight</code> → <code>road_speed_limit</code></li>
 </ul>
+</li>
+</ul>
+<p>Exemple: <code>link_type = Yield</code>, <code>road_speed_limit = 13.9</code> → approach_speed ≈ 0.7 * 13.9 = 9.73 m/s</p>
+<hr>
+<p>Ces exemples aident à comprendre les ordres de grandeur et tester la cohérence des <code>DrivePlanEntry</code> produits par le moteur.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../simulation/vehicle.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../simulation/drive_plan.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../simulation/drive_plan.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../scoring.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -220,11 +253,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../simulation/vehicle.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../simulation/drive_plan.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../simulation/drive_plan.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../scoring.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
@@ -269,10 +302,8 @@
         <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="../mermaid-loader-1508ae7a.js"></script>
-        <script src="../mermaid-init-49a54d84.js"></script>
-        <script src="../katex-loader-d2c37f60.js"></script>
-        <script src="../katex-init-c90d5c99.js"></script>
+        <script src="../mermaid-loader-58f8d2c4.js"></script>
+        <script src="../mermaid-init-1ea3646b.js"></script>
 
 
 
