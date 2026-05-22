@@ -13,6 +13,25 @@ RoadIA est un éditeur de réseau routier et un simulateur de trafic en temps r�
 
 ---
 
+## Docker
+
+### Prérequis
+
+- Docker 20.10+
+- Docker Compose v2 (plugin, `docker compose`)
+
+### Lancement
+2
+```bash
+docker compose up --build
+```
+
+Services:
+- **client** — application Next.js
+- **server** — API Rust et moteur de simulation
+
+---
+
 ## Installation et lancement local
 
 ### 1. Cloner le projet avec Git
@@ -62,25 +81,6 @@ Commandes utiles:
 cargo build --release   # compilation optimisée
 cargo test --all-features   # exécution des tests
 ```
-
----
-
-## Docker
-
-### Prérequis
-
-- Docker 20.10+
-- Docker Compose v2 (plugin, `docker compose`)
-
-### Lancement
-
-```bash
-docker compose up --build
-```
-
-Services:
-- **client** — application Next.js
-- **server** — API Rust et moteur de simulation
 
 ---
 
