@@ -63,7 +63,7 @@ impl Simulation for SimulationEngine {
             }
         }
         
-        Self {
+        let mut engine = Self {
             config,
             vehicles,
             current_time,
@@ -74,7 +74,9 @@ impl Simulation for SimulationEngine {
             all_vehicles_arrived: false,
             traffic_light_states,
             link_directory,
-        }
+        };
+        engine.update_green_links();
+        engine
     }
 
     fn run(&mut self) {
@@ -122,6 +124,49 @@ impl SimulationEngine {
                 for link in &lane.links {
                     self.link_directory.insert(link.id, link.clone());
                 }
+            }
+        }
+    }
+
+    pub fn rebuild_traffic_light_states(&mut self) {
+        let mut new_states = HashMap::new();
+        for (&id, controller) in &self.config.map.traffic_lights {
+            if let Some(existing) = self.traffic_light_states.get(&id) {
+                if existing.phase_index < controller.phases.len() {
+                    new_states.insert(id, existing.clone());
+                } else {
+                    new_states.insert(id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 });
+                }
+            } else {
+                new_states.insert(id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 });
+            }
+        }
+        self.traffic_light_states = new_states;
+        self.update_green_links();
+    }
+
+    pub fn reset_traffic_light_states(&mut self) {
+        let mut new_states = HashMap::new();
+        for &id in self.config.map.traffic_lights.keys() {
+            new_states.insert(id, TrafficLightRuntimeState { phase_index: 0, time_in_phase: 0.0 });
+        }
+        self.traffic_light_states = new_states;
+        self.update_green_links();
+    }
+
+    pub fn update_green_links(&mut self) {
+        self.green_links.clear();
+        for (&ctrl_id, state) in &self.traffic_light_states {
+            let controller = match self.config.map.traffic_lights.get(&ctrl_id) {
+                Some(c) => c,
+                None => continue,
+            };
+            if controller.phases.is_empty() {
+                continue;
+            }
+            let current_phase = &controller.phases[state.phase_index];
+            if state.time_in_phase < current_phase.green_duration {
+                self.green_links.extend(current_phase.green_link_ids.iter().copied());
             }
         }
     }

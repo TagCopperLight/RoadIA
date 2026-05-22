@@ -333,3 +333,75 @@ pub fn add_traffic_light_controller(
 
     Ok(TrafficLightControllerHandle { controller_id })
 }
+
+pub fn update_traffic_light(
+    map: &mut Map,
+    intersection_id: u32,
+    phases: Vec<SignalPhase>,
+) -> Result<(), String> {
+    if !map.node_index_map.contains_key(&intersection_id) {
+        return Err(format!("Intersection {} not found", intersection_id));
+    }
+    if phases.is_empty() {
+        return Err("Traffic light controller must have at least one phase".to_string());
+    }
+
+    let existing_controller_id = map.traffic_lights.iter()
+        .find(|(_, c)| c.intersection_id == intersection_id)
+        .map(|(cid, _)| *cid);
+
+    let controller_id = match existing_controller_id {
+        Some(cid) => cid,
+        None => {
+            let cid = map.next_controller_id;
+            map.next_controller_id += 1;
+            cid
+        }
+    };
+
+    let mut old_link_ids = Vec::new();
+    if let Some(controller) = map.traffic_lights.get(&controller_id) {
+        old_link_ids = controller.phases.iter().flat_map(|p| p.green_link_ids.iter().copied()).collect();
+    }
+
+    let new_link_ids: Vec<u32> = phases.iter().flat_map(|p| p.green_link_ids.iter().copied()).collect();
+
+    for edge_idx in map.graph.edge_indices() {
+        for lane in &mut map.graph[edge_idx].lanes {
+            for link in &mut lane.links {
+                if old_link_ids.contains(&link.id) && !new_link_ids.contains(&link.id) {
+                    link.link_type = LinkType::Priority;
+                }
+                for foe in &mut link.foe_links {
+                    if old_link_ids.contains(&foe.id) && !new_link_ids.contains(&foe.id) {
+                        foe.link_type = LinkType::Priority;
+                    }
+                }
+            }
+        }
+    }
+
+    for edge_idx in map.graph.edge_indices() {
+        for lane in &mut map.graph[edge_idx].lanes {
+            for link in &mut lane.links {
+                if new_link_ids.contains(&link.id) {
+                    link.link_type = LinkType::TrafficLight;
+                }
+                for foe in &mut link.foe_links {
+                    if new_link_ids.contains(&foe.id) {
+                        foe.link_type = LinkType::TrafficLight;
+                    }
+                }
+            }
+        }
+    }
+
+    let controller = TrafficLightController {
+        id: controller_id,
+        intersection_id,
+        phases,
+    };
+    map.traffic_lights.insert(controller_id, controller);
+
+    Ok(())
+}
