@@ -24,7 +24,7 @@ Pour passer en mode édition, cliquez sur `Édition`.
 
 Il y a plusieurs outils d'éditions disponibles en haut de l'écran :
 
-![outils.png](outils.png)
+![Outils](outils.png)
 
 - ![select.png](select.png) l'outil de sélection permet de séléctionner une route ou intersection et de modifier ses paramètres
 - ![add-node.png](add-node.png) cette outil permet d'ajouter une intersection
@@ -40,13 +40,13 @@ Pour sauvegarder ou supprimer la carte, cliquez sur `Fichier`.
 
 Pour passer en mode simulation, cliquez sur `Simulation`.
 
-![simulation.png](simulation.png)
+![Screenshot](simulation.png)
 
 Pour accéder aux paramètres de la simulation, cliquez sur `Paramètres`.
 
 Il y a plusieurs outils de simulations disponibles en haut de l'écran :
 
-![simulation-tools.png](simulation-tools.png)
+![Outils](simulation-tools.png)
 
 - ![play.png](play.png) permet de lancer la simulation
 - ![reinit.png](reinit.png) permet de réinitialiser la simulation
@@ -60,7 +60,7 @@ Le mode classique démarre le trajet de toutes les voitures directement après l
 ### Score
 Pour accéder au score de la simulation avant qu'elle ne se finisse, cliquez sur `Statistiques`.
 
-![score.png](score.png)
+![Screenshot](score.png)
 
 Le score est calculé en fonction de quatre paramètres.
 L'importance de chaque paramètre dans le calcul du score peut être changer dans les paramètres.
