@@ -202,16 +202,24 @@ impl SimulationEngine {
         }
 
         for &controller_id in self.config.map.traffic_lights.keys() {
-            let state = previous_traffic_light_states
-                .get(&controller_id)
-                .cloned()
-                .unwrap_or(TrafficLightRuntimeState {
+            let state = if let Some(existing) = previous_traffic_light_states.get(&controller_id) {
+                let controller = &self.config.map.traffic_lights[&controller_id];
+                if existing.phase_index < controller.phases.len() {
+                    existing.clone()
+                } else {
+                    TrafficLightRuntimeState {
+                        phase_index: 0,
+                        time_in_phase: 0.0,
+                    }
+                }
+            } else {
+                TrafficLightRuntimeState {
                     phase_index: 0,
                     time_in_phase: 0.0,
-                });
+                }
+            };
             self.traffic_light_states.insert(controller_id, state);
         }
-
         for (&controller_id, state) in &self.traffic_light_states {
             let (active_links, active_roads) = Self::traffic_light_cache_for_controller(
                 &self.config.map,
@@ -403,7 +411,6 @@ impl SimulationEngine {
                 }
             }
         }
-
         true
     }
 }

@@ -8,6 +8,7 @@ use uuid::Uuid;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use tokio::sync::broadcast;
+use petgraph::visit::EdgeRef;
 
 use std::collections::HashMap;
 use crate::map::intersection::IntersectionKind;
@@ -37,10 +38,12 @@ pub enum ClientPacket {
     ResetSimulation {},
     AddNode { x: f32, y: f32, kind: String },
     DeleteNode { id: u32 },
-    UpdateNode { id: u32, kind: String },
+    UpdateNode { id: u32, kind: String, has_traffic_light: Option<bool> },
+    UpdateInternalLane { intersection_id: u32, internal_lane_id: u32, link_type: String },
     AddRoad { from_id: u32, to_id: u32, lane_count: u8, speed_limit: f32 },
     DeleteRoad { id: u32 },
     UpdateRoad { id: u32, speed_limit: f32, lane_count: Option<u8> },
+    UpdateTrafficLight { intersection_id: u32, phases: Vec<crate::map::traffic_light::SignalPhase> },
     SetSpeed { multiplier: u32 },
     RequestScore {},
     RequestDensity {},
@@ -477,7 +480,7 @@ async fn handle_client_packet(
         }
 
 
-        ClientPacket::UpdateNode { id, kind } => {
+        ClientPacket::UpdateNode { id, kind, has_traffic_light } => {
             if instance.controller.is_running() {
                 send_edit_error(socket, "Stop simulation before editing the map").await;
                 return;
@@ -488,7 +491,63 @@ async fn handle_client_packet(
             };
             let result = {
                 let mut eng = instance.engine.lock().await;
-                match editor::update_node(&mut eng.config.map, id, kind) {
+                match editor::update_node(&mut eng.config.map, id, kind, has_traffic_light) {
+                    Ok(()) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
+                }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
+                Err(e) => send_edit_error(socket, &e).await,
+            }
+        }
+
+        ClientPacket::UpdateTrafficLight { intersection_id, phases } => {
+            if instance.controller.is_running() {
+                send_edit_error(socket, "Stop simulation before editing the map").await;
+                return;
+            }
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::update_traffic_light(&mut eng.config.map, intersection_id, phases) {
+                    Ok(()) => {
+                        eng.rebuild_runtime_caches();
+                        let map_snapshot = eng.config.map.clone();
+                        let snapshot = eng.clone();
+                        drop(eng);
+                        *instance.initial_engine.lock().await = snapshot;
+                        Ok(serialize_map(&map_snapshot))
+                    }
+                    Err(e) => {
+                        drop(eng);
+                        Err(e)
+                    }
+                }
+            };
+            match result {
+                Ok((nodes, edges)) => broadcast_map_edit_success(&instance.broadcast, nodes, edges),
+                Err(e) => send_edit_error(socket, &e).await,
+            }
+        }
+
+        ClientPacket::UpdateInternalLane { intersection_id, internal_lane_id, link_type } => {
+            if instance.controller.is_running() {
+                send_edit_error(socket, "Stop simulation before editing the map").await;
+                return;
+            }
+            let result = {
+                let mut eng = instance.engine.lock().await;
+                match editor::update_internal_lane(&mut eng.config.map, intersection_id, internal_lane_id, &link_type) {
                     Ok(()) => {
                         eng.rebuild_runtime_caches();
                         let map_snapshot = eng.config.map.clone();
@@ -706,29 +765,56 @@ pub fn serialize_map(map: &Map) -> (Vec<Value>, Vec<Value>) {
         .node_indices()
         .map(|i| {
             let n = &map.graph[i];
-            let has_traffic_light = map.traffic_lights
+            let controller = map.traffic_lights
                 .values()
-                .any(|c| c.intersection_id == n.id);
+                .find(|c| c.intersection_id == n.id);
+            let has_traffic_light = controller.is_some();
+            let traffic_light_controller = controller.map(|c| {
+                json!({
+                    "id": c.id,
+                    "intersection_id": c.intersection_id,
+                    "phases": c.phases.iter().map(|p| {
+                        json!({
+                            "green_link_ids": p.green_link_ids,
+                            "green_duration": p.green_duration,
+                            "yellow_duration": p.yellow_duration,
+                        })
+                    }).collect::<Vec<Value>>()
+                })
+            });
+
             let internal_lanes: Vec<Value> = n.internal_lanes.iter().map(|lane| {
-                let link_type = map.graph.edge_indices()
-                    .flat_map(|e| map.graph[e].lanes.iter())
-                    .flat_map(|l| l.links.iter())
-                    .find(|link| link.via_internal_lane_id == lane.id)
-                    .map(|link| format!("{:?}", link.link_type))
+                let link = map.graph.edges_directed(i, petgraph::Direction::Incoming)
+                    .flat_map(|e| map.graph[e.id()].lanes.iter().map(move |l| (e.id(), l)))
+                    .flat_map(|(edge_idx, l)| l.links.iter().map(move |link| (edge_idx, link)))
+                    .find(|(_, link)| link.via_internal_lane_id == lane.id);
+                
+                let link_type = link.as_ref()
+                    .map(|(_, l)| format!("{:?}", l.link_type))
                     .unwrap_or_else(|| "Priority".to_string());
+                
+                let link_id = link.as_ref().map(|(_, l)| l.id);
+                let from_road_id = link.as_ref().map(|(edge_idx, _)| map.graph[*edge_idx].id);
+                let to_road_id = link.as_ref().map(|(_, l)| l.destination_road_id);
+
                 json!({
                     "id": lane.id,
                     "entry": [lane.entry.0, lane.entry.1],
                     "exit": [lane.exit.0, lane.exit.1],
                     "link_type": link_type,
+                    "link_id": link_id,
+                    "from_road_id": from_road_id,
+                    "to_road_id": to_road_id,
                 })
             }).collect();
+
             json!({
                 "id": n.id,
                 "kind": format!("{:?}", n.kind),
                 "x": n.center_coordinates.x,
                 "y": n.center_coordinates.y,
                 "has_traffic_light": has_traffic_light,
+                "traffic_light_controller": traffic_light_controller,
                 "radius": n.radius,
                 "internal_lanes": internal_lanes,
             })
