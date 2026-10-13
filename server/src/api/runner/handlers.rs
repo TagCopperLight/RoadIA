@@ -46,6 +46,82 @@ pub struct CustomMapRequest {
     pub max_lon: f64,
 }
 
+const OVERPASS_BUSY_MESSAGE: &str = "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.";
+
+/// Public Overpass instances tried in order. Override with a comma-separated `OVERPASS_URLS`.
+const DEFAULT_OVERPASS_ENDPOINTS: &[&str] = &[
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.openstreetmap.fr/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+];
+
+fn overpass_endpoints() -> Vec<String> {
+    match std::env::var("OVERPASS_URLS") {
+        Ok(urls) if !urls.trim().is_empty() => urls.split(',').map(|u| u.trim().to_string()).filter(|u| !u.is_empty()).collect(),
+        _ => DEFAULT_OVERPASS_ENDPOINTS.iter().map(|u| u.to_string()).collect(),
+    }
+}
+
+/// Overpass reports errors as HTML (`<strong>Error</strong>: ...`) or, on a 200, as an XML `<remark>`.
+fn overpass_error_excerpt(body: &str) -> Option<String> {
+    let start = body.find("Error</strong>:").map(|i| i + "Error</strong>:".len())
+        .or_else(|| body.find("<remark>").map(|i| i + "<remark>".len()))?;
+    let rest = &body[start..];
+    let end = rest.find("</p>").or_else(|| rest.find("</remark>")).unwrap_or(rest.len().min(500));
+    Some(rest[..end].trim().to_string())
+}
+
+async fn fetch_overpass(query: &str) -> Result<String, (axum::http::StatusCode, String)> {
+    let client = reqwest::Client::builder()
+        .user_agent("RoadIA/0.1.0")
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to build HTTP client: {}", e)))?;
+
+    let mut last_error = (axum::http::StatusCode::SERVICE_UNAVAILABLE, OVERPASS_BUSY_MESSAGE.to_string());
+    for endpoint in overpass_endpoints() {
+        let started = std::time::Instant::now();
+        println!("[overpass] POST {} query={}", endpoint, query);
+
+        let res = match client.post(&endpoint).body(query.to_string()).send().await {
+            Ok(res) => res,
+            Err(e) => {
+                println!("[overpass] {} request failed after {:.1}s: {} (timeout={}, connect={})",
+                    endpoint, started.elapsed().as_secs_f32(), e, e.is_timeout(), e.is_connect());
+                continue;
+            }
+        };
+        let status = res.status();
+        let body = match res.text().await {
+            Ok(body) => body,
+            Err(e) => {
+                println!("[overpass] {} -> {} but failed to read body after {:.1}s: {}", endpoint, status, started.elapsed().as_secs_f32(), e);
+                continue;
+            }
+        };
+        println!("[overpass] {} -> {} ({} bytes in {:.1}s)", endpoint, status, body.len(), started.elapsed().as_secs_f32());
+
+        let error = overpass_error_excerpt(&body);
+        if status.is_success() && error.is_none() {
+            return Ok(body);
+        }
+
+        let detail = error.unwrap_or_else(|| body.chars().take(500).collect());
+        println!("[overpass] {} error: {}", endpoint, detail);
+        last_error = if status.is_client_error() && status != axum::http::StatusCode::TOO_MANY_REQUESTS {
+            // A bad query fails the same way on every mirror.
+            return Err((axum::http::StatusCode::BAD_GATEWAY, format!("Overpass API error: {}", detail)));
+        } else if detail.contains("too busy") || status == axum::http::StatusCode::TOO_MANY_REQUESTS || status == axum::http::StatusCode::GATEWAY_TIMEOUT {
+            (axum::http::StatusCode::SERVICE_UNAVAILABLE, OVERPASS_BUSY_MESSAGE.to_string())
+        } else {
+            (axum::http::StatusCode::BAD_GATEWAY, format!("Overpass API error: {}", detail))
+        };
+    }
+
+    println!("[overpass] all endpoints failed");
+    Err(last_error)
+}
+
 async fn create_custom_simulation_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CustomMapRequest>,
@@ -77,30 +153,7 @@ async fn create_custom_simulation_handler(
         max_lon = payload.max_lon
     );
 
-    let client = reqwest::Client::builder()
-        .user_agent("RoadIA/0.1.0")
-        .timeout(Duration::from_secs(35))
-        .build()
-        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to build HTTP client: {}", e)))?;
-    let res = client.post("https://overpass-api.de/api/interpreter")
-        .body(overpass_query)
-        .send()
-        .await
-        .map_err(|e| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to fetch from Overpass API: {}", e)))?;
-
-    if !res.status().is_success() {
-        let err_text = res.text().await.unwrap_or_default();
-        if err_text.contains("too busy") {
-            return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.".to_string()));
-        }
-        return Err((axum::http::StatusCode::BAD_GATEWAY, format!("Overpass API error: {}", err_text)));
-    }
-
-    let map_data = res.text().await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to get Overpass text".to_string()))?;
-
-    if map_data.contains("too busy") {
-        return Err((axum::http::StatusCode::SERVICE_UNAVAILABLE, "Les serveurs d'OpenStreetMap sont actuellement surchargés. Veuillez réessayer plus tard.".to_string()));
-    }
+    let map_data = fetch_overpass(&overpass_query).await?;
 
     tokio::fs::write(&tmp_osm_path, map_data).await.map_err(|_| (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Failed to write temporary osm file".to_string()))?;
 
