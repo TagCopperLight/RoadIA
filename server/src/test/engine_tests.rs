@@ -295,7 +295,7 @@ fn rebuild_runtime_caches_refreshes_traffic_light_road_ids_after_edit() {
 }
 
 #[test]
-fn step_vehicle_stops_before_junction_when_destination_lane_blocked() {
+fn step_vehicle_stops_behind_a_vehicle_blocking_the_junction_exit() {
     let map = make_minimal_straight_map();
     let hab = map.find_node(0).unwrap();
     let jct = map.find_node(1).unwrap();
@@ -330,23 +330,37 @@ fn step_vehicle_stops_before_junction_when_destination_lane_blocked() {
         engine.insert_vehicle_into_lane(LaneId::Normal(first_edge, 0), 0);
         engine.insert_vehicle_into_lane(LaneId::Normal(second_edge, 0), 1);
 
-        // Step for a while
-        for _ in 0..50 {
+        for _ in 0..150 {
             engine.step();
             engine.current_time += engine.config.time_step;
         }
 
-        // v0 should stop before entering the junction (position_on_lane < 500.0)
+        // Nothing crosses this junction, so v0 may enter it, but it must stop behind
+        // v1, whose rear sticks 8 m back into the junction.
+        let v0 = &engine.vehicles[0];
+        let v1 = &engine.vehicles[1];
+        let junction_lane_length = |id: u32| {
+            engine.config.map.graph[jct]
+                .internal_lanes
+                .iter()
+                .find(|lane| lane.id == id)
+                .unwrap()
+                .length
+        };
+        // Position of v0's front measured from the start of the exit road.
+        let front = match v0.current_lane {
+            Some(LaneId::Normal(edge, _)) if edge == first_edge => {
+                v0.position_on_lane - 500.0 - engine.vehicles[0].drive_plan.first().map_or(0.0, |entry| junction_lane_length(entry.via_internal_lane_id))
+            }
+            Some(LaneId::Internal(_, id)) => v0.position_on_lane - junction_lane_length(id),
+            other => panic!("v0 should not have reached {other:?}"),
+        };
         assert!(
-            engine.vehicles[0].position_on_lane < 500.0,
-            "v0 should have stopped before the junction, but got position {}",
-            engine.vehicles[0].position_on_lane
+            front <= v1.position_on_lane - v1.spec.length,
+            "v0 front at {front} overlaps v1 rear at {}",
+            v1.position_on_lane - v1.spec.length
         );
-        assert_eq!(
-            engine.vehicles[0].current_lane,
-            Some(LaneId::Normal(first_edge, 0)),
-            "v0 should still be on the first edge"
-        );
+        assert!(v0.velocity < 0.5, "v0 should have stopped");
     }
 
     // Case 2: Destination lane has enough space (vehicle v1 is further down at 20.0)

@@ -21,7 +21,8 @@ pub enum CommutePlanState {
 pub struct CommutePlan {
     pub id: u64,
     pub outbound_vehicle_id: u64,
-    pub return_vehicle_id: u64,
+    /// `None` when there is no way back from the destination.
+    pub return_vehicle_id: Option<u64>,
     pub outbound_departure_time_s: f32,
     pub return_waiting_time_s: f32,
     pub state: CommutePlanState,
@@ -31,7 +32,7 @@ impl CommutePlan {
     pub fn new(
         id: u64,
         outbound_vehicle_id: u64,
-        return_vehicle_id: u64,
+        return_vehicle_id: Option<u64>,
         outbound_departure_time_s: f32,
         return_waiting_time_s: f32,
     ) -> Self {
@@ -48,7 +49,7 @@ impl CommutePlan {
     pub fn immediate(
         id: u64,
         outbound_vehicle_id: u64,
-        return_vehicle_id: u64,
+        return_vehicle_id: Option<u64>,
         simulation_start_time_s: f32,
     ) -> Self {
         Self::new(id, outbound_vehicle_id, return_vehicle_id, simulation_start_time_s, 0.0)
@@ -57,7 +58,7 @@ impl CommutePlan {
     pub fn random<R: Rng + ?Sized>(
         id: u64,
         outbound_vehicle_id: u64,
-        return_vehicle_id: u64,
+        return_vehicle_id: Option<u64>,
         simulation_start_time_s: f32,
         rng: &mut R,
     ) -> Self {

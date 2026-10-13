@@ -17,6 +17,7 @@ dotenvy = "0.15"
 reqwest = { version = "0.13.3", features = ["json"] }
 rand_distr = "0.5"
 ordered-float = "4"
+rustc-hash = "2"
 
 [dev-dependencies]
 rand_chacha = "0.9"

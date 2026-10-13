@@ -47,7 +47,7 @@ pub struct TripRequest {
     pub departure_time: f32,
 }
 
-#[derive(Copy, Clone, PartialEq, Debug, Hash, Eq)]
+#[derive(Copy, Clone, PartialEq, Debug, Hash, Eq, PartialOrd, Ord)]
 pub enum LaneId {
     Normal(EdgeIndex, u32), // Normal lane (EdgeIndex, lane.id).
     Internal(u32, u32), // Internal lane (intersection.id, internal_lane.id).
@@ -60,20 +60,20 @@ pub enum VehicleState {
     Arrived,
 }
 
-#[derive(Clone)]
+/// One upcoming junction crossing, as planned by the vehicle.
+#[derive(Clone, Debug)]
 pub struct DrivePlanEntry {
     pub link_id: u32,
-    pub lane_id: LaneId,
-    pub via_internal_lane_id: u32,
     pub junction_id: u32,
-    pub v_pass: f32,
-    pub v_wait: f32,
+    pub via_internal_lane_id: u32,
+    /// Distance from the vehicle's front to the stop line of the link.
+    pub distance: f32,
+    /// Speed the vehicle slows down to before crossing the stop line.
+    pub approach_speed: f32,
     pub arrival_time: f32,
     pub arrival_speed: f32,
     pub leave_time: f32,
     pub leave_speed: f32,
-    pub distance: f32,
-    pub set_request: bool,
 }
 
 #[derive(Clone)]
@@ -118,6 +118,24 @@ pub fn fastest_path(map: &Map, source: NodeIndex, destination: NodeIndex) -> Opt
     result.map(|(_cost, path)| path)
 }
 
+/// Fastest route from `start` visiting every waypoint in order, then `destination`.
+/// Returns `None` when a stop is unreachable.
+pub fn route_through(
+    map: &Map,
+    start: NodeIndex,
+    waypoints: &[NodeIndex],
+    destination: NodeIndex,
+) -> Option<Vec<NodeIndex>> {
+    let mut route = vec![start];
+    for &stop in waypoints.iter().chain(std::iter::once(&destination)) {
+        let current = *route.last().unwrap();
+        if stop != current {
+            route.extend_from_slice(&fastest_path(map, current, stop)?[1..]);
+        }
+    }
+    Some(route)
+}
+
 impl Vehicle {
     pub fn new(id: u64, spec: VehicleSpec, trip: TripRequest, motorization: VehicleType) -> Self {
         Self {
@@ -146,47 +164,26 @@ impl Vehicle {
         }
     }
 
+    /// Recomputes the route from the current node (or the trip origin) through the
+    /// remaining waypoints. Clears the path and returns `false` when no route exists.
     pub fn update_path(&mut self, map: &Map) -> bool {
-        let mut stops: Vec<NodeIndex> = self.waypoints.clone();
-        stops.push(self.trip.destination);
-
-        let start = if !self.path.is_empty() && self.path_index < self.path.len() {
-            self.path[self.path_index]
-        } else {
-            self.trip.origin
+        let start = match self.path.get(self.path_index) {
+            Some(&node) => node,
+            None => self.trip.origin,
         };
 
-        let mut full_path = vec![start];
-        let mut current = start;
-        for &stop in &stops {
-            match fastest_path(map, current, stop) {
-                Some(seg) => {
-                    if seg.len() < 2 {
-                        self.path.clear();
-                        self.path_index = 0;
-                        return false;
-                    }
-                    full_path.extend_from_slice(&seg[1..]);
-                    current = stop;
-                }
-                None => {
-                    self.path.clear();
-                    self.path_index = 0;
-                    return false;
-                }
+        match route_through(map, start, &self.waypoints, self.trip.destination) {
+            Some(route) if route.len() >= 2 => {
+                self.path = route;
+                self.path_index = 0;
+                true
+            }
+            _ => {
+                self.path.clear();
+                self.path_index = 0;
+                false
             }
         }
-        if full_path.len() < 2 {
-            self.path.clear();
-            self.path_index = 0;
-            return false;
-        }
-        self.path = full_path;
-        self.path_index = 0; // full_path always starts at `start`
-        // NOTE: Do NOT clear drive_plan/registered_link_ids here. The simulation engine
-        // will rebuild them naturally when rebuild_drive_plan is called in the next step.
-        // Clearing them prematurely would cause enter_junction_or_arrive to abort movement.
-        true
     }
 
     pub fn compute_acceleration(
@@ -198,6 +195,9 @@ impl Vehicle {
     ) -> f32 {
         if minimum_gap == 0.0 {
             minimum_gap = 0.1;
+        }
+        if desired_velocity <= 0.0 {
+            return -self.spec.comfortable_deceleration;
         }
 
         let free_road_acc = self.spec.max_acceleration
@@ -362,9 +362,10 @@ impl Vehicle {
     pub fn get_current_road(&self, map: &Map) -> Option<EdgeIndex> {
         match self.current_lane {
             Some(LaneId::Internal(_, _)) => None,
-            _ => map
-                .graph
-                .find_edge(self.get_current_node(), self.get_next_node()),
+            _ => map.graph.find_edge(
+                *self.path.get(self.path_index)?,
+                *self.path.get(self.path_index + 1)?,
+            ),
         }
     }
 

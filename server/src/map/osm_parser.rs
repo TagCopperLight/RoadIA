@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 
@@ -48,6 +48,14 @@ struct HighwayWay {
     lane_count: u8,
     oneway: bool,
     reversed: bool, // oneway=-1: one-way in reverse node order
+    roundabout: bool,
+}
+
+/// A map imported from OpenStreetMap.
+pub struct OsmMap {
+    pub map: Map,
+    /// Roads that are part of a roundabout (`junction=roundabout`).
+    pub roundabout_road_ids: HashSet<u32>,
 }
 
 /// A node's position (lat/lon in degrees).
@@ -59,7 +67,7 @@ struct NodeCoord {
 
 // ── Main entry point ────────────────────────────────────────────────────
 
-pub fn parse_osm_pbf<P: AsRef<Path>>(path: P) -> Result<Map, OsmParseError> {
+pub fn parse_osm_pbf<P: AsRef<Path>>(path: P) -> Result<OsmMap, OsmParseError> {
     // ── Pass 1: collect highway ways & count node references ────────
     let (ways, mut node_ref_count) = collect_highway_data(path.as_ref())?;
     if ways.is_empty() {
@@ -162,11 +170,12 @@ fn collect_highway_data(
 
                 let oneway_tag = tags.iter().find(|(k, _)| *k == "oneway").map(|(_, v)| *v);
                 let reversed = oneway_tag == Some("-1");
+                let roundabout = tags.iter().any(|(k, v)| *k == "junction" && *v == "roundabout");
                 let oneway = reversed
                     || oneway_tag == Some("yes")
                     || oneway_tag == Some("1")
                     || oneway_tag == Some("true")
-                    || tags.iter().any(|(k, v)| *k == "junction" && *v == "roundabout")
+                    || roundabout
                     || hw_type == "motorway"
                     || hw_type == "motorway_link";
 
@@ -177,6 +186,7 @@ fn collect_highway_data(
                     lane_count,
                     oneway,
                     reversed,
+                    roundabout,
                 });
             }
         }
@@ -227,8 +237,9 @@ fn build_map(
     ways: &[HighwayWay],
     node_ref_count: &HashMap<i64, u32>,
     node_coords: &HashMap<i64, NodeCoord>,
-) -> Result<Map, OsmParseError> {
+) -> Result<OsmMap, OsmParseError> {
     let mut map = Map::new();
+    let mut roundabout_road_ids = HashSet::new();
 
     // Compute a geographic center for the equirectangular projection.
     let (center_lat, center_lon) = {
@@ -306,7 +317,10 @@ fn build_map(
 
             if way.oneway {
                 let (src, dst) = if way.reversed { (to_id, from_id) } else { (from_id, to_id) };
-                map.add_road(src, dst, way.lane_count, speed, length);
+                let road_id = map.add_road(src, dst, way.lane_count, speed, length);
+                if way.roundabout {
+                    roundabout_road_ids.insert(road_id);
+                }
             } else {
                 map.add_two_way_road(from_id, to_id, way.lane_count, speed, length);
             }
@@ -315,7 +329,7 @@ fn build_map(
         }
     }
 
-    Ok(map)
+    Ok(OsmMap { map, roundabout_road_ids })
 }
 
 // ── Helper functions ────────────────────────────────────────────────────

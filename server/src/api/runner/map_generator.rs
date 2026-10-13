@@ -15,7 +15,7 @@ use crate::simulation::vehicle::{TripRequest, Vehicle, VehicleKind, VehicleSpec,
 /// Load a map from an `.osm.pbf` file, build intersections, and assign
 /// habitation / workplace kinds to leaf nodes so vehicles can spawn.
 pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmParseError> {
-    let mut map = osm_parser::parse_osm_pbf(path)?;
+    let osm_parser::OsmMap { mut map, roundabout_road_ids } = osm_parser::parse_osm_pbf(path)?;
 
     // Remove disconnected fragments — keep only the largest connected component.
     map.retain_largest_component();
@@ -71,6 +71,7 @@ pub fn create_osm_map<P: AsRef<Path>>(path: P) -> Result<Map, osm_parser::OsmPar
     );
 
     intersection::build_intersections(&mut map);
+    roundabout::mark_roundabout_entries(&mut map, &roundabout_road_ids);
     Ok(map)
 }
 
@@ -134,7 +135,7 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
     while commute_plans.len() < commute_plan_count {
         let commute_plan_id = commute_plans.len() as u64;
         let outbound_vehicle_id = vehicles.len() as u64;
-        let return_vehicle_id = outbound_vehicle_id + 1;
+        let return_vehicle_id = Some(outbound_vehicle_id + 1);
 
         let (origin, destination) = valid_pairs[rng.random_range(0..valid_pairs.len())];
 
@@ -199,11 +200,12 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
         // Only create a return vehicle if a path exists back from destination -> origin.
         let has_return_path = crate::simulation::vehicle::fastest_path(map, destination, origin).is_some();
         if has_return_path {
-            let mut return_vehicle = Vehicle::new(return_vehicle_id, spec, return_trip, motorization);
+            let mut return_vehicle = Vehicle::new(outbound_vehicle_id + 1, spec, return_trip, motorization);
             return_vehicle.commute_plan_id = Some(commute_plan_id);
             return_vehicle.is_reckless = is_reckless;
             if !return_vehicle.update_path(map) {
                 // If return path unexpectedly fails, push outbound only.
+                commute_plan.return_vehicle_id = None;
                 vehicles.push(outbound_vehicle);
                 commute_plans.push(commute_plan);
                 continue;
@@ -213,6 +215,7 @@ pub fn create_random_commutes_with_rng<R: Rng + ?Sized>(
             vehicles.push(return_vehicle);
             commute_plans.push(commute_plan);
         } else {
+            commute_plan.return_vehicle_id = None;
             vehicles.push(outbound_vehicle);
             commute_plans.push(commute_plan);
         }

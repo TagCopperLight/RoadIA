@@ -12,43 +12,45 @@ pub struct RoundaboutHandle {
 }
 
 pub fn finalize_roundabout_links(map: &mut Map, handle: &RoundaboutHandle) {
-    let ring_node_set: HashSet<u32> = handle.ring_node_ids.iter().copied().collect();
+    let ring_road_ids: HashSet<u32> = handle.ring_road_ids.iter().copied().collect();
+    mark_roundabout_entries(map, &ring_road_ids);
+}
+
+/// Makes traffic entering a roundabout yield to the traffic already on it: every link of a
+/// road that ends on the ring without being part of it becomes a `Yield` link.
+/// Must run after `build_intersections`, which resets link types. Unknown ids are ignored.
+pub fn mark_roundabout_entries(map: &mut Map, ring_road_ids: &HashSet<u32>) {
+    let ring_nodes: HashSet<_> = map
+        .graph
+        .edge_references()
+        .filter(|edge| ring_road_ids.contains(&edge.weight().id))
+        .map(|edge| edge.target())
+        .collect();
+
+    let entries: Vec<_> = ring_nodes
+        .iter()
+        .flat_map(|&node| map.graph.edges_directed(node, Direction::Incoming))
+        .filter(|edge| !ring_road_ids.contains(&edge.weight().id))
+        .map(|edge| edge.id())
+        .collect();
 
     let mut entry_link_ids: HashSet<u32> = HashSet::new();
-    for &ring_node_id in &handle.ring_node_ids {
-        let ring_node_idx = map.find_node(ring_node_id).expect("ring node not found");
-        let incoming: Vec<_> = map
-            .graph
-            .edges_directed(ring_node_idx, Direction::Incoming)
-            .map(|e| e.id())
-            .collect();
-
-        for edge_idx in incoming {
-            let (src, _) = map.graph.edge_endpoints(edge_idx).unwrap();
-            let src_id = map.graph[src].id;
-            if !ring_node_set.contains(&src_id) {
-                for lane in &mut map.graph[edge_idx].lanes {
-                    for link in &mut lane.links {
-                        entry_link_ids.insert(link.id);
-                        link.link_type = LinkType::Yield;
-                    }
-                }
+    for edge in entries {
+        for lane in &mut map.graph[edge].lanes {
+            for link in &mut lane.links {
+                link.link_type = LinkType::Yield;
+                entry_link_ids.insert(link.id);
             }
         }
     }
 
-    for &ring_road_id in &handle.ring_road_ids {
-        if let Some(edge_idx) = map.find_edge(ring_road_id) {
-            for lane in &mut map.graph[edge_idx].lanes {
-                for link in &mut lane.links {
-                    for foe in &mut link.foe_links {
-                        if entry_link_ids.contains(&foe.id) {
-                            foe.link_type = LinkType::Yield;
-                        }
-                    }
+    for road in map.graph.edge_weights_mut() {
+        for link in road.lanes.iter_mut().flat_map(|lane| &mut lane.links) {
+            for foe in &mut link.foe_links {
+                if entry_link_ids.contains(&foe.id) {
+                    foe.link_type = LinkType::Yield;
                 }
             }
         }
     }
 }
-

@@ -13,11 +13,11 @@ use crate::map::intersection::build_intersections;
 
 #[test]
 fn commute_plan_new_is_deterministic() {
-    let plan = CommutePlan::new(7, 11, 12, 1_234.5, 678.9);
+    let plan = CommutePlan::new(7, 11, Some(12), 1_234.5, 678.9);
 
     assert_eq!(plan.id, 7);
     assert_eq!(plan.outbound_vehicle_id, 11);
-    assert_eq!(plan.return_vehicle_id, 12);
+    assert_eq!(plan.return_vehicle_id, Some(12));
     assert_eq!(plan.outbound_departure_time_s, 1_234.5);
     assert_eq!(plan.return_waiting_time_s, 678.9);
     assert_eq!(plan.state, CommutePlanState::OutboundPending);
@@ -28,8 +28,8 @@ fn commute_plan_random_is_seeded() {
     let mut rng_a = ChaCha20Rng::seed_from_u64(42);
     let mut rng_b = ChaCha20Rng::seed_from_u64(42);
 
-    let plan_a = CommutePlan::random(0, 1, 2, 0.0, &mut rng_a);
-    let plan_b = CommutePlan::random(0, 1, 2, 0.0, &mut rng_b);
+    let plan_a = CommutePlan::random(0, 1, Some(2), 0.0, &mut rng_a);
+    let plan_b = CommutePlan::random(0, 1, Some(2), 0.0, &mut rng_b);
 
     assert_eq!(plan_a.outbound_departure_time_s, plan_b.outbound_departure_time_s);
     assert_eq!(plan_a.return_waiting_time_s, plan_b.return_waiting_time_s);
@@ -40,7 +40,7 @@ fn commute_plan_random_is_seeded() {
 #[test]
 fn commute_plan_random_respects_simulation_start_time() {
     let mut rng = ChaCha20Rng::seed_from_u64(99);
-    let plan = CommutePlan::random(0, 1, 2, 39_600.0, &mut rng);
+    let plan = CommutePlan::random(0, 1, Some(2), 39_600.0, &mut rng);
 
     assert!((39_600.0..=43_200.0).contains(&plan.outbound_departure_time_s));
 }
@@ -64,7 +64,7 @@ fn create_random_commutes_builds_paired_vehicles() {
         assert_eq!(return_vehicle.trip.departure_time, f32::MAX);
         assert_eq!(plan.state, CommutePlanState::OutboundPending);
         assert_eq!(plan.outbound_vehicle_id, outbound.id);
-        assert_eq!(plan.return_vehicle_id, return_vehicle.id);
+        assert_eq!(plan.return_vehicle_id, Some(return_vehicle.id));
     }
 }
 
@@ -132,7 +132,7 @@ fn commute_plan_runs_outbound_then_return() {
     let mut engine = SimulationEngine::new_with_commutes(
         config,
         vec![outbound, return_vehicle],
-        vec![CommutePlan::new(0, 0, 1, 0.0, 0.0)],
+        vec![CommutePlan::new(0, 0, Some(1), 0.0, 0.0)],
     );
 
     engine.run();

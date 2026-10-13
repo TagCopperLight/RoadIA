@@ -54,13 +54,14 @@ fn overtake_slow_leader() {
 }
 
 #[test]
-fn keep_right_in_clear_left_lane() {
+fn keep_right_in_clear_road() {
+    // Lanes are numbered from the centre of the road: lane 1 is right of lane 0.
     let map = make_two_lane_map();
     let hab  = map.find_node(0).unwrap();
     let jct  = map.find_node(1).unwrap();
     let work = map.find_node(2).unwrap();
     let first_edge = map.graph.find_edge(hab, jct).unwrap();
-    let lane1 = LaneId::Normal(first_edge, 1);
+    let left_lane = LaneId::Normal(first_edge, 0);
 
     let spec = VehicleSpec::new(VehicleKind::Car, 40.0, 4.0, 3.0, 1.0, 5.0);
     let mut v = Vehicle::new(
@@ -70,16 +71,15 @@ fn keep_right_in_clear_left_lane() {
         VehicleType::Essence,
     );
     v.update_path(&map);
-    // Pre-place in lane 1
     v.state = VehicleState::OnRoad;
-    v.current_lane = Some(lane1);
+    v.current_lane = Some(left_lane);
     v.position_on_lane = 10.0;
     v.velocity = 5.0;
     v.previous_velocity = 5.0;
 
     let config = make_sim_config(map, 30.0);
     let mut engine = SimulationEngine::new(config, vec![v]);
-    engine.insert_vehicle_into_lane(lane1, 0);
+    engine.insert_vehicle_into_lane(left_lane, 0);
 
     let end_time = engine.current_time + 10.0;
     while engine.current_time < end_time {
@@ -87,6 +87,7 @@ fn keep_right_in_clear_left_lane() {
         engine.current_time += engine.config.time_step;
     }
 
-    let in_lane_0 = matches!(engine.vehicles[0].current_lane, Some(LaneId::Normal(_, 0)));
-    assert!(in_lane_0, "vehicle should have kept right to lane 0");
+    // It must also stay there: no leader to overtake.
+    let in_right_lane = matches!(engine.vehicles[0].current_lane, Some(LaneId::Normal(_, 1)));
+    assert!(in_right_lane, "vehicle should have kept right to lane 1");
 }

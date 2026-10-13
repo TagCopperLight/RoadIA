@@ -1,16 +1,9 @@
-use std::collections::{HashMap, HashSet};
-
-use petgraph::graph::NodeIndex;
-
 use crate::map::intersection::{
-    boundary_point, build_intersections, cross, dist, foe_is_to_the_right, is_link_open,
-    lerp, on_segment, perp_right, lane_boundary_point, segments_intersect, time_window_conflict,
-    ApproachData, IntersectionKind, LinkState,
+    boundary_point, build_intersections, cross, dist, lane_boundary_point, on_segment, perp_right,
+    segments_intersect, IntersectionKind,
 };
 use crate::map::model::Map;
-use crate::map::road::{FoeLink, Link, LinkType};
-use crate::simulation::vehicle::{LaneId, Vehicle};
-use crate::test::{make_approach_data, make_default_link, make_foe_link, make_minimal_straight_map, make_vehicle};
+use crate::test::make_minimal_straight_map;
 
 // ---- cross ----
 
@@ -154,33 +147,6 @@ fn dist_negative_coords() {
     assert!((dist((-3.0, 0.0), (0.0, 4.0)) - 5.0).abs() < 1e-4);
 }
 
-// ---- lerp ----
-
-#[test]
-fn lerp_at_zero() {
-    assert_eq!(lerp(2.0, 5.0, 0.0), 2.0);
-}
-
-#[test]
-fn lerp_at_one() {
-    assert_eq!(lerp(2.0, 5.0, 1.0), 5.0);
-}
-
-#[test]
-fn lerp_at_half() {
-    assert!((lerp(2.0, 5.0, 0.5) - 3.5).abs() < 1e-6);
-}
-
-#[test]
-fn lerp_clamp_below_zero() {
-    assert_eq!(lerp(2.0, 5.0, -1.0), 2.0);
-}
-
-#[test]
-fn lerp_clamp_above_one() {
-    assert_eq!(lerp(2.0, 5.0, 2.0), 5.0);
-}
-
 // ---- perp_right ----
 
 #[test]
@@ -228,261 +194,6 @@ fn lane_boundary_point_lane_one() {
     let (x, y) = lane_boundary_point((0.0, 0.0), (1.0, 0.0), 1, 7.5);
     assert!((x - 11.25).abs() < 1e-4, "x={x}");
     assert!((y - 0.0).abs() < 1e-4, "y={y}");
-}
-
-// ---- foe_is_to_the_right ----
-// Using screen/y-down coordinate system where +y is south.
-
-#[test]
-fn foe_is_to_the_right_true() {
-    // Ego coming from south (entry=(0,10)), junction=(0,0), going north (-y).
-    // Foe coming from east (entry=(10,0)), going west (-x).
-    // In screen coords, going north (-y), right is east (+x) → foe from east IS to the right.
-    let ego = Link {
-        entry: (0.0, 10.0),
-        junction_center: (0.0, 0.0),
-        link_type: LinkType::Priority,
-        foe_links: vec![],
-        foe_internal_lane_ids: vec![],
-        id: 0, lane_origin_id: 0, lane_destination_id: 0,
-        via_internal_lane_id: 0, destination_road_id: 0,
-    };
-    let foe = FoeLink {
-        id: 1,
-        link_type: LinkType::Priority,
-        entry: (10.0, 0.0),
-    };
-    assert!(foe_is_to_the_right(&ego, &foe));
-}
-
-#[test]
-fn foe_is_to_the_right_false() {
-    // Same ego (going north), but foe from west (entry=(-10,0)).
-    // In screen coords, going north (-y), left is west → foe from west is to the LEFT.
-    let ego = Link {
-        entry: (0.0, 10.0),
-        junction_center: (0.0, 0.0),
-        link_type: LinkType::Priority,
-        foe_links: vec![],
-        foe_internal_lane_ids: vec![],
-        id: 0, lane_origin_id: 0, lane_destination_id: 0,
-        via_internal_lane_id: 0, destination_road_id: 0,
-    };
-    let foe = FoeLink {
-        id: 1,
-        link_type: LinkType::Priority,
-        entry: (-10.0, 0.0),
-    };
-    assert!(!foe_is_to_the_right(&ego, &foe));
-}
-
-// ---- time_window_conflict ----
-
-#[test]
-fn twc_direct_window_overlap() {
-    // ego=(5,7), foe=(4,6) with zero impatience → overlapping → true
-    let result = time_window_conflict(5.0, 7.0, 4.0, 6.0, 10.0, 10.0, 3.0, 0.1, false, 0.0);
-    assert!(result);
-}
-
-#[test]
-fn twc_ego_well_after_foe_leaves() {
-    // ego arrives 7s after foe leaves, look_ahead=0.1 → gap=7 >> 0.1 → false
-    let result = time_window_conflict(10.0, 12.0, 1.0, 3.0, 10.0, 10.0, 3.0, 0.1, false, 0.0);
-    assert!(!result);
-}
-
-#[test]
-fn twc_gap_smaller_than_look_ahead() {
-    // ego arrives 0.05s after foe leaves, look_ahead=0.1 → gap too small → true
-    let result = time_window_conflict(3.05, 5.0, 1.0, 3.0, 10.0, 10.0, 3.0, 0.1, false, 0.0);
-    assert!(result);
-}
-
-#[test]
-fn twc_ego_entirely_before_foe() {
-    // ego leaves well before foe arrives → false
-    let result = time_window_conflict(1.0, 3.0, 10.0, 12.0, 10.0, 10.0, 3.0, 0.1, false, 0.0);
-    assert!(!result);
-}
-
-#[test]
-fn twc_impatience_shifts_foe_window() {
-    // impatience=1 shifts foe window by look_ahead*2 forward.
-    // If ego is just after foe with no impatience (no conflict), adding impatience
-    // might keep it no-conflict or cause one depending on values.
-    // Here: ego=10, foe=1.0-3.0, look_ahead=0.1, gap=7 with impatience=0 → no conflict
-    // With impatience=1, foe_arrival_adj = lerp(1, 1.2, 1) = 1.2 → gap still 10-3.2=6.8 → no conflict
-    let no_impatience = time_window_conflict(10.0, 12.0, 1.0, 3.0, 10.0, 10.0, 3.0, 0.1, false, 0.0);
-    let with_impatience = time_window_conflict(10.0, 12.0, 1.0, 3.0, 10.0, 10.0, 3.0, 0.1, false, 1.0);
-    // Both are false (gap large enough), impatience shift is small (0.2s)
-    assert!(!no_impatience);
-    assert!(!with_impatience);
-}
-
-#[test]
-fn twc_foe_just_arrived_conflict() {
-    // Windows exactly adjacent: ego(3,5), foe(1,3) → foe_leave_adj=3 == ego_arrival=3
-    // The check: ego_arrival < foe_leave_adj → 3 < 3 is false
-    // foe_leave_adj < ego_arrival → 3 < 3 is false
-    // Falls through to true
-    let result = time_window_conflict(3.0, 5.0, 1.0, 3.0, 10.0, 10.0, 3.0, 0.1, false, 0.0);
-    assert!(result);
-}
-
-// ---- is_link_open ----
-
-fn make_vehicle_on_road(id: u64) -> Vehicle {
-    let origin = NodeIndex::new(0);
-    let dest = NodeIndex::new(1);
-    make_vehicle(id, origin, dest)
-}
-
-#[test]
-fn is_link_open_already_in_internal_lane_always_true() {
-    let link = make_default_link(0);
-    let mut vehicle = make_vehicle_on_road(1);
-    vehicle.current_lane = Some(LaneId::Internal(0, 0));
-    let ego_data = make_approach_data(1.0, 2.0);
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(result);
-}
-
-#[test]
-fn is_link_open_stop_sign_not_waited() {
-    let mut link = make_default_link(0);
-    link.link_type = LinkType::Stop;
-    let mut vehicle = make_vehicle_on_road(1);
-    vehicle.waiting_time = 0.0; // hasn't waited yet
-    let ego_data = make_approach_data(1.0, 2.0);
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(!result);
-}
-
-#[test]
-fn is_link_open_stop_sign_after_dwell() {
-    let mut link = make_default_link(0);
-    link.link_type = LinkType::Stop;
-    let mut vehicle = make_vehicle_on_road(1);
-    vehicle.waiting_time = 2.0; // > STOP_DWELL_TIME=1.0
-    let ego_data = make_approach_data(1.0, 2.0);
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(result);
-}
-
-#[test]
-fn is_link_open_foe_in_internal_lane_blocks() {
-    let junction_id = 5u32;
-    let foe_il_id = 99u32;
-    let mut link = make_default_link(0);
-    link.foe_internal_lane_ids = vec![foe_il_id];
-
-    let vehicle = make_vehicle_on_road(1);
-    let ego_data = make_approach_data(1.0, 2.0);
-
-    // Put a dummy vehicle in the conflicting internal lane
-    let mut vehicles_by_lane: HashMap<LaneId, Vec<usize>> = HashMap::new();
-    vehicles_by_lane.insert(LaneId::Internal(junction_id, foe_il_id), vec![0]);
-
-    let dummy = make_vehicle_on_road(99);
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &vehicles_by_lane, &[dummy], junction_id, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(!result);
-}
-
-#[test]
-fn is_link_open_foe_internal_lane_empty_allows() {
-    let junction_id = 5u32;
-    let foe_il_id = 99u32;
-    let mut link = make_default_link(0);
-    link.foe_internal_lane_ids = vec![foe_il_id];
-
-    let vehicle = make_vehicle_on_road(1);
-    let ego_data = make_approach_data(1.0, 2.0);
-
-    // Empty vehicle list for the conflicting lane
-    let mut vehicles_by_lane: HashMap<LaneId, Vec<usize>> = HashMap::new();
-    vehicles_by_lane.insert(LaneId::Internal(junction_id, foe_il_id), vec![]);
-
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &vehicles_by_lane, &[], junction_id, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(result);
-}
-
-#[test]
-fn is_link_open_priority_no_foes() {
-    let link = make_default_link(0); // Priority, no foe_links
-    let vehicle = make_vehicle_on_road(1);
-    let ego_data = make_approach_data(1.0, 2.0);
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(result);
-}
-
-#[test]
-fn is_link_open_yield_to_priority_conflict_blocks() {
-    // ego: Yield, foe: Priority, overlapping time windows → blocked
-    let foe_link_id = 10u32;
-    let mut link = make_default_link(0);
-    link.link_type = LinkType::Yield;
-    link.foe_links = vec![make_foe_link(foe_link_id, LinkType::Priority, (50.0, 0.0))];
-
-    let mut vehicle = make_vehicle_on_road(1); // ego id=1
-    vehicle.impatience = 0.0;
-    let ego_data = make_approach_data(2.0, 4.0);
-
-    // Foe with id=2 is approaching link 10, arrival=1, leave=3 (overlaps with ego arrival=2)
-    let foe_vehicle = make_vehicle_on_road(2);
-    let mut link_states: HashMap<u32, LinkState> = HashMap::new();
-    let mut foe_state = LinkState::default();
-    foe_state.approaching.insert(2, ApproachData {
-        arrival_time: 1.0,
-        leave_time: 3.0,
-        arrival_speed: 10.0,
-        leave_speed: 10.0,
-        will_pass: true,
-    });
-    link_states.insert(foe_link_id, foe_state);
-
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &link_states, &HashMap::new(), &[foe_vehicle], 0, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(!result, "expected blocked by yielding to priority foe");
-}
-
-#[test]
-fn is_link_open_priority_ignores_yield_foe() {
-    // ego: Priority, foe: Yield → must_yield=false → skipped, no blocking
-    let foe_link_id = 10u32;
-    let mut link = make_default_link(0);
-    link.link_type = LinkType::Priority;
-    link.foe_links = vec![make_foe_link(foe_link_id, LinkType::Yield, (50.0, 0.0))];
-
-    let vehicle = make_vehicle_on_road(1);
-    let ego_data = make_approach_data(2.0, 4.0);
-
-    let foe_vehicle = make_vehicle_on_road(2);
-    let mut link_states: HashMap<u32, LinkState> = HashMap::new();
-    let mut foe_state = LinkState::default();
-    foe_state.approaching.insert(2, ApproachData {
-        arrival_time: 1.0, leave_time: 3.0,
-        arrival_speed: 10.0, leave_speed: 10.0, will_pass: true,
-    });
-    link_states.insert(foe_link_id, foe_state);
-
-    let result = is_link_open(
-        &link, &vehicle, &ego_data, &link_states, &HashMap::new(), &[foe_vehicle], 0, 0.1, 1.0, &HashSet::new(),
-    );
-    assert!(result, "Priority vehicle should not be blocked by Yield foe");
 }
 
 // ---- build_intersections ----
@@ -533,35 +244,30 @@ fn build_intersections_populates_links_on_lanes() {
     );
 }
 
-// ---- is_link_open: traffic light ----
-
 #[test]
-fn is_link_open_traffic_light_red_blocks() {
-    let mut link = make_default_link(0);
-    link.link_type = LinkType::TrafficLight;
-    let vehicle = make_vehicle_on_road(1);
-    let ego_data = make_approach_data(1.0, 2.0);
-    // green_links is empty → link 0 is red
-    let result = is_link_open(
-        &link, &vehicle, &ego_data,
-        &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
-        &HashSet::new(),
-    );
-    assert!(!result, "traffic light link should be blocked when not in green set");
-}
+fn build_intersections_allows_u_turns_only_at_dead_ends() {
+    // hab(0) — jct(1) — dead_end(2): the dead end needs a U-turn, the junction does not.
+    let map = make_minimal_straight_map();
+    let jct = map.find_node(1).unwrap();
+    let work = map.find_node(2).unwrap();
 
-#[test]
-fn is_link_open_traffic_light_green_allows() {
-    let mut link = make_default_link(0);
-    link.link_type = LinkType::TrafficLight;
-    let vehicle = make_vehicle_on_road(1);
-    let ego_data = make_approach_data(1.0, 2.0);
-    let mut green_links = HashSet::new();
-    green_links.insert(0u32); // link id 0 is green
-    let result = is_link_open(
-        &link, &vehicle, &ego_data,
-        &HashMap::new(), &HashMap::new(), &[], 0, 0.1, 1.0,
-        &green_links,
+    let into_dead_end = map.graph.find_edge(jct, work).unwrap();
+    let back_road = map.graph[map.graph.find_edge(work, jct).unwrap()].id;
+    let u_turns: Vec<_> = map.graph[into_dead_end].lanes[0]
+        .links
+        .iter()
+        .filter(|link| link.destination_road_id == back_road)
+        .collect();
+    assert_eq!(u_turns.len(), 1, "dead end should offer a U-turn");
+
+    let hab = map.find_node(0).unwrap();
+    let into_jct = map.graph.find_edge(hab, jct).unwrap();
+    let back_to_hab = map.graph[map.graph.find_edge(jct, hab).unwrap()].id;
+    assert!(
+        map.graph[into_jct].lanes[0]
+            .links
+            .iter()
+            .all(|link| link.destination_road_id != back_to_hab),
+        "no U-turn where the road continues"
     );
-    assert!(result, "traffic light link should be open when in green set");
 }

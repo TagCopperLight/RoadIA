@@ -1859,6 +1859,7 @@ dependencies = [
  "rand_chacha 0.9.0",
  "rand_distr",
  "reqwest",
+ "rustc-hash",
  "serde",
  "serde_json",
  "tokio",
