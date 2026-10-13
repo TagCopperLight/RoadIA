@@ -2,6 +2,8 @@
 
 RoadIA est un éditeur de réseau routier et un simulateur de trafic en temps réel. Ce projet permet de créer des routes, de définir des points de passage pour les véhicules et d'observer la circulation.
 
+![Simulation sur la carte de Lannion](docs/screenshots/simulation.png)
+
 ## Tech stack
 
 | | Frontend | Backend |
