@@ -68,6 +68,8 @@ export interface VehicleUpdatePacket {
 	vehicles: VehicleData[];
 	traffic_lights: TrafficLightData[];
 	simulation_time_s: number;
+	playback_speed?: number;
+	snapshot_interval_s?: number;
 }
 
 export interface VehicleSummary {

@@ -179,3 +179,32 @@ fn create_random_commutes_supports_one_way_paths() {
     assert_eq!(outbound.commute_plan_id, Some(plan.id));
     assert_eq!(outbound.trip.departure_time, plan.outbound_departure_time_s);
 }
+#[tokio::test]
+async fn simulation_playback_applies_speed_once() {
+    use crate::api::websocket::ServerPacket;
+    use std::sync::atomic::Ordering;
+    use tokio::time::{timeout, Duration};
+
+    for multiplier in [1, 3] {
+        let mut map = make_minimal_straight_map();
+        map.settings.vehicle_count = 1;
+        map.settings.time_step = 0.1;
+        let instance = SimulationInstance::new(map);
+        instance.speed_multiplier.store(multiplier, Ordering::Relaxed);
+        let mut updates = instance.broadcast.subscribe();
+        instance.controller.start();
+
+        for step in 1..=3 {
+            let packet = timeout(Duration::from_secs(2), updates.recv()).await.unwrap().unwrap();
+            match packet {
+                ServerPacket::VehicleUpdate { simulation_time_s, playback_speed, snapshot_interval_s, .. } => {
+                    assert!((simulation_time_s - step as f32 * 0.1).abs() < 1e-6);
+                    assert_eq!(playback_speed, multiplier);
+                    assert!((snapshot_interval_s - 0.1 / multiplier as f32).abs() < 1e-6);
+                }
+                other => panic!("expected a vehicle snapshot, got {other:?}"),
+            }
+        }
+        instance.controller.stop();
+    }
+}

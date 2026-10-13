@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { useApplication } from '@pixi/react';
 import { FederatedPointerEvent } from 'pixi.js';
-import { MapData, MapEdge, VehicleData, TrafficLightData } from './types';
+import { MapData, MapEdge, TrafficLightData } from './types';
 import { AppMode, EditTool, SelectedElement } from '../EditModeContext';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
-import { Vehicle } from './elements/Vehicle';
+import { VehicleLayer } from './VehicleLayer';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
 
 interface MapCanvasProps {
 	data: MapData;
-	vehicles: VehicleData[];
 	trafficLights: Map<number, TrafficLightData>;
 	roadDensity: Map<number, number>;
 	densityView: boolean;
@@ -28,7 +27,6 @@ interface MapCanvasProps {
 
 export function MapCanvas({
 	data,
-	vehicles,
 	trafficLights,
 	roadDensity,
 	densityView,
@@ -44,51 +42,6 @@ export function MapCanvas({
 	onWaypointNodeClick,
 }: MapCanvasProps) {
 	const { app } = useApplication();
-
-	// Interpolation: targetRef holds raw WS positions, displayRef holds smoothed positions
-	const targetRef = useRef<Map<number, VehicleData>>(new Map());
-	const displayRef = useRef<Map<number, VehicleData>>(new Map());
-	const [displayVehicles, setDisplayVehicles] = useState<VehicleData[]>([]);
-
-	// Update targets when new WS data arrives
-	useEffect(() => {
-		const map = new Map<number, VehicleData>();
-		for (const v of vehicles) map.set(v.id, v);
-		targetRef.current = map;
-	}, [vehicles]);
-
-	// Lerp display vehicles toward targets on every Pixi frame
-	useEffect(() => {
-		const FACTOR = 0.2;
-		const tick = () => {
-			const targets = targetRef.current;
-			const display = displayRef.current;
-			let changed = false;
-
-			for (const [id, target] of targets) {
-				const curr = display.get(id);
-				if (!curr || target.state !== 'Moving') {
-					display.set(id, { ...target });
-					changed = true;
-				} else {
-					const nx = curr.x + (target.x - curr.x) * FACTOR;
-					const ny = curr.y + (target.y - curr.y) * FACTOR;
-					const nh = target.heading ?? 0;
-					display.set(id, { ...target, x: nx, y: ny, heading: nh });
-					changed = true;
-				}
-			}
-			for (const id of [...display.keys()]) {
-				if (!targets.has(id)) { display.delete(id); changed = true; }
-			}
-
-			if (changed) setDisplayVehicles([...display.values()]);
-		};
-
-		if (!app?.ticker) return;
-		app.ticker.add(tick);
-		return () => { app.ticker?.remove(tick); };
-	}, [app]);
 
 	const nodeMap = useMemo(
 		() => new Map(data.nodes.map(n => [n.id, n])),
@@ -216,10 +169,8 @@ export function MapCanvas({
 				/>
 				{staticMapElements}
 
-				{/* Pass 4: Vehicles (interpolated) */}
-				{displayVehicles.map((vehicle) => (
-					<Vehicle key={`vehicle-${vehicle.id}`} data={vehicle} />
-				))}
+				{/* Pass 4: Vehicles animated directly by the Pixi ticker */}
+				<VehicleLayer />
 			</pixiContainer>
 		</pixiCustomViewport>
 	);

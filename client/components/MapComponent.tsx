@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePacket, useWs } from '@/app/websocket/websocket';
 import { useEditMode } from './EditModeContext';
 import { PixiApp } from './map/PixiApp';
-import { BusLine, MapData, VehicleData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary, VehicleUpdatePacket, ScoreProgressPacket } from './map/types';
+import { BusLine, MapData, ScoreData, TrafficLightData, RoadMetricData, VehicleSummary, VehicleUpdatePacket, ScoreProgressPacket } from './map/types';
 import ScoreModal from './ScoreModal';
 import SettingsModal from './SettingsModal';
 import PropertiesPanel from './PropertiesPanel';
@@ -22,7 +22,6 @@ const clampProgress = (value: number) => Math.max(0, Math.min(100, value));
 export default function MapComponent({ uuid }: { uuid: string }) {
 	const [container, setContainer] = useState<HTMLDivElement | null>(null);
 	const [mapData, setMapData] = useState<MapData | null>(null);
-	const [vehicles, setVehicles] = useState<VehicleData[]>([]);
 	const [vehicleSummaries, setVehicleSummaries] = useState<VehicleSummary[]>([]);
 	const [score, setScore] = useState<ScoreData | null>(null);
 	const [trafficLights, setTrafficLights] = useState<Map<number, TrafficLightData>>(new Map());
@@ -96,9 +95,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	usePacket("vehicleUpdate", (data) => {
 		if (modeRef.current === 'edit') return;
 		const update = data as VehicleUpdatePacket;
-		if (update && Array.isArray(update.vehicles)) {
-			setVehicles(update.vehicles as VehicleData[]);
-		}
 		if (update && Array.isArray(update.traffic_lights)) {
 			setTrafficLights(prev => {
 				const next = new Map<number, TrafficLightData>();
@@ -110,7 +106,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 			});
 		}
 		if (typeof update?.simulation_time_s === 'number') {
-			setSimulationTime(update.simulation_time_s);
+			setSimulationTime(Math.floor(update.simulation_time_s));
 		}
 	});
 
@@ -198,7 +194,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 	useEffect(() => {
 		if (simulationResetAt === 0) return;
 		const t = setTimeout(() => {
-			setVehicles([]);
 			setRoadDensity(new Map());
 			setDensityView(false);
 			setIsDensityLoading(false);
@@ -327,8 +322,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 		}
 	}, [editTool, handleWaypointNodeClick, handleBusStopClick]);
 
-	// In edit mode, show no vehicles
-	const visibleVehicles = mode === 'edit' ? [] : vehicles;
 
 	return (
 		<div className="w-full h-full relative flex">
@@ -337,7 +330,6 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 					<PixiApp
 						resizeTo={container}
 						mapData={mapData}
-						vehicles={visibleVehicles}
 						trafficLights={trafficLights}
 						roadDensity={roadDensity}
 						densityView={densityView}

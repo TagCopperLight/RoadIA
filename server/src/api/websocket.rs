@@ -60,7 +60,7 @@ pub enum ClientPacket {
 #[serde(rename_all = "camelCase")]
 pub enum ServerPacket {
     Map { nodes: Vec<Value>, edges: Vec<Value> },
-    VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value>, simulation_time_s: f32 },
+    VehicleUpdate { vehicles: Vec<Value>, traffic_lights: Vec<Value>, simulation_time_s: f32, playback_speed: u32, snapshot_interval_s: f32 },
     MapEdit { success: bool, error: Option<String>, nodes: Vec<Value>, edges: Vec<Value> },
     Score {
         score: f32,
@@ -375,6 +375,8 @@ async fn handle_client_packet(
                 vehicles,
                 traffic_lights,
                 simulation_time_s: eng.current_time,
+                playback_speed: instance.speed_multiplier.load(Ordering::Relaxed),
+                snapshot_interval_s: (eng.config.time_step / instance.speed_multiplier.load(Ordering::Relaxed) as f32).max(1.0 / 30.0),
             };
             if let Ok(text) = serde_json::to_string(&packet) {
                 let _ = socket.send(Message::Text(text)).await;

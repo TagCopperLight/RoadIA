@@ -2,7 +2,7 @@ import { Application, extend, PixiReactElementProps } from '@pixi/react';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { CustomViewport } from './CustomViewport';
 import { MapCanvas } from './MapCanvas';
-import { MapData, VehicleData, TrafficLightData } from './types';
+import { MapData, TrafficLightData } from './types';
 import { AppMode, EditTool, SelectedElement } from '../EditModeContext';
 import { RefObject, useCallback, useState } from 'react';
 
@@ -17,7 +17,6 @@ declare module "@pixi/react" {
 interface AppProps {
 	resizeTo: RefObject<HTMLElement> | HTMLElement;
 	mapData: MapData | null;
-	vehicles: VehicleData[];
 	trafficLights: Map<number, TrafficLightData>;
 	roadDensity: Map<number, number>;
 	densityView: boolean;
@@ -34,7 +33,7 @@ interface AppProps {
 }
 
 export function PixiApp({
-	resizeTo, mapData, vehicles, trafficLights,
+	resizeTo, mapData, trafficLights,
 	roadDensity, densityView, showIntersections,
 	mode, editTool, selectedElement, pendingRoadFrom,
 	onSelectNode, onSelectRoad, onAddNode, onAddRoad, onWaypointNodeClick,
@@ -47,7 +46,6 @@ export function PixiApp({
 			{isInitialized && mapData && (
 				<MapCanvas
 					data={mapData}
-					vehicles={vehicles}
 					trafficLights={trafficLights}
 					roadDensity={roadDensity}
 					densityView={densityView}

@@ -17,7 +17,7 @@ const BUS_STYLE = { color: 0x22C55E, w: 18, h: 5 };
 
 const RECKLESS_COLOR = 0xEF4444;
 
-export function Vehicle({ data }: VehicleProps) {
+export function getVehicleStyle(data: VehicleData) {
     const baseStyle = data.kind === 'Bus'
         ? BUS_STYLE
         : data.motorization ? MOTOR_STYLE[data.motorization] : MOTOR_STYLE.Essence;
@@ -25,6 +25,11 @@ export function Vehicle({ data }: VehicleProps) {
         ? { ...baseStyle, color: RECKLESS_COLOR }
         : baseStyle;
 
+    return style;
+}
+
+export function Vehicle({ data }: VehicleProps) {
+    const style = getVehicleStyle(data);
     const drawCar = useCallback((g: Graphics) => {
         g.clear();
         g.setFillStyle({ color: style.color });
