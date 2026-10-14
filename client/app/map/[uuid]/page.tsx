@@ -6,6 +6,7 @@ import { useEditMode } from '@/components/EditModeContext';
 import { use, useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { saveMap, renameMap, deleteMap, useWs } from '@/app/websocket/websocket';
+import { ThemeToggle } from '@/components/ThemeContext';
 
 const MENU_ITEMS = ['Fichier', 'Édition', 'Simulation', 'Paramètres', 'Statistiques'];
 
@@ -93,7 +94,7 @@ function Header() {
     return (
         <div className="flex items-center w-full p-[15px]">
             <button onClick={() => router.push('/')} className="cursor-pointer hover:opacity-70 transition-opacity">
-                <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} loading='eager' />
+                <Image src="/map/logo-black.svg" alt="Logo" width={45} height={45} loading='eager' className='dark:invert' />
             </button>
             <div className='flex flex-col pl-[15px]'>
                 <div className='inline-grid w-fit text-[17px]'>
@@ -107,7 +108,7 @@ function Header() {
                             sessionStorage.setItem('map_name', e.target.value);
                         }}
                         onBlur={handleNameBlur}
-                        className='col-start-1 row-start-1 min-w-0 bg-transparent border border-transparent rounded px-1 outline-none hover:border-gray-300 focus:border-gray-400 transition-colors'
+                        className='col-start-1 row-start-1 min-w-0 bg-transparent border border-transparent rounded px-1 outline-none hover:border-gray-300 focus:border-gray-400 dark:hover:border-neutral-600 dark:focus:border-neutral-500 transition-colors'
                     />
                 </div>
                 <div className='flex text-[15px] font-medium pl-1' ref={menuRef}>
@@ -132,16 +133,16 @@ function Header() {
                                 {item}
                             </p>
                             {item === 'Fichier' && openMenu === 'Fichier' && (
-                                <div className='absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-md z-50 min-w-[160px]'>
+                                <div className='absolute top-full left-0 mt-1 bg-white border border-gray-200 dark:bg-neutral-900 dark:border-neutral-700 rounded shadow-md z-50 min-w-[160px]'>
                                     <p
                                         onClick={handleSauvegarder}
-                                        className='px-4 py-2 text-[14px] cursor-pointer hover:bg-gray-100 select-none'
+                                        className='px-4 py-2 text-[14px] cursor-pointer hover:bg-gray-100 dark:hover:bg-neutral-800 select-none'
                                     >
                                         Sauvegarder
                                     </p>
                                     <p
                                         onClick={handleSupprimer}
-                                        className='px-4 py-2 text-[14px] cursor-pointer hover:bg-red-50 text-red-600 select-none'
+                                        className='px-4 py-2 text-[14px] cursor-pointer hover:bg-red-50 text-red-600 dark:hover:bg-red-950 dark:text-red-400 select-none'
                                     >
                                         Supprimer
                                     </p>
@@ -152,7 +153,8 @@ function Header() {
                     })}
                 </div>
             </div>
-            <button className='ml-auto cursor-pointer bg-black hover:bg-neutral-800 transition-colors rounded-[10px] flex items-center justify-center'>
+            <ThemeToggle className='ml-auto mr-[10px]' />
+            <button className='cursor-pointer bg-black hover:bg-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800 dark:ring-1 dark:ring-white/10 transition-colors rounded-[10px] flex items-center justify-center'>
                 <Image src="/map/send.svg" alt="Share" width={20} height={20} className='m-[11px]' />
                 <p className='text-white text-[17px] font-medium mr-[11px]'>Partager</p>
             </button>

@@ -124,7 +124,7 @@ export default function MapSelection() {
   };
 
   return (
-    <div className="relative w-full h-[600px] bg-slate-100 rounded-lg overflow-hidden border border-gray-300">
+    <div className="relative w-full h-[600px] bg-slate-100 dark:bg-neutral-800 rounded-lg overflow-hidden border border-gray-300 dark:border-neutral-700">
       <MapContainer
         center={defaultCenter}
         zoom={defaultZoom}
@@ -147,7 +147,7 @@ export default function MapSelection() {
       {/* Overlay UI */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] flex flex-col items-center gap-2">
         {error && (
-          <div className="px-4 py-2 bg-red-100 border border-red-400 text-red-700 rounded shadow text-sm max-w-sm text-center">
+          <div className="px-4 py-2 bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300 rounded shadow text-sm max-w-sm text-center">
             {error}
           </div>
         )}
@@ -160,7 +160,7 @@ export default function MapSelection() {
             {loading ? 'Importation en cours...' : 'Importer cette zone'}
           </button>
         ) : (
-          <div className="px-6 py-2 bg-white/90 rounded shadow text-gray-700 font-medium">
+          <div className="px-6 py-2 bg-white/90 dark:bg-neutral-900/90 rounded shadow text-gray-700 dark:text-neutral-200 font-medium">
             Cliquez et glissez pour sélectionner une zone
           </div>
         )}

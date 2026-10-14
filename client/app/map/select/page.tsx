@@ -5,12 +5,13 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ThemeToggle } from '@/components/ThemeContext';
 
 const MapSelection = dynamic(() => import('@/components/MapSelection'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-[600px] bg-slate-100 flex items-center justify-center rounded-lg border border-gray-300">
-      <div className="text-gray-500 font-medium text-lg">Chargement de la carte...</div>
+    <div className="w-full h-[600px] bg-slate-100 dark:bg-neutral-800 flex items-center justify-center rounded-lg border border-gray-300 dark:border-neutral-700">
+      <div className="text-gray-500 dark:text-neutral-400 font-medium text-lg">Chargement de la carte...</div>
     </div>
   ),
 });
@@ -49,45 +50,46 @@ export default function MapSelectPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center py-10 px-4">
+    <div className="min-h-screen bg-slate-50 dark:bg-neutral-950 flex flex-col items-center py-10 px-4">
       <div className="max-w-4xl w-full">
         {/* Header / Top bar */}
         <div className="flex items-center mb-6">
           <Link
             href="/"
-            className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
+            className="flex items-center text-gray-600 hover:text-gray-900 dark:text-neutral-400 dark:hover:text-white transition-colors"
           >
             <span className="text-2xl mr-2">←</span> Retour
           </Link>
           <div className="mx-auto flex gap-4">
-            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={200} height={67} loading="eager" />
+            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={200} height={67} loading="eager" className="dark:invert" />
           </div>
+          <ThemeToggle />
         </div>
 
-        <div className="bg-white p-6 shadow-xl rounded-xl mb-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Importer une nouvelle carte</h1>
-          <p className="text-gray-600 mb-6 font-medium">
+        <div className="bg-white dark:bg-neutral-900 p-6 shadow-xl rounded-xl mb-6">
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-neutral-100 mb-2">Importer une nouvelle carte</h1>
+          <p className="text-gray-600 dark:text-neutral-400 mb-6 font-medium">
             Cliquez et faites glisser avec la souris pour dessiner un rectangle de sélection.<br/>
-            Maintenez la touche <kbd className="bg-gray-200 px-1 rounded">Ctrl</kbd> enfoncée et cliquez pour déplacer la carte.
+            Maintenez la touche <kbd className="bg-gray-200 dark:bg-neutral-700 px-1 rounded">Ctrl</kbd> enfoncée et cliquez pour déplacer la carte.
           </p>
 
           <MapSelection />
         </div>
 
-        <div className="bg-white p-6 shadow-xl rounded-xl">
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Créer une carte vide</h2>
-          <p className="text-gray-600 mb-4 font-medium">
+        <div className="bg-white dark:bg-neutral-900 p-6 shadow-xl rounded-xl">
+          <h2 className="text-xl font-bold text-gray-800 dark:text-neutral-100 mb-2">Créer une carte vide</h2>
+          <p className="text-gray-600 dark:text-neutral-400 mb-4 font-medium">
             Démarrez avec une carte sans routes et construisez votre réseau routier depuis zéro.
           </p>
           {voidError && (
-            <div className="mb-4 px-4 py-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+            <div className="mb-4 px-4 py-2 bg-red-100 border border-red-400 text-red-700 dark:bg-red-950 dark:border-red-800 dark:text-red-300 rounded text-sm">
               {voidError}
             </div>
           )}
           <button
             onClick={handleCreateVoidMap}
             disabled={voidLoading}
-            className="px-6 py-2 bg-gray-700 hover:bg-gray-800 text-white font-semibold rounded shadow-md transition-colors disabled:opacity-60"
+            className="px-6 py-2 bg-gray-700 hover:bg-gray-800 dark:bg-neutral-700 dark:hover:bg-neutral-600 text-white font-semibold rounded shadow-md transition-colors disabled:opacity-60"
           >
             {voidLoading ? 'Création en cours...' : 'Créer une carte vide'}
           </button>

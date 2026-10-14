@@ -75,28 +75,28 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
 
     return (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
+            <div className="bg-white dark:bg-neutral-900 rounded-3xl shadow-2xl w-full max-w-2xl mx-4 flex flex-col max-h-[90vh]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-8 pt-8 pb-4">
-                    <h2 className="text-2xl font-semibold text-gray-900">Paramètres</h2>
+                    <h2 className="text-2xl font-semibold text-gray-900 dark:text-neutral-100">Paramètres</h2>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition-colors text-2xl leading-none"
+                        className="text-gray-400 hover:text-gray-600 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors text-2xl leading-none"
                     >
                         ×
                     </button>
                 </div>
 
                 {/* Tabs */}
-                <div className="flex px-4 gap-1 border-b border-gray-100">
+                <div className="flex px-4 gap-1 border-b border-gray-100 dark:border-neutral-800">
                     {(['simulation', 'budget', 'score'] as Section[]).map(s => (
                         <button
                             key={s}
                             onClick={() => setSection(s)}
                             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors capitalize ${
                                 section === s
-                                    ? 'bg-gray-100 text-gray-900'
-                                    : 'text-gray-500 hover:text-gray-700'
+                                    ? 'bg-gray-100 text-gray-900 dark:bg-neutral-800 dark:text-neutral-100'
+                                    : 'text-gray-500 hover:text-gray-700 dark:text-neutral-400 dark:hover:text-neutral-200'
                             }`}
                         >
                             {s === 'simulation' ? 'Simulation' : s === 'budget' ? 'Budget & Économie' : 'Score'}
@@ -106,7 +106,7 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
 
                 {/* Body */}
                 <div className="overflow-y-auto flex-1 px-8 py-6">
-                    {loading && <p className="text-gray-500 text-sm">Chargement…</p>}
+                    {loading && <p className="text-gray-500 dark:text-neutral-400 text-sm">Chargement…</p>}
                     {!loading && !form && <p className="text-red-500 text-sm">{error}</p>}
                     {form && (
                         <>
@@ -161,8 +161,8 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                                             onChange={v => set('base_cost_per_meter', v)}
                                         />
                                     </FieldRow>
-                                    <hr className="border-gray-100" />
-                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Coût de base des nœuds</p>
+                                    <hr className="border-gray-100 dark:border-neutral-800" />
+                                    <p className="text-xs font-medium text-gray-500 dark:text-neutral-400 uppercase tracking-wide">Coût de base des nœuds</p>
                                     <FieldRow label="Intersection">
                                         <NumberInput
                                             value={form.intersection_cost}
@@ -189,7 +189,7 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
 
                             {section === 'score' && (
                                 <div className="space-y-5">
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-gray-500 dark:text-neutral-400">
                                         Les poids définissent l&apos;importance de chaque critère. Leur somme doit être égale à 1,0.
                                     </p>
                                     <FieldRow label="Temps de trajet">
@@ -216,20 +216,20 @@ export default function SettingsModal({ uuid, onClose }: SettingsModalProps) {
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 pb-8 pt-4 flex items-center justify-between border-t border-gray-100">
+                <div className="px-8 pb-8 pt-4 flex items-center justify-between border-t border-gray-100 dark:border-neutral-800">
                     {error && <p className="text-red-500 text-sm">{error}</p>}
                     {!error && <span />}
                     <div className="flex gap-3">
                         <button
                             onClick={onClose}
-                            className="px-5 py-2 rounded-xl text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+                            className="px-5 py-2 rounded-xl text-sm text-gray-600 hover:bg-gray-100 dark:text-neutral-300 dark:hover:bg-neutral-800 transition-colors"
                         >
                             Annuler
                         </button>
                         <button
                             onClick={handleSave}
                             disabled={!form || !weightsValid || saving}
-                            className="px-5 py-2 rounded-xl text-sm bg-black text-white hover:bg-neutral-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="px-5 py-2 rounded-xl text-sm bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             {saving ? 'Sauvegarde…' : 'Sauvegarder'}
                         </button>
@@ -244,8 +244,8 @@ function FieldRow({ label, hint, children }: { label: string; hint?: string; chi
     return (
         <div className="flex items-center justify-between gap-4">
             <div>
-                <p className="text-sm font-medium text-gray-800">{label}</p>
-                {hint && <p className="text-xs text-gray-400">{hint}</p>}
+                <p className="text-sm font-medium text-gray-800 dark:text-neutral-200">{label}</p>
+                {hint && <p className="text-xs text-gray-400 dark:text-neutral-500">{hint}</p>}
             </div>
             {children}
         </div>
@@ -267,9 +267,9 @@ function NumberInput({
                 max={max}
                 step={step}
                 onChange={e => onChange(Number(e.target.value))}
-                className="w-36 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-36 text-right border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            {suffix && <span className="text-xs text-gray-400">{suffix}</span>}
+            {suffix && <span className="text-xs text-gray-400 dark:text-neutral-500">{suffix}</span>}
         </div>
     );
 }
@@ -283,7 +283,7 @@ function WeightInput({ value, onChange }: { value: number; onChange: (v: number)
             max={1}
             step={0.05}
             onChange={e => onChange(Number(e.target.value))}
-            className="w-24 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="w-24 text-right border border-gray-200 dark:border-neutral-700 dark:bg-neutral-800 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/20 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
     );
 }

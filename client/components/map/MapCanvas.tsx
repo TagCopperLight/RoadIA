@@ -8,6 +8,10 @@ import { Intersection } from './elements/Intersection';
 import { buildRoadNetworkGeometry } from './roadNetworkGeometry';
 import { VehicleLayer } from './VehicleLayer';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
+import { useTheme } from '../ThemeContext';
+
+const ROAD_BORDER_LIGHT = 0xffffff;
+const ROAD_BORDER_DARK = 0x9AA397;
 
 interface MapCanvasProps {
 	data: MapData;
@@ -43,6 +47,8 @@ export function MapCanvas({
 	onWaypointNodeClick,
 }: MapCanvasProps) {
 	const { app } = useApplication();
+	const { theme } = useTheme();
+	const roadBorderColor = theme === 'dark' ? ROAD_BORDER_DARK : ROAD_BORDER_LIGHT;
 
 	const nodeMap = useMemo(
 		() => new Map(data.nodes.map(n => [n.id, n])),
@@ -146,7 +152,7 @@ export function MapCanvas({
 								g.closePath();
 							}
 						}
-						g.stroke({ color: 0xffffff, width: 2, join: 'round' });
+						g.stroke({ color: roadBorderColor, width: 2, join: 'round' });
 					}}
 				/>
 
@@ -173,7 +179,7 @@ export function MapCanvas({
 				})}
 			</>
 		);
-	}, [roadGeometry, edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, onWaypointNodeClick, pendingRoadFrom, roadDensity, densityView, showIntersections]);
+	}, [roadGeometry, edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, onWaypointNodeClick, pendingRoadFrom, roadDensity, densityView, showIntersections, roadBorderColor]);
 
 	return (
 		<pixiCustomViewport

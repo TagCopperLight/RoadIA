@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { listMaps, loadMap, deleteMap } from "@/app/websocket/websocket";
 import { useState } from "react";
+import { ThemeToggle } from "@/components/ThemeContext";
 
 interface MenuCardProps {
   src: string;
@@ -20,7 +21,7 @@ function MenuCard({ src, alt, label, className = "", onClick, disabled = false }
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-col items-center justify-center w-[200px] h-[200px] rounded-[10px] drop-shadow-[6px_6px_5px_rgba(0,0,0,0.35)] ${disabled ? "bg-zinc-700 opacity-50 cursor-not-allowed" : "bg-black hover:bg-zinc-800 cursor-pointer"} ${className}`}
+      className={`flex flex-col items-center justify-center w-[200px] h-[200px] rounded-[10px] drop-shadow-[6px_6px_5px_rgba(0,0,0,0.35)] ${disabled ? "bg-zinc-700 opacity-50 cursor-not-allowed" : "bg-black hover:bg-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:ring-1 dark:ring-white/10 cursor-pointer"} ${className}`}
     >
       <Image src={src} alt={alt} width={130} height={130} loading="eager" />
       <p className="text-[22px] text-white text-center pt-[8px]">{label}</p>
@@ -72,13 +73,16 @@ export default function Home() {
 
   return (
     <div>
-      <div className="fixed inset-0 bg-white">
-        <Image src="/home/map.png" alt="Map Background" fill />
+      <div className="fixed inset-0 bg-white dark:bg-neutral-950">
+        <Image src="/home/map.png" alt="Map Background" fill className="dark:brightness-[0.35] dark:saturate-50" />
+      </div>
+      <div className="fixed top-4 right-4 z-30">
+        <ThemeToggle className="bg-white/75 dark:bg-neutral-900/75 shadow-md" />
       </div>
       <div className="flex flex-col h-screen w-screen justify-center items-center z-10">
-        <div className="relative z-20 w-[700px] h-[928px] shadow-2xl bg-white/75 rounded-[15px] flex flex-col items-center overflow-hidden">
+        <div className="relative z-20 w-[700px] h-[928px] shadow-2xl bg-white/75 dark:bg-neutral-900/80 rounded-[15px] flex flex-col items-center overflow-hidden">
           <div className="pt-[50px]">
-            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={577} height={192} loading="eager" />
+            <Image src="/home/roadia-logo.svg" alt="RoadIA Logo" width={577} height={192} loading="eager" className="dark:invert" />
           </div>
 
           {!showMapList ? (
@@ -92,18 +96,18 @@ export default function Home() {
           ) : (
             <div className="flex flex-col items-center w-full px-10 pt-10 overflow-hidden">
               <h2 className="text-2xl font-bold mb-6">Cartes Sauvegardées</h2>
-              <div className="flex-1 w-full overflow-y-auto mb-6 bg-white/50 rounded-lg border border-gray-200">
+              <div className="flex-1 w-full overflow-y-auto mb-6 bg-white/50 dark:bg-neutral-900/50 rounded-lg border border-gray-200 dark:border-neutral-700">
                 {maps.length === 0 ? (
-                  <p className="text-center py-10 text-gray-500">Aucune carte trouvée dans data/</p>
+                  <p className="text-center py-10 text-gray-500 dark:text-neutral-400">Aucune carte trouvée dans data/</p>
                 ) : (
-                  <ul className="divide-y divide-gray-200">
+                  <ul className="divide-y divide-gray-200 dark:divide-neutral-700">
                     {maps.map((map) => (
-                      <li key={map.uuid} className="flex justify-between items-center p-4 bg-white/80 hover:bg-gray-100">
+                      <li key={map.uuid} className="flex justify-between items-center p-4 bg-white/80 hover:bg-gray-100 dark:bg-neutral-900/80 dark:hover:bg-neutral-800">
                         <span className="font-medium">{map.name || map.uuid}</span>
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => handleLoadMap(map.uuid, map.name)}
-                            className="cursor-pointer bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 transition-colors"
+                            className="cursor-pointer bg-black text-white px-4 py-2 rounded hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 transition-colors"
                           >
                             Charger
                           </button>
@@ -127,7 +131,7 @@ export default function Home() {
               </div>
               <button
                 onClick={() => setShowMapList(false)}
-                className="cursor-pointer mb-10 text-zinc-600 hover:text-black font-semibold"
+                className="cursor-pointer mb-10 text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-white font-semibold"
               >
                 ← Retour
               </button>
@@ -135,7 +139,7 @@ export default function Home() {
           )}
 
           <div className="mt-auto pb-[16px]">
-            <Image src="/home/bagnole-logo.png" alt="Bagnole Logo" width={190} height={47} loading="eager" />
+            <Image src="/home/bagnole-logo.png" alt="Bagnole Logo" width={190} height={47} loading="eager" className="dark:invert" />
           </div>
         </div>
       </div>

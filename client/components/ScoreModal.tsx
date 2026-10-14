@@ -50,7 +50,7 @@ function RadarChart({ score }: { score: ScoreData }) {
 
 	return (
 		<div className="flex flex-col items-center">
-			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
+			<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible text-gray-200 dark:text-neutral-700">
 				{/* Background Grid Circles */}
 				{[0.25, 0.5, 0.75, 1].map((r) => (
 					<circle
@@ -59,7 +59,7 @@ function RadarChart({ score }: { score: ScoreData }) {
 						cy={center}
 						r={r * radius}
 						fill="none"
-						stroke="#e5e7eb"
+						stroke="currentColor"
 						strokeWidth="1"
 					/>
 				))}
@@ -74,7 +74,7 @@ function RadarChart({ score }: { score: ScoreData }) {
 							y1={center}
 							x2={p.x}
 							y2={p.y}
-							stroke="#e5e7eb"
+							stroke="currentColor"
 							strokeWidth="1"
 						/>
 					);
@@ -90,7 +90,7 @@ function RadarChart({ score }: { score: ScoreData }) {
 							y={p.y}
 							textAnchor="middle"
 							alignmentBaseline="middle"
-							className="text-xs font-bold fill-gray-500 uppercase"
+							className="text-xs font-bold fill-gray-500 dark:fill-neutral-400 uppercase"
 						>
 							{axis.label}
 						</text>
@@ -128,12 +128,12 @@ function RadarChart({ score }: { score: ScoreData }) {
 export default function ScoreModal({ score, onClose }: ScoreModalProps) {
 	return (
 		<div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-sm z-50">
-			<div className="bg-white p-12 rounded-3xl shadow-2xl max-w-5xl w-full mx-4 transform transition-all animate-in fade-in zoom-in duration-300">
+			<div className="bg-white dark:bg-neutral-900 p-12 rounded-3xl shadow-2xl max-w-5xl w-full mx-4 transform transition-all animate-in fade-in zoom-in duration-300">
 				<div className="flex justify-between items-start mb-8">
-					<h2 className="text-4xl font-bold text-gray-800">Simulation Terminée</h2>
+					<h2 className="text-4xl font-bold text-gray-800 dark:text-neutral-100">Simulation Terminée</h2>
 					<button
 						onClick={onClose}
-						className="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+						className="text-gray-400 hover:text-gray-600 dark:text-neutral-500 dark:hover:text-neutral-300 transition-colors cursor-pointer"
 					>
 						<svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -143,41 +143,41 @@ export default function ScoreModal({ score, onClose }: ScoreModalProps) {
 
 				<div className="flex flex-col lg:flex-row gap-12 items-center lg:items-start">
 					{/* Left: Radar Chart */}
-					<div className="flex-1 w-full max-w-md bg-gray-50 p-8 rounded-3xl flex items-center justify-center">
+					<div className="flex-1 w-full max-w-md bg-gray-50 dark:bg-neutral-800 p-8 rounded-3xl flex items-center justify-center">
 						<RadarChart score={score} />
 					</div>
 
 					{/* Right: Stats Details */}
 					<div className="flex-1 space-y-6 w-full">
-						<div className="bg-gray-50 p-6 rounded-2xl flex justify-between items-center">
+						<div className="bg-gray-50 dark:bg-neutral-800 p-6 rounded-2xl flex justify-between items-center">
 							<span className="font-semibold text-2xl">Score Final</span>
-							<span className="text-5xl font-black text-gray-900">{score.score.toFixed(1)}/100</span>
+							<span className="text-5xl font-black text-gray-900 dark:text-neutral-100">{score.score.toFixed(1)}/100</span>
 						</div>
 
 						<div className="grid grid-cols-2 gap-6">
-							<div className="bg-gray-50 p-5 rounded-xl">
-								<p className="text-sm text-gray-500 uppercase font-bold mb-2">Taux de réussite</p>
-								<p className="text-3xl font-bold text-gray-800">{(score.success_rate * 100).toFixed(0)}%</p>
+							<div className="bg-gray-50 dark:bg-neutral-800 p-5 rounded-xl">
+								<p className="text-sm text-gray-500 dark:text-neutral-400 uppercase font-bold mb-2">Taux de réussite</p>
+								<p className="text-3xl font-bold text-gray-800 dark:text-neutral-100">{(score.success_rate * 100).toFixed(0)}%</p>
 							</div>
-							<div className="bg-gray-50 p-5 rounded-xl">
-								<p className="text-sm text-gray-500 uppercase font-bold mb-2">CO2 Émis</p>
-								<p className="text-3xl font-bold text-gray-800">
+							<div className="bg-gray-50 dark:bg-neutral-800 p-5 rounded-xl">
+								<p className="text-sm text-gray-500 dark:text-neutral-400 uppercase font-bold mb-2">CO2 Émis</p>
+								<p className="text-3xl font-bold text-gray-800 dark:text-neutral-100">
 									{score.total_emitted_co2.toFixed(2)}kg
-									<span className="block text-sm text-gray-400 font-normal mt-1">Optimal: {score.ref_total_emitted_co2.toFixed(2)}kg</span>
+									<span className="block text-sm text-gray-400 dark:text-neutral-500 font-normal mt-1">Optimal: {score.ref_total_emitted_co2.toFixed(2)}kg</span>
 								</p>
 							</div>
-							<div className="bg-gray-50 p-5 rounded-xl">
-								<p className="text-sm text-gray-500 uppercase font-bold mb-2">Temps total</p>
-								<p className="text-3xl font-bold text-gray-800">
+							<div className="bg-gray-50 dark:bg-neutral-800 p-5 rounded-xl">
+								<p className="text-sm text-gray-500 dark:text-neutral-400 uppercase font-bold mb-2">Temps total</p>
+								<p className="text-3xl font-bold text-gray-800 dark:text-neutral-100">
 									{(score.total_trip_time/60).toFixed(0)}min
-									<span className="block text-sm text-gray-400 font-normal mt-1">Optimal: {(score.ref_total_trip_time/60).toFixed(0)}min</span>
+									<span className="block text-sm text-gray-400 dark:text-neutral-500 font-normal mt-1">Optimal: {(score.ref_total_trip_time/60).toFixed(0)}min</span>
 								</p>
 							</div>
-							<div className="bg-gray-50 p-5 rounded-xl">
-								<p className="text-sm text-gray-500 uppercase font-bold mb-2">Taille du réseau</p>
-								<p className="text-3xl font-bold text-gray-800">
+							<div className="bg-gray-50 dark:bg-neutral-800 p-5 rounded-xl">
+								<p className="text-sm text-gray-500 dark:text-neutral-400 uppercase font-bold mb-2">Taille du réseau</p>
+								<p className="text-3xl font-bold text-gray-800 dark:text-neutral-100">
 									{(score.network_length/1000).toFixed(2)}km
-									<span className="block text-sm text-gray-400 font-normal mt-1">Optimal: {(score.ref_network_length /1000).toFixed(2)}km</span>
+									<span className="block text-sm text-gray-400 dark:text-neutral-500 font-normal mt-1">Optimal: {(score.ref_network_length /1000).toFixed(2)}km</span>
 								</p>
 							</div>
 						</div>
@@ -186,7 +186,7 @@ export default function ScoreModal({ score, onClose }: ScoreModalProps) {
 
 				<button
 					onClick={onClose}
-					className="mt-10 w-full bg-black hover:bg-neutral-800 text-white font-bold py-4 text-xl rounded-2xl transition-colors cursor-pointer"
+					className="mt-10 w-full bg-black hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 text-white font-bold py-4 text-xl rounded-2xl transition-colors cursor-pointer"
 				>
 					Fermer
 				</button>

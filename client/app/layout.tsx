@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ThemeProvider, themeInitScript } from "@/components/ThemeContext";
 
 const satoshi = localFont({
   src: "./fonts/Satoshi-Variable.ttf",
@@ -20,9 +21,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${satoshi.variable} font-extrabold antialiased`}>
+    <html lang="en" className={`${satoshi.variable} font-extrabold antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body>
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

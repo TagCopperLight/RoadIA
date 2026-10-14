@@ -352,7 +352,7 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 						{formatSimulationTime(simulationTime)}
 					</div>
 				)}
-				<div className="absolute bottom-[15px] right-[15px] bg-white p-1 rounded-[10px] shadow-md group cursor-pointer">
+				<div className="absolute bottom-[15px] right-[15px] bg-white dark:bg-neutral-800 p-1 rounded-[10px] shadow-md group cursor-pointer">
 					<Image src="/map/man.png" alt="Orange man" width={35} height={35} className="transition-transform duration-200 group-hover:-rotate-12" />
 				</div>
 
@@ -363,20 +363,20 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 
 				{isScoringLoading && (
-					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-3 rounded-2xl shadow-lg z-40 min-w-[280px]">
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm border border-neutral-200 dark:border-neutral-700 px-4 py-3 rounded-2xl shadow-lg z-40 min-w-[280px]">
 						<div className="flex items-center gap-3">
-							<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
-							<span className="text-sm font-medium text-neutral-800">Calcul du score...</span>
+							<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 dark:border-neutral-600 dark:border-t-neutral-100 rounded-full animate-spin" />
+							<span className="text-sm font-medium text-neutral-800 dark:text-neutral-100">Calcul du score...</span>
 							{scoreProgressLabel !== null && (
-								<span className="ml-auto text-sm font-semibold text-neutral-900 tabular-nums">
+								<span className="ml-auto text-sm font-semibold text-neutral-900 dark:text-neutral-100 tabular-nums">
 									{scoreProgressLabel}%
 								</span>
 							)}
 						</div>
 						{scoreProgressValue !== null && (
-							<div className="mt-3 h-2 w-full rounded-full bg-neutral-200 overflow-hidden">
+							<div className="mt-3 h-2 w-full rounded-full bg-neutral-200 dark:bg-neutral-700 overflow-hidden">
 								<div
-									className="h-full rounded-full bg-neutral-900 transition-[width] duration-150"
+									className="h-full rounded-full bg-neutral-900 dark:bg-neutral-100 transition-[width] duration-150"
 									style={{ width: `${scoreProgressValue}%` }}
 								/>
 							</div>
@@ -385,9 +385,9 @@ export default function MapComponent({ uuid }: { uuid: string }) {
 				)}
 
 				{isDensityLoading && (
-					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm border border-neutral-200 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
-						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 rounded-full animate-spin" />
-						<span className="text-sm font-medium text-neutral-800">Calcul de la densité...</span>
+					<div className="absolute top-[15px] left-1/2 -translate-x-1/2 bg-white/90 dark:bg-neutral-900/90 backdrop-blur-sm border border-neutral-200 dark:border-neutral-700 px-4 py-2 rounded-full shadow-lg flex items-center gap-3 z-40">
+						<div className="w-4 h-4 border-2 border-neutral-300 border-t-neutral-800 dark:border-neutral-600 dark:border-t-neutral-100 rounded-full animate-spin" />
+						<span className="text-sm font-medium text-neutral-800 dark:text-neutral-100">Calcul de la densité...</span>
 					</div>
 				)}
 

@@ -225,7 +225,7 @@ export default function Toolbar({ uuid }: { uuid: string }) {
 
     return (
         <div className="flex items-center w-full pl-[15px] pr-[15px]">
-            <div className="flex items-center justify-between bg-black rounded-[10px] w-full px-1">
+            <div className="flex items-center justify-between bg-black dark:bg-neutral-900 dark:ring-1 dark:ring-white/10 rounded-[10px] w-full px-1">
                 {/* Left: mode-specific items */}
                 <div className="flex items-center">
                     {mode === 'edit' ? (
