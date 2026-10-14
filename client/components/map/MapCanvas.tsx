@@ -5,6 +5,7 @@ import { MapData, MapEdge, TrafficLightData } from './types';
 import { AppMode, EditTool, SelectedElement } from '../EditModeContext';
 import { Road } from './elements/Road';
 import { Intersection } from './elements/Intersection';
+import { buildRoadNetworkGeometry } from './roadNetworkGeometry';
 import { VehicleLayer } from './VehicleLayer';
 import { TrafficLightIndicator } from './elements/TrafficLightIndicator';
 
@@ -62,6 +63,11 @@ export function MapCanvas({
 		return map;
 	}, [data.edges]);
 
+	const roadGeometry = useMemo(
+		() => buildRoadNetworkGeometry(nodeMap, Array.from(edgePairs.values())),
+		[edgePairs, nodeMap],
+	);
+
 	// Background overlay handles addNode clicks and move-tool drag tracking
 	const handleBackgroundTap = (e: FederatedPointerEvent) => {
 		if (mode !== 'edit' || editTool !== 'addNode') return;
@@ -88,6 +94,8 @@ export function MapCanvas({
 							reverseEdge={reverse}
 							startNode={startNode}
 							endNode={endNode}
+							startReach={roadGeometry.junctions.get(startNode.id)?.find(c => c.roadId === canonical.id)?.reach}
+							endReach={roadGeometry.junctions.get(endNode.id)?.find(c => c.roadId === canonical.id)?.reach}
 							isSelected={isSelected}
 							isEditMode={isEditMode}
 							densityView={densityView}
@@ -102,13 +110,14 @@ export function MapCanvas({
 
 				{/* Pass 2: Intersections */}
 				{data.nodes.map((node) => {
-					if (!isEditMode && !showIntersections && node.kind === 'Intersection') return null;
 					const isSelected = selectedElement?.type === 'node' && selectedElement.id === node.id;
 					const isPendingFrom = pendingRoadFrom === node.id;
 					return (
 						<Intersection
 							key={`node-${node.id}`}
 							node={node}
+							corners={roadGeometry.junctions.get(node.id)}
+							showMarker={isEditMode || showIntersections || node.kind !== 'Intersection'}
 							isSelected={isSelected}
 							isEditMode={isEditMode}
 							isPendingFrom={isPendingFrom}
@@ -125,6 +134,22 @@ export function MapCanvas({
 					);
 				})}
 
+				{/* Shared pavement boundary, including grass islands inside roundabouts. */}
+				<pixiGraphics
+					eventMode="none"
+					draw={(g) => {
+						g.clear();
+						for (const polygon of roadGeometry.outline) {
+							for (const ring of polygon) {
+								g.moveTo(ring[0][0], ring[0][1]);
+								for (let i = 1; i < ring.length; i++) g.lineTo(ring[i][0], ring[i][1]);
+								g.closePath();
+							}
+						}
+						g.stroke({ color: 0xffffff, width: 2, join: 'round' });
+					}}
+				/>
+
 				{/* Pass 3: Traffic Light Indicators */}
 				{data.edges.map((edge, index) => {
 					const startNode = nodeMap.get(edge.from);
@@ -133,19 +158,22 @@ export function MapCanvas({
 					if (!endNode.has_traffic_light) return null;
 					const tl = trafficLights.get(endNode.id);
 					const isGreen = tl ? tl.green_road_ids.includes(edge.id) : false;
+					const pair = edgePairs.get(`${Math.min(edge.from, edge.to)}-${Math.max(edge.from, edge.to)}`);
+					const endReach = roadGeometry.junctions.get(endNode.id)?.find(c => c.roadId === pair?.canonical.id)?.reach;
 					return (
 						<TrafficLightIndicator
 							key={`tli-${edge.id}-${index}`}
 							start={startNode}
 							end={endNode}
 							edge={edge}
+							endReach={endReach}
 							isGreen={isGreen}
 						/>
 					);
 				})}
 			</>
 		);
-	}, [edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, onWaypointNodeClick, pendingRoadFrom, roadDensity, densityView, showIntersections]);
+	}, [roadGeometry, edgePairs, data.nodes, data.edges, nodeMap, trafficLights, selectedElement, isEditMode, editTool, onSelectRoad, onSelectNode, onAddRoad, onWaypointNodeClick, pendingRoadFrom, roadDensity, densityView, showIntersections]);
 
 	return (
 		<pixiCustomViewport

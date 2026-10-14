@@ -6,11 +6,13 @@ export const TrafficLightIndicator = memo(function TrafficLightIndicator({
 	end,
 	edge,
 	isGreen,
+	endReach,
 }: {
 	start: MapNode;
 	end: MapNode;
 	edge: MapEdge;
 	isGreen: boolean;
+	endReach?: number;
 }) {
 	return (
 		<pixiGraphics
@@ -25,7 +27,7 @@ export const TrafficLightIndicator = memo(function TrafficLightIndicator({
 				g.rotation = angle;
 
 				const fwWidth = edge.lane_count * edge.lane_width;
-				const stopX = length - end.radius - 4;
+				const stopX = length - (endReach ?? end.radius) - 4;
 				const color = isGreen ? 0x22c55e : 0xef4444;
 
 				// Stop line across the forward lanes

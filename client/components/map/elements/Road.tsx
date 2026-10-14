@@ -1,12 +1,15 @@
 import { memo } from 'react';
 import { Graphics } from 'pixi.js';
 import { MapNode, MapEdge } from '../types';
+import { junctionReach } from '../intersectionGeometry';
 
 interface RoadProps {
 	canonicalEdge: MapEdge;  // startNode → endNode; lanes on positive y (right of travel)
 	reverseEdge?: MapEdge;   // endNode → startNode; lanes on negative y (two-way only)
 	startNode: MapNode;
 	endNode: MapNode;
+	startReach?: number;
+	endReach?: number;
 	isSelected?: boolean;
 	isEditMode?: boolean;
 	onSelect?: () => void;
@@ -53,7 +56,7 @@ function drawDashedLine(
 	}
 }
 
-export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, endNode, isSelected, isEditMode, onSelect, densityView, speedRatio, reverseSpeedRatio }: RoadProps) {
+export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, endNode, startReach, endReach, isSelected, isEditMode, onSelect, densityView, speedRatio, reverseSpeedRatio }: RoadProps) {
 	return (
 		<pixiGraphics
 			eventMode={isEditMode && onSelect ? 'static' : 'none'}
@@ -75,12 +78,18 @@ export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, 
 				const fwCount = canonicalEdge.lane_count;
 				const bwCount = reverseEdge?.lane_count ?? 0;
 				const fwWidth = fwCount * laneWidth;
-				const bwWidth = bwCount * laneWidth;
+				const bwLaneWidth = reverseEdge?.lane_width ?? laneWidth;
+				const bwWidth = bwCount * bwLaneWidth;
+
+				const from = startReach ?? junctionReach(startNode.radius, length, bwWidth, fwWidth);
+				const to = length - (endReach ?? junctionReach(endNode.radius, length, fwWidth, bwWidth));
+				const visibleLength = to - from;
+				if (visibleLength <= 0.001) return;
 
 				// Selection highlight behind road
 				if (isSelected) {
 					g.setFillStyle({ color: 0xfbbf24, alpha: 0.4 });
-					g.rect(-4, -bwWidth - 4, length + 8, fwWidth + bwWidth + 8);
+					g.rect(from - 4, -bwWidth - 4, visibleLength + 8, fwWidth + bwWidth + 8);
 					g.fill();
 				}
 
@@ -89,50 +98,41 @@ export const Road = memo(function Road({ canonicalEdge, reverseEdge, startNode, 
 					const fwColor = speedRatio !== undefined ? speedRatioToColor(speedRatio) : 0x555555;
 					const bwColor = reverseSpeedRatio !== undefined ? speedRatioToColor(reverseSpeedRatio) : 0x555555;
 					g.setFillStyle({ color: fwColor });
-					g.rect(0, 0, length, fwWidth);
+					g.rect(from, 0, visibleLength, fwWidth);
 					g.fill();
 					g.setFillStyle({ color: bwColor });
-					g.rect(0, -bwWidth, length, bwWidth);
+					g.rect(from, -bwWidth, visibleLength, bwWidth);
 					g.fill();
 				} else {
 					const surfaceColor = densityView && speedRatio !== undefined
 						? speedRatioToColor(speedRatio)
 						: 0x555555;
 					g.setFillStyle({ color: surfaceColor });
-					g.rect(0, -bwWidth, length, fwWidth + bwWidth);
+					g.rect(from, -bwWidth, visibleLength, fwWidth + bwWidth);
 					g.fill();
 				}
 
 				// Lane dividers (dashed white)
 				for (let i = 1; i < fwCount; i++) {
-					drawDashedLine(g, 0, i * laneWidth, length, i * laneWidth, 0xffffff, 1);
+					drawDashedLine(g, from, i * laneWidth, to, i * laneWidth, 0xffffff, 1);
 				}
 				for (let i = 1; i < bwCount; i++) {
-					drawDashedLine(g, 0, -i * laneWidth, length, -i * laneWidth, 0xffffff, 1);
+					drawDashedLine(g, from, -i * bwLaneWidth, to, -i * bwLaneWidth, 0xffffff, 1);
 				}
 
 				// Center line
 				if (isTwoWay) {
 					// Double yellow — opposing traffic
 					g.setStrokeStyle({ color: 0xf59e0b, width: 1 });
-					g.moveTo(0, -1); g.lineTo(length, -1); g.stroke();
-					g.moveTo(0,  1); g.lineTo(length,  1); g.stroke();
-				} else {
-					// Single white left edge for one-way roads
-					g.setStrokeStyle({ color: 0xffffff, width: 1 });
-					g.moveTo(0, 0); g.lineTo(length, 0); g.stroke();
+					g.moveTo(from, -1); g.lineTo(to, -1); g.stroke();
+					g.moveTo(from,  1); g.lineTo(to,  1); g.stroke();
 				}
 
-				// Outer road edges (solid white)
-				g.setStrokeStyle({ color: 0xffffff, width: 2 });
-				g.moveTo(0, fwWidth); g.lineTo(length, fwWidth); g.stroke();
-				if (bwWidth > 0) {
-					g.moveTo(0, -bwWidth); g.lineTo(length, -bwWidth); g.stroke();
-				}
+				// Outer borders are drawn once around the union of roads and junctions.
 
 				// Direction arrow for one-way roads (always points toward endNode)
-				if (!isTwoWay) {
-					const arrowX = length / 2;
+				if (!isTwoWay && visibleLength >= 16) {
+					const arrowX = (from + to) / 2;
 					const arrowY = fwWidth / 2;
 					const arrowSize = 6;
 					g.setFillStyle({ color: 0x888888 });

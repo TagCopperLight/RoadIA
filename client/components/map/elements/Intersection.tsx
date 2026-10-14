@@ -1,5 +1,18 @@
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
+import { Graphics, Circle } from 'pixi.js';
 import { MapNode } from '../types';
+import { buildJunctionCorners, JunctionApproach, JunctionCorner } from '../intersectionGeometry';
+
+const EMPTY_APPROACHES: JunctionApproach[] = [];
+
+function traceSurface(g: Graphics, corners: JunctionCorner[]) {
+	g.moveTo(corners[0].left.x, corners[0].left.y);
+	for (const { right, control, nextLeft } of corners) {
+		g.lineTo(right.x, right.y);
+		g.quadraticCurveTo(control.x, control.y, nextLeft.x, nextLeft.y);
+	}
+	g.closePath();
+}
 
 const LINK_TYPE_COLORS: Record<string, number> = {
 	Priority:     0x22c55e,  // green
@@ -10,6 +23,9 @@ const LINK_TYPE_COLORS: Record<string, number> = {
 
 interface IntersectionProps {
 	node: MapNode;
+	approaches?: JunctionApproach[];
+	corners?: JunctionCorner[];
+	showMarker?: boolean;
 	isSelected?: boolean;
 	isEditMode?: boolean;
 	isPendingFrom?: boolean;
@@ -20,6 +36,9 @@ interface IntersectionProps {
 
 export const Intersection = memo(function Intersection({
 	node,
+	approaches = EMPTY_APPROACHES,
+	corners: suppliedCorners,
+	showMarker = true,
 	isSelected,
 	isEditMode,
 	isPendingFrom,
@@ -27,43 +46,42 @@ export const Intersection = memo(function Intersection({
 	onAddRoad,
 	onWaypointClick,
 }: IntersectionProps) {
+	const corners = useMemo(() => suppliedCorners ?? buildJunctionCorners(node.radius, approaches), [suppliedCorners, node.radius, approaches]);
+	const hitArea = useMemo(() => new Circle(0, 0, Math.max(node.radius, 6)), [node.radius]);
 	const isInteractive = isEditMode && (onSelect || onAddRoad || onWaypointClick);
 	const handleTap = onSelect ?? onAddRoad ?? onWaypointClick;
 
 	return (
 		<pixiGraphics
 			eventMode={isInteractive ? 'static' : 'none'}
+			hitArea={hitArea}
 			cursor={isInteractive ? 'pointer' : 'default'}
 			onPointerTap={handleTap}
 			draw={(g) => {
 				g.clear();
 				g.position.set(node.x, node.y);
 
-				// Selection highlight: amber transparent fill behind intersection
-				if (isSelected) {
-					g.setFillStyle({ color: 0xfbbf24, alpha: 0.4 });
-					g.circle(0, 0, node.radius + 4);
-					g.fill();
+				// Cover road markings inside the junction with a continuous asphalt surface.
+				if (corners.length) {
+					traceSurface(g, corners);
+					g.fill({ color: 0x555555 });
+
+				} else {
+					g.circle(0, 0, node.radius).fill({ color: 0x555555 });
 				}
 
-				// Intersection body
-				g.setFillStyle({ color: 0x555555 });
-				g.circle(0, 0, node.radius);
-				g.fill();
+				if (isSelected || isPendingFrom) {
+					if (corners.length) traceSurface(g, corners);
+					else g.circle(0, 0, node.radius + 4);
+					if (isSelected) g.fill({ color: 0xfbbf24, alpha: 0.25 });
+					g.stroke({ color: isPendingFrom ? 0x22c55e : 0xfbbf24, width: 3 });
+				}
 
-				// Kind ring
-				const ringColor = node.kind === 'Habitation' ? 0x3b82f6
-					: node.kind === 'Workplace' ? 0xef4444
-					: 0x888888;
-				g.setStrokeStyle({ color: ringColor, width: 2 });
-				g.circle(0, 0, node.radius);
-				g.stroke();
-
-				// Pending-from indicator (first node in addRoad): green outer ring
-				if (isPendingFrom) {
-					g.setStrokeStyle({ color: 0x22c55e, width: 3 });
-					g.circle(0, 0, node.radius + 4);
-					g.stroke();
+				// Small editor/type marker, independent of the generated pavement.
+				if (showMarker) {
+					const color = node.kind === 'Habitation' ? 0x3b82f6
+						: node.kind === 'Workplace' ? 0xef4444 : 0x888888;
+					g.circle(0, 0, Math.min(node.radius, 2.5)).fill({ color });
 				}
 
 				// Internal lanes drawn on top of intersection body
