@@ -1,0 +1,9 @@
+[package]
+name = "roadia-realtime-bench"
+version = "0.1.0"
+edition = "2021"
+[dependencies]
+server = { path = "../../../server" }
+rand = "0.9.2"
+rand_chacha = "0.9"
+serde_json = "1.0"
